@@ -51,8 +51,13 @@ CONTRAST_STRETCH = 0.6
 """How far luminance is stretched toward the full ramp (0 keeps, 1 stretches fully)."""
 SATURATION_BOOST = 1.2
 """Thin glyphs show less color than a filled cell, so ink colors are pushed a little."""
-INK_GAMMA = 0.8
-"""Brightens ink colors for the same reason; applied to sRGB values in [0, 1]."""
+INK_FLOOR = 0.35
+"""Lowest brightness of an ink color (its strongest channel, 0..1). Symbol density
+already shows how bright a cell is, so the color only has to carry its hue; without a
+floor, dark surfaces print as nearly invisible symbols."""
+DENSITY_GAMMA = 0.75
+"""Curve from luminance to symbol density. Below 1 it lifts dark surfaces off the
+background so they read as texture instead of empty space."""
 FILL_BACKGROUND = 0.55
 """Brightness of the painted background in `fill` style, relative to the cell color."""
 FILL_HIGHLIGHT = 0.35
@@ -107,17 +112,18 @@ def image_to_art(
         )
     srgb = pixels[: rows * cell_h, : cols * cell_w].astype(np.float32) / 255.0
 
-    cell_color = _linear_to_srgb(
-        _cell_mean(_srgb_to_linear(srgb), rows, cell_h, cols, cell_w)
-    )
-    chars = _RAMP_CHARS[_ramp_index(_dither(_stretch(_luma(cell_color))))]
+    linear = _srgb_to_linear(srgb)
+    cell_color = _linear_to_srgb(_cell_mean(linear, rows, cell_h, cols, cell_w))
+    glow = _linear_to_srgb(_bright_mean(linear, rows, cell_h, cols, cell_w))
+    density = _stretch(_luma(cell_color)) ** DENSITY_GAMMA
+    chars = _RAMP_CHARS[_ramp_index(_dither(density))]
     edge_chars = _edge_chars(_luma(srgb), rows, cell_h, cols, cell_w)
     chars = np.where(edge_chars != "", edge_chars, chars)
 
     if style == "fill":
-        fg = cell_color + (1.0 - cell_color) * FILL_HIGHLIGHT
+        fg = glow + (1.0 - glow) * FILL_HIGHLIGHT
         return SymbolArt(chars, _to_bytes(fg), _to_bytes(cell_color * FILL_BACKGROUND))
-    return SymbolArt(chars, _to_bytes(_ink(cell_color)), None)
+    return SymbolArt(chars, _to_bytes(_ink(glow)), None)
 
 
 def to_text(art: SymbolArt) -> Text:
@@ -159,6 +165,21 @@ def _cell_mean(
 ) -> FloatArray:
     shaped = values.reshape(rows, cell_h, cols, cell_w, *values.shape[2:])
     result: FloatArray = shaped.mean(axis=(1, 3))
+    return result
+
+
+def _bright_mean(
+    linear: FloatArray, rows: int, cell_h: int, cols: int, cell_w: int
+) -> FloatArray:
+    """Cell color weighted toward its brightest pixels.
+
+    A symbol's ink stands for the light in its cell, so a small lit window or star
+    should give the symbol its color instead of being averaged into the dark around
+    it. Weighting by squared luminance does that and leaves flat cells unchanged.
+    """
+    weight = (_luma(linear) ** 2 + 1e-6)[..., None]
+    total = _cell_mean(linear * weight, rows, cell_h, cols, cell_w)
+    result: FloatArray = total / _cell_mean(weight, rows, cell_h, cols, cell_w)
     return result
 
 
@@ -279,7 +300,10 @@ def _sobel(image: FloatArray) -> tuple[FloatArray, FloatArray]:
 def _ink(color: FloatArray) -> FloatArray:
     gray = _luma(color)[..., None]
     saturated = np.clip(gray + (color - gray) * SATURATION_BOOST, 0.0, 1.0)
-    result: FloatArray = (saturated**INK_GAMMA).astype(np.float32)
+    value = saturated.max(axis=-1, keepdims=True)
+    lifted = INK_FLOOR + (1.0 - INK_FLOOR) * value
+    scale = np.divide(lifted, value, out=np.ones_like(value), where=value > 0.02)
+    result: FloatArray = np.clip(saturated * scale, 0.0, 1.0).astype(np.float32)
     return result
 
 
