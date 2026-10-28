@@ -21,6 +21,9 @@ WARN = "#fb7185"
 GOOD = "#c084fc"
 SPINNER = "✻✽✶✳✢·"
 PROMPT = " › "
+CLEAR = "\x1b[2J\x1b[3J\x1b[H"
+"""Screen and scrollback, then home: what starting Claude Code does to a shell. Clearing
+the screen alone leaves the old lines one scroll away in Windows Terminal."""
 FRAME = "#5b5b6b"
 
 BLOCK = "█"
@@ -122,6 +125,7 @@ STRINGS: dict[Language, dict[str, str]] = {
 COMMANDS: dict[Language, Sequence[tuple[str, str]]] = {
     "en": (
         ("/new", "start a fresh picture"),
+        ("/clear", "clear the screen and start a fresh picture"),
         ("/style [ink|fill]", "switch how the picture is drawn"),
         ("/charset [classic|symbols]", "switch the character set"),
         ("/help", "show this list"),
@@ -129,6 +133,7 @@ COMMANDS: dict[Language, Sequence[tuple[str, str]]] = {
     ),
     "tr": (
         ("/new", "yeni bir resme başla"),
+        ("/clear", "ekranı temizle ve yeni bir resme başla"),
         ("/style [ink|fill]", "resmin çizim stilini değiştir"),
         ("/charset [classic|symbols]", "karakter setini değiştir"),
         ("/help", "bu listeyi göster"),
