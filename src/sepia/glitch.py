@@ -8,15 +8,28 @@ import random
 
 from sepia.ascii_art import SymbolArt
 
-RADIUS_X = 9
-RADIUS_Y = 4
+RADIUS_X = 13
+RADIUS_Y = 6
 """Half-size of the glitched area in cells; cells are about twice as tall as wide,
 so this reads as roughly round."""
-DURATION = 0.6
+DURATION = 0.9
 """Seconds the glitch lingers and fades after the pointer stops."""
 FRAME_SECONDS = 1 / 30
-MAX_SHIFT = 3
+MAX_SHIFT = 5
 """How far, in cells, a torn row segment slides sideways."""
+
+# How often each kind of damage happens at full strength, per row or per cell.
+TEAR_RATE = 0.85
+"""A row segment slides sideways."""
+JUMP_RATE = 0.3
+"""A row shows its neighbor above or below instead, so the area judders."""
+NOISE_RATE = 0.7
+"""A glyph turns into noise."""
+SPLIT_RATE = 0.8
+"""A cell's color splits: red from the left neighbor, green and blue from the right."""
+FLASH_RATE = 0.25
+"""A cell flashes magenta, cyan or white."""
+
 NOISE = "░▒▓█▚▞#@%&$!?/\\|<>"
 SPLIT_COLORS = ((255, 0, 170), (0, 255, 255), (255, 255, 255))
 """Magenta, cyan and white flashes, the usual colors of a broken signal."""
@@ -39,23 +52,26 @@ def glitch_ansi(
     out: list[str] = []
     for y in range(top, bottom):
         dy = (y - row) / RADIUS_Y
-        torn = rng.random() < 0.6 * strength
-        shift = rng.randint(-MAX_SHIFT, MAX_SHIFT) if torn else 0
+        shift = 0
+        if rng.random() < TEAR_RATE * strength:
+            shift = rng.randint(-MAX_SHIFT, MAX_SHIFT)
+        source_row = y
+        if rng.random() < JUMP_RATE * strength:
+            source_row = min(max(y + rng.choice((-1, 1)), 0), art.rows - 1)
         cells: list[Cell] = []
         for x in range(left, right):
             dx = (x - col) / RADIUS_X
-            chance = max(0.0, 1.0 - (dx * dx + dy * dy)) * strength
+            # Strongest at the pointer, fading toward the edge of the ellipse.
+            chance = max(0.0, 1.0 - (dx * dx + dy * dy)) ** 0.6 * strength
             source = min(max(x - shift, 0), art.cols - 1)
-            char, fg, bg = _cell(art, y, source)
-            if rng.random() < chance * 0.5:
+            char, fg, bg = _cell(art, source_row, source)
+            if rng.random() < chance * NOISE_RATE:
                 char = rng.choice(NOISE)
-            if rng.random() < chance * 0.6:
-                # Chromatic split: red from the left neighbor, green and blue from
-                # the right one.
-                red = _cell(art, y, max(source - 1, 0))[1][0]
-                _, green, blue = _cell(art, y, min(source + 1, art.cols - 1))[1]
-                fg = (red, green, blue)
-            if rng.random() < chance * 0.15:
+            if rng.random() < chance * SPLIT_RATE:
+                red = _cell(art, source_row, max(source - 1, 0))[1][0]
+                right_fg = _cell(art, source_row, min(source + 1, art.cols - 1))[1]
+                fg = (red, right_fg[1], right_fg[2])
+            if rng.random() < chance * FLASH_RATE:
                 fg = rng.choice(SPLIT_COLORS)
             cells.append((char, fg, bg))
         out.append(_row_ansi(y, left, cells))
