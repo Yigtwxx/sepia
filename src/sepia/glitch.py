@@ -17,6 +17,8 @@ DURATION = 0.9
 FRAME_SECONDS = 1 / 30
 MAX_SHIFT = 5
 """How far, in cells, a torn row segment slides sideways."""
+RIM_JITTER = 0.2
+"""How ragged the round edge is, as a share of the radius."""
 
 # How often each kind of damage happens at full strength, per row or per cell.
 TEAR_RATE = 0.85
@@ -61,8 +63,14 @@ def glitch_ansi(
         cells: list[Cell] = []
         for x in range(left, right):
             dx = (x - col) / RADIUS_X
-            # Strongest at the pointer, fading toward the edge of the ellipse.
-            chance = max(0.0, 1.0 - (dx * dx + dy * dy)) ** 0.6 * strength
+            distance = dx * dx + dy * dy
+            if distance > 1.0 + rng.uniform(-RIM_JITTER, RIM_JITTER):
+                # Outside the circle: the untouched cell, so the corners of the
+                # redrawn box never show and the glitch reads as round.
+                cells.append(_cell(art, y, x))
+                continue
+            # Strongest at the pointer, fading toward the rim.
+            chance = max(0.0, 1.0 - distance) ** 0.6 * strength
             source = min(max(x - shift, 0), art.cols - 1)
             char, fg, bg = _cell(art, source_row, source)
             if rng.random() < chance * NOISE_RATE:

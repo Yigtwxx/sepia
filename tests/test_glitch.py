@@ -67,3 +67,21 @@ def test_glitch_ansi_at_full_strength_corrupts_and_stays_in_place() -> None:
     assert rows == list(range(top, bottom)), f"Rows drawn: {rows}"
     assert cols == {left}, f"Every row starts at the area's left edge, got {cols}"
     assert set(_text(noisy)) != {"a"}, "Full strength must corrupt some glyphs"
+
+
+def test_glitch_ansi_leaves_the_corners_of_its_box_untouched() -> None:
+    cols, rows = 60, 20
+    letters = np.array(
+        [[chr(65 + (x + y) % 26) for x in range(cols)] for y in range(rows)]
+    )
+    art = SymbolArt(letters, np.zeros((rows, cols, 3), dtype=np.uint8), None)
+    top, bottom, left, right = area(art, 30, 10)
+    for seed in range(20):
+        ansi = glitch_ansi(art, 30, 10, 1.0, random.Random(seed))
+        drawn = [_text(row) for row in POSITION.split(ansi)[3::3]]
+        for y, x in [(0, 0), (0, -1), (-1, 0), (-1, -1)]:
+            row = top if y == 0 else bottom - 1
+            col = left if x == 0 else right - 1
+            got = drawn[row - top][col - left]
+            expected = str(letters[row, col])
+            assert got == expected, f"seed {seed}: corner ({row},{col}) is {got!r}"
