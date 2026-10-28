@@ -212,9 +212,9 @@ class LocalPainter:
         reference: Image.Image | None = None,
     ) -> Painting:
         """Paint `prompt`; with `reference`, edit that image instead of a new one."""
+        self.load()  # first: it explains a missing extra before torch is imported
         import torch
 
-        self.load()
         budget = LOCAL_PIXELS if reference is None else LOCAL_EDIT_PIXELS
         width, height = size
         if width * height > budget:
