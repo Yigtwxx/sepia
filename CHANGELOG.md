@@ -15,6 +15,10 @@ tag all carry.
 - `/effort [low|medium|high|xhigh|max]` sets how long Claude thinks about each
   picture, from the next request on; without a name it opens a menu. The
   bottom bar shows the current effort next to the model.
+- Paste a picture link into a request ("yunara https://…") to paint from
+  that picture: sepia downloads it first, Claude sees it and writes the
+  subject's look into the prompt without a web search, and the image model
+  copies it. A link without a usable picture is reported.
 - `/usage` shows all-time totals under the session's, kept in `usage.json` in
   the config folder and shared by every sepia window. Use from before tracking
   began is estimated once from the prompt history and the saved sessions.

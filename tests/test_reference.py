@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from sepia import reference
-from sepia.reference import find_reference, preview_image
+from sepia.reference import find_reference, preview_image, split_links
 
 PAGE = "https://wiki.example.org/en-us/Yunara"
 PICTURE = "https://images.example.org/Yunara.png"
@@ -21,6 +21,31 @@ def _png(size: tuple[int, int] = (400, 300), color: object = (200, 40, 220)) -> 
 
 def _page(meta: str) -> bytes:
     return f"<html><head><title>x</title>{meta}</head><body></body></html>".encode()
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("waterfall", ("waterfall", ())),
+        (f"yunara {PICTURE}", ("yunara", (PICTURE,))),
+        (PICTURE, ("", (PICTURE,))),
+        (f"paint this: {PICTURE}.", ("paint this:", (PICTURE,))),
+        (
+            "at night https://en.wikipedia.org/wiki/Mercury_(planet)",
+            ("at night", ("https://en.wikipedia.org/wiki/Mercury_(planet)",)),
+        ),
+    ],
+)
+def test_split_links_separates_words_from_pasted_links(
+    text: str, expected: tuple[str, tuple[str, ...]]
+) -> None:
+    got = split_links(text)
+    assert got == expected, f"Expected {expected}, got {got}"
+
+
+def test_split_links_link_in_parentheses_drops_the_closing_one() -> None:
+    _, links = split_links(f"a castle (like {PICTURE})")
+    assert links == (PICTURE,), f"Got {links}"
 
 
 def test_preview_image_prefers_og_image_and_resolves_relative_links() -> None:

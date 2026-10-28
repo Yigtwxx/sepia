@@ -1,5 +1,7 @@
 """Ask Claude to turn a short request into a prompt for the local image model."""
 
+import base64
+import io
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import cache
@@ -9,10 +11,13 @@ from typing import Any
 
 import anthropic
 from anthropic.types.beta import (
+    BetaContentBlockParam,
+    BetaImageBlockParam,
     BetaOutputConfigParam,
     BetaUsage,
     BetaWebSearchTool20260209Param,
 )
+from PIL import Image
 from pydantic import BaseModel, Field, ValidationError
 
 from sepia.config import Effort
@@ -36,6 +41,8 @@ WEB_SEARCH: BetaWebSearchTool20260209Param = {
 """Lets Claude look up what an unfamiliar name looks like; about $0.01 a search."""
 MAX_REFERENCES = 3
 """Links tried for a reference picture; the first usable one wins."""
+LINKED_SIDE = 1024
+"""Longest side of a linked picture shown to Claude; more detail only costs tokens."""
 
 REPLY_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -122,13 +129,23 @@ class Director:
         """Takes effect from the next request; /effort sets it while sepia waits."""
         self._effort = effort
 
-    def direct(self, request: str, scene: Scene) -> Direction:
-        """Turn `request`, in the context of `scene`, into an image prompt."""
+    def direct(
+        self, request: str, scene: Scene, linked: Image.Image | None = None
+    ) -> Direction:
+        """Turn `request`, in the context of `scene`, into an image prompt.
+
+        `linked` is a picture the person linked; Claude sees it, so it can write
+        the subject's look into the prompt without searching.
+        """
         output_config: BetaOutputConfigParam = {
             "effort": self._effort,
             "format": {"type": "json_schema", "schema": REPLY_SCHEMA},
         }
         fallback = self._model in FALLBACK_MODELS
+        text = build_request(request, scene, linked=linked is not None)
+        content: str | list[BetaContentBlockParam] = text
+        if linked is not None:
+            content = [_image_block(linked), {"type": "text", "text": text}]
         try:
             with self._client.beta.messages.stream(
                 model=self._model,
@@ -138,7 +155,7 @@ class Director:
                 system=system_prompt(),
                 tools=[WEB_SEARCH],
                 output_config=output_config,
-                messages=[{"role": "user", "content": build_request(request, scene)}],
+                messages=[{"role": "user", "content": content}],
             ) as stream:
                 message = stream.get_final_message()
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
@@ -175,6 +192,18 @@ class Director:
         )
 
 
+def _image_block(picture: Image.Image) -> BetaImageBlockParam:
+    small = picture.convert("RGB")
+    small.thumbnail((LINKED_SIDE, LINKED_SIDE))
+    buffer = io.BytesIO()
+    small.save(buffer, format="JPEG", quality=85)
+    data = base64.standard_b64encode(buffer.getvalue()).decode("ascii")
+    return {
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/jpeg", "data": data},
+    }
+
+
 def _searches(usage: BetaUsage) -> int:
     """Web searches the request ran; None when it ran no server tool at all."""
     server = usage.server_tool_use
@@ -193,7 +222,7 @@ def system_prompt() -> str:
     return _prompt("director.md")
 
 
-def build_request(request: str, scene: Scene) -> str:
+def build_request(request: str, scene: Scene, linked: bool = False) -> str:
     if scene.is_empty:
         history = (
             "<previous_requests>none: this is the first picture</previous_requests>"
@@ -204,8 +233,13 @@ def build_request(request: str, scene: Scene) -> str:
             f"<previous_requests>\n{earlier}\n</previous_requests>\n"
             f"<previous_prompt>{scene.prompts[-1]}</previous_prompt>"
         )
+    picture = (
+        "<linked_picture>the picture above, linked by the person</linked_picture>\n"
+        if linked
+        else ""
+    )
     return Template(_prompt("request.md")).substitute(
-        history=history, request=request.strip()
+        history=history, linked=picture, request=request.strip()
     )
 
 

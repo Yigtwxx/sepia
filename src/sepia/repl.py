@@ -35,7 +35,7 @@ from sepia.launcher import VIEWER_COLS, VIEWER_ROWS, LaunchError, open_viewer
 from sepia.painter import FallbackPainter, PainterError, Painting, build_painter
 from sepia.painter import image_size as paint_size
 from sepia.picker import choose
-from sepia.reference import find_reference
+from sepia.reference import Reference, find_reference, split_links
 from sepia.scene import Canvas, Scene
 from sepia.usage import SESSION_FORMAT, Ledger, Usage, estimate_earlier
 
@@ -232,9 +232,18 @@ class Repl:
         if not add:
             self.scene.reset()
         self._ensure_viewer()
+        words, links = split_links(request)
+        linked: Reference | None = None
+        if links:
+            linked = self._wait(lambda: find_reference(links), self.words("looking"))
+            if linked is None:
+                self.console.print(ui.reply(self.words("link_unusable"), failed=True))
+                if not words:
+                    return
+        picture = linked.image if linked is not None else None
         try:
             direction = self._wait(
-                lambda: self.director.direct(request, self.scene),
+                lambda: self.director.direct(words, self.scene, picture),
                 self.words("directing"),
             )
         except DirectorError as exc:
@@ -244,8 +253,8 @@ class Repl:
             return
         self._tally(lambda usage: usage.add_direction(direction))
         # A new picture starts from an empty scene; /add keeps the last reference.
-        likeness = self.scene.likeness
-        if direction.references:
+        likeness = linked or self.scene.likeness
+        if linked is None and direction.references:
             found = self._wait(
                 lambda: find_reference(direction.references), self.words("looking")
             )
@@ -264,7 +273,7 @@ class Repl:
             message = self.words("failure.paint", error=str(exc))
             self.console.print(ui.reply(message, failed=True))
             return
-        self.scene.record(request, direction.prompt, painting.image, likeness)
+        self.scene.record(words or request, direction.prompt, painting.image, likeness)
         # The keyless API ignores reference pictures, so such a picture had none.
         used = likeness if painting.source != "keyless" else None
         self._tally(

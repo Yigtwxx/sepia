@@ -8,6 +8,7 @@ picture (`og:image`) and keeps the first one that is a real picture of usable si
 
 import io
 import ipaddress
+import re
 import socket
 import urllib.error
 import urllib.parse
@@ -29,6 +30,9 @@ MIN_SIDE = 256
 """Smaller pictures are icons and thumbnails, too coarse to copy a look from."""
 USER_AGENT = f"sepia-cli/{__version__} (https://github.com/Yigtwxx/sepia)"
 """Wikimedia and others refuse clients that don't say who they are."""
+LINK = re.compile(r"https?://\S+")
+TRAILING = ".,;:!?'\""
+"""Punctuation after a pasted link that belongs to the sentence, not the link."""
 PREVIEW_KEYS = (
     "og:image",
     "og:image:url",
@@ -49,6 +53,24 @@ class Reference:
 
 class UnusableLink(Exception):
     """This link gave no usable picture."""
+
+
+def split_links(text: str) -> tuple[str, tuple[str, ...]]:
+    """The words of a request and the links pasted into it: "yunara <link>" is the
+    words "yunara" and a picture the person chose to paint from."""
+    links = tuple(_trim(match) for match in LINK.findall(text))
+    words = " ".join(LINK.sub(" ", text).split())
+    return words, links
+
+
+def _trim(link: str) -> str:
+    """`link` without the sentence's punctuation; a closing parenthesis stays when
+    the link opened one, as in a wiki's .../Mercury_(planet)."""
+    while link and (
+        link[-1] in TRAILING or (link[-1] == ")" and link.count(")") > link.count("("))
+    ):
+        link = link[:-1]
+    return link
 
 
 def find_reference(links: Sequence[str]) -> Reference | None:

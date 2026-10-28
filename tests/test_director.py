@@ -1,3 +1,5 @@
+import base64
+import io
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -8,6 +10,7 @@ from PIL import Image
 
 from sepia.director import (
     FALLBACK_BETA,
+    LINKED_SIDE,
     REPLY_SCHEMA,
     Director,
     DirectorError,
@@ -141,6 +144,40 @@ def test_build_request_first_picture_says_so() -> None:
     text = build_request("  şelale ", Scene())
     assert "<request>şelale</request>" in text, f"Request missing in {text!r}"
     assert "first picture" in text, f"First-picture note missing in {text!r}"
+
+
+def test_build_request_linked_picture_is_marked() -> None:
+    text = build_request("at night", Scene(), linked=True)
+    assert "<linked_picture>" in text, f"Linked-picture note missing in {text!r}"
+    plain = build_request("at night", Scene())
+    assert "<linked_picture>" not in plain, f"Note without a picture in {plain!r}"
+
+
+def test_director_direct_linked_picture_is_shown_before_the_request(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message(REPLY))
+    picture = Image.new("RGB", (2048, 1024), (200, 40, 220))
+    Director(fake_client, "m", "low").direct("at night", Scene(), picture)
+    messages = fake_client.beta.messages.stream.call_args.kwargs["messages"]
+    image, text = messages[0]["content"]
+    assert image["type"] == "image", f"Expected the picture first, got {image}"
+    assert image["source"]["media_type"] == "image/jpeg", f"Got {image['source']}"
+    assert "<linked_picture>" in text["text"], f"Got {text}"
+
+
+def test_director_direct_linked_picture_is_shrunk_for_claude(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message(REPLY))
+    picture = Image.new("RGB", (4000, 2000), (200, 40, 220))
+    Director(fake_client, "m", "low").direct("x", Scene(), picture)
+    messages = fake_client.beta.messages.stream.call_args.kwargs["messages"]
+    data = base64.standard_b64decode(messages[0]["content"][0]["source"]["data"])
+    size = Image.open(io.BytesIO(data)).size
+    assert max(size) == LINKED_SIDE, (
+        f"Expected the long side at {LINKED_SIDE}, got {size}"
+    )
 
 
 def test_build_request_follow_up_includes_history_and_last_prompt() -> None:

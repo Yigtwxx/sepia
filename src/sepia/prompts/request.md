@@ -1,2 +1,2 @@
 $history
-<request>$request</request>
+$linked<request>$request</request>
