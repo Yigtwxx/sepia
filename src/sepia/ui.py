@@ -22,8 +22,6 @@ GOOD = "#c084fc"
 SPINNER = "✻✽✶✳✢·"
 PROMPT = " › "
 FRAME = "#5b5b6b"
-BAR_ROWS = 4
-"""The chat bar: top border, input line, bottom border, status line."""
 
 BLOCK = "█"
 """The cell the letters are made of; every other glyph of the mark is shadow."""

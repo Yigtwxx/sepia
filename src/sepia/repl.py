@@ -79,43 +79,6 @@ def new_session_dir(root: Path, keep: int = KEEP_SESSIONS) -> Path:
     return folder
 
 
-class BottomBar:
-    """Keeps the chat bar on the bottom rows while the transcript scrolls above it.
-
-    A terminal scroll region (DECSTBM) covers every row except the bar's, so output
-    that reaches the region's bottom scrolls only the region: the welcome box moves up
-    and out of view like any old line, and the bar never moves.
-    """
-
-    SAVE, RESTORE, RESET = "\x1b7", "\x1b8", "\x1b[r"
-
-    def __init__(self, write: Callable[[str], None], rows: Callable[[], int]) -> None:
-        self._write = write
-        self._rows = rows
-
-    def start(self) -> None:
-        """Set the region; this also homes the cursor, where the transcript begins."""
-        self._write(self._region())
-
-    def to_bar(self) -> None:
-        """Remember the transcript position and move to the bar's first row."""
-        height = self._rows()
-        # Re-applying the region follows window resizes; it homes the cursor, so
-        # the transcript position is saved first and put back afterwards.
-        self._write(self.SAVE + self._region() + self.RESTORE + self.SAVE)
-        self._write(f"\x1b[{max(height - ui.BAR_ROWS + 1, 1)};1H")
-
-    def to_transcript(self) -> None:
-        self._write(self.RESTORE)
-
-    def stop(self) -> None:
-        """Give the whole screen back and leave the cursor on the last row."""
-        self._write(f"{self.RESET}\x1b[{self._rows()};1H\n")
-
-    def _region(self) -> str:
-        return f"\x1b[1;{max(self._rows() - ui.BAR_ROWS, 1)}r"
-
-
 class Repl:
     def __init__(
         self,
@@ -142,7 +105,6 @@ class Repl:
         self._launched_at = 0.0
         self._count = 0
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sepia-work")
-        self.bar = BottomBar(self._write, lambda: shutil.get_terminal_size().lines)
 
     def run(self) -> int:
         self._open_screen()
@@ -168,7 +130,6 @@ class Repl:
         )
         try:
             while True:
-                self.bar.to_bar()
                 try:
                     line = session.prompt(
                         self._bar_message,
@@ -178,8 +139,6 @@ class Repl:
                     ).strip()
                 except KeyboardInterrupt:
                     continue
-                finally:
-                    self.bar.to_transcript()
                 if not line:
                     continue
                 self.console.print(ui.echo(line))
@@ -189,7 +148,6 @@ class Repl:
         except EOFError:
             return 0
         finally:
-            self.bar.stop()
             self.host.send({"type": "bye"})
             self.host.close()
             self._pool.shutdown(wait=False, cancel_futures=True)
@@ -313,16 +271,16 @@ class Repl:
             self.canvas = Canvas(cols, rows)
 
     def _open_screen(self) -> None:
-        """Welcome box at the top of the scroll region, chat bar on the bottom rows."""
+        """Welcome box, then the chat bar right under it, like Claude Code.
+
+        Each turn erases the bar, prints the exchange where it stood and draws the
+        bar again below, so the bar walks down to the bottom of the window and stays
+        there while the terminal scrolls the welcome box away.
+        """
         self.console.clear()
-        self.bar.start()
         self.console.print(ui.welcome(self.words, self.console.width))
         self.console.print(ui.tip(self.words))
         self.console.print()
-
-    def _write(self, sequence: str) -> None:
-        self.console.file.write(sequence)
-        self.console.file.flush()
 
     def _bar_message(self) -> FormattedText:
         width = shutil.get_terminal_size().columns
