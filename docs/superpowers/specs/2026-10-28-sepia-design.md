@@ -1,4 +1,4 @@
-# Sepia design
+# sepia design
 
 Date: 2026-10-28
 Status: approved
@@ -7,7 +7,7 @@ Status: approved
 
 `sepia` opens a chat-style prompt in the terminal. The user describes a picture ("waterfall"). Claude draws it, and a
 second terminal window opens to show the picture as colored symbols (`.'^+%&/()…`). Follow-up prompts edit the same
-scene ("mountains" gives a waterfall with mountains). Sepia only makes pictures.
+scene ("mountains" gives a waterfall with mountains). sepia only makes pictures.
 
 Constraints:
 
@@ -18,7 +18,7 @@ Constraints:
 
 ## Name
 
-Sepia is the cuttlefish genus. Cuttlefish release ink and paint colored patterns across their skin, which is what this
+sepia is the cuttlefish genus. Cuttlefish release ink and paint colored patterns across their skin, which is what this
 tool does to a terminal. The PyPI name `sepia` is taken by an abandoned 2018 project, so the package is published as
 `sepia-cli` and installs a `sepia` command.
 
@@ -69,7 +69,7 @@ terminal 1: sepia (prompt)                         terminal 2: sepia --viewer (s
 ## Windows and terminals
 
 - Windows: `wt.exe -w new --focus` opens a new Windows Terminal window in focus mode, which hides the tab and title bar.
-  If Windows Terminal is missing, Sepia falls back to a new console window.
+  If Windows Terminal is missing, sepia falls back to a new console window.
 - macOS: `osascript` asks Terminal.app to run the viewer in a new window. Terminal.app cannot hide its title bar.
 - The viewer switches to the alternate screen and clears it, so the launching command line is never visible.
 - One viewer window per session. Later prompts update it in place. If the user closes it, the next prompt reopens it.
@@ -82,7 +82,7 @@ terminal 1: sepia (prompt)                         terminal 2: sepia --viewer (s
 ## Configuration and secrets
 
 - `ANTHROPIC_API_KEY` is read from the environment, then a `.env` in the working directory (development), then a `.env`
-  in the user config directory. If no key is found, Sepia asks once with hidden input and stores it in the user config
+  in the user config directory. If no key is found, sepia asks once with hidden input and stores it in the user config
   directory. The key is never logged.
 - `SEPIA_MODEL`, `SEPIA_EFFORT`, `SEPIA_STYLE` adjust the model, the effort level and the rendering style.
 
