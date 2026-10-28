@@ -8,7 +8,7 @@ from string import Template
 from typing import Any
 
 import anthropic
-from anthropic.types.beta import BetaOutputConfigParam
+from anthropic.types.beta import BetaOutputConfigParam, BetaWebSearchTool20260209Param
 from pydantic import BaseModel, Field, ValidationError
 
 from sepia.config import Effort
@@ -24,6 +24,12 @@ FALLBACK_MODELS = frozenset(
     {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"}
 )
 """Models that accept `fallbacks: "default"`; Haiku has no server-side fallback."""
+WEB_SEARCH: BetaWebSearchTool20260209Param = {
+    "type": "web_search_20260209",
+    "name": "web_search",
+    "max_uses": 2,
+}
+"""Lets Claude look up what an unfamiliar name looks like; about $0.01 a search."""
 
 REPLY_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -103,6 +109,7 @@ class Director:
                 betas=[FALLBACK_BETA] if fallback else anthropic.omit,
                 fallbacks="default" if fallback else anthropic.omit,
                 system=system_prompt(),
+                tools=[WEB_SEARCH],
                 output_config=output_config,
                 messages=[{"role": "user", "content": build_request(request, scene)}],
             ) as stream:
@@ -122,7 +129,9 @@ class Director:
             raise DirectorError(Failure.REFUSED)
         if message.stop_reason == "max_tokens":
             raise DirectorError(Failure.TRUNCATED)
-        text = "".join(block.text for block in message.content if block.type == "text")
+        # The JSON is the last text block; a search can put remarks before it.
+        texts = [block.text for block in message.content if block.type == "text"]
+        text = texts[-1] if texts else ""
         try:
             reply = _Reply.model_validate_json(text)
         except ValidationError as exc:

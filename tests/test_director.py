@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import anthropic
@@ -136,3 +137,25 @@ def test_build_request_follow_up_includes_history_and_last_prompt() -> None:
     assert "1. şelale" in text, f"History missing in {text!r}"
     expected = "<previous_prompt>A waterfall in a canyon.</previous_prompt>"
     assert expected in text, f"Last prompt missing in {text!r}"
+
+
+def test_director_direct_offers_claude_a_web_search(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message(REPLY))
+    Director(fake_client, "claude-haiku-5-5", "low").direct("yunara lol", Scene())
+    tools = fake_client.beta.messages.stream.call_args.kwargs["tools"]
+    assert [tool["name"] for tool in tools] == ["web_search"], f"Got {tools}"
+    assert tools[0]["max_uses"] <= 2, "Searches must stay capped"
+
+
+def test_director_direct_reads_json_from_the_last_text_block(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    message = make_message(REPLY)
+    remark = SimpleNamespace(type="text", text="Let me look that up.")
+    search = SimpleNamespace(type="server_tool_use", name="web_search")
+    message.content = [remark, search, *message.content]
+    set_final_message(message)
+    direction = Director(fake_client, "m", "low").direct("yunara lol", Scene())
+    assert direction.prompt == "A waterfall.", f"Got {direction.prompt!r}"
