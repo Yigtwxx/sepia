@@ -61,6 +61,8 @@ class Usage:
     paint_seconds: float = 0.0
     referenced: int = 0
     """Pictures painted after a reference picture."""
+    image_searches: int = 0
+    """Brave image searches for named subjects; Brave bills its own account."""
 
     @property
     def cost(self) -> float:
@@ -80,6 +82,9 @@ class Usage:
         per_input, per_output = price
         self.input_cost += direction.input_tokens * per_input / 1_000_000
         self.output_cost += direction.output_tokens * per_output / 1_000_000
+
+    def add_image_searches(self, searches: int) -> None:
+        self.image_searches += searches
 
     def add_painting(self, painting: Painting, referenced: bool) -> None:
         self.pictures[painting.source] = self.pictures.get(painting.source, 0) + 1

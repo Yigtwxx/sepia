@@ -160,3 +160,12 @@ def test_ledger_corrupt_file_starts_over_without_estimate(tmp_path: Path) -> Non
     record = Ledger(path, estimate).read()
     assert record.total == Usage(), f"Expected fresh totals, got {record.total}"
     assert estimate.call_count == 0, "History now holds tracked requests too"
+
+
+def test_usage_add_image_searches_counts_them() -> None:
+    usage = Usage()
+    usage.add_image_searches(1)
+    usage.add_image_searches(0)
+    usage.add_image_searches(1)
+    assert usage.image_searches == 2, f"Got {usage.image_searches}"
+    assert usage.cost == 0.0, "Brave bills its own account"

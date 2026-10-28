@@ -27,6 +27,23 @@ def fit_image(image: Image.Image, width: int, height: int) -> RGBImage:
     return np.asarray(fitted, dtype=np.uint8)
 
 
+def letterbox(image: Image.Image, width: int, height: int) -> Image.Image:
+    """`image` scaled to fit inside `width` x `height` and centered on black.
+
+    A picture shown as it is keeps all of itself, where a painting fills the grid;
+    transparent parts become black, the terminal's own background.
+    """
+    if width <= 0 or height <= 0:
+        raise ValueError(f"canvas must be positive, got {width}x{height}")
+    layer = ImageOps.contain(
+        image.convert("RGBA"), (width, height), method=Image.Resampling.LANCZOS
+    )
+    canvas = Image.new("RGB", (width, height), (0, 0, 0))
+    corner = ((width - layer.width) // 2, (height - layer.height) // 2)
+    canvas.paste(layer, corner, layer)
+    return canvas
+
+
 def enhance(image: Image.Image) -> Image.Image:
     """Stretch contrast and boost color so a photo reads well as colored text."""
     stretched = ImageOps.autocontrast(image.convert("RGB"), cutoff=AUTOCONTRAST_CUTOFF)

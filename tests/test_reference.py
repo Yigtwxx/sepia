@@ -1,12 +1,22 @@
 import io
+import json
 import socket
+import urllib.parse
 from unittest.mock import MagicMock
 
 import pytest
 from PIL import Image
 
 from sepia import reference
-from sepia.reference import find_reference, preview_image, split_links
+from sepia.reference import (
+    IMAGE_RESULTS,
+    IMAGE_SEARCH,
+    find_reference,
+    find_subject,
+    image_search,
+    preview_image,
+    split_links,
+)
 
 PAGE = "https://wiki.example.org/en-us/Yunara"
 PICTURE = "https://images.example.org/Yunara.png"
@@ -144,3 +154,99 @@ def test_checked_redirects_refuse_a_redirect_to_a_private_host(
         handler.redirect_request(
             MagicMock(), MagicMock(), 302, "Found", MagicMock(), "https://intranet/x"
         )
+
+
+ORIGINAL = "https://art.example.org/yunara-splash.jpg"
+THUMBNAIL = "https://imgs.search.brave.com/yunara-splash"
+
+
+def _search_url(query: str) -> str:
+    params = urllib.parse.urlencode({"q": query, "count": IMAGE_RESULTS})
+    return f"{IMAGE_SEARCH}?{params}"
+
+
+def _results(*items: dict[str, object]) -> bytes:
+    return json.dumps({"type": "images", "results": list(items)}).encode()
+
+
+SPLASH = {"properties": {"url": ORIGINAL}, "thumbnail": {"src": THUMBNAIL}}
+
+
+def test_image_search_lists_originals_then_brave_copies(web) -> None:
+    other = {"properties": {"url": "http://plain.example.org/x.jpg"}, "thumbnail": {}}
+    web[_search_url("Yunara")] = (_results(SPLASH, other, "junk"), "application/json")
+    links = image_search("Yunara", "key")
+    assert links == [ORIGINAL, THUMBNAIL], f"Expected https links only, got {links}"
+
+
+def test_image_search_sends_the_key_as_a_header_only(
+    web, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    web[_search_url("Yunara")] = (_results(SPLASH), "application/json")
+    sent: list[object] = []
+    opener = reference.urllib.request.build_opener()
+    original = opener.open.side_effect
+
+    def record(request, timeout):
+        sent.append(request)
+        return original(request, timeout)
+
+    opener.open.side_effect = record
+    image_search("Yunara", "secret-key")
+    request = sent[0]
+    assert request.get_header("X-subscription-token") == "secret-key", "Key missing"
+    assert "secret-key" not in request.full_url, "The key must not be in the URL"
+
+
+def test_image_search_failure_returns_nothing(web) -> None:
+    assert image_search("Yunara", "key") == [], "A failed search gives no links"
+
+
+def test_find_subject_with_key_takes_the_top_search_picture(web) -> None:
+    web[_search_url("Yunara")] = (_results(SPLASH), "application/json")
+    web[ORIGINAL] = (_png(), "image/png")
+    web[PICTURE] = (_png(), "image/png")
+    found, searches = find_subject("Yunara", [PICTURE], "key")
+    assert found is not None and found.url == ORIGINAL, f"Got {found}"
+    assert searches == 1, f"Expected one search, got {searches}"
+
+
+def test_find_subject_refused_original_falls_back_to_brave_copy(web) -> None:
+    web[_search_url("Yunara")] = (_results(SPLASH), "application/json")
+    web[THUMBNAIL] = (_png((500, 400)), "image/jpeg")
+    found, _ = find_subject("Yunara", [], "key")
+    assert found is not None and found.url == THUMBNAIL, f"Got {found}"
+
+
+def test_find_subject_nothing_usable_in_search_uses_claudes_links(web) -> None:
+    web[PICTURE] = (_png(), "image/png")
+    found, searches = find_subject("Yunara", [PICTURE], "key")
+    assert found is not None and found.url == PICTURE, f"Got {found}"
+    assert searches == 1, "The search still ran"
+
+
+def test_find_subject_without_key_uses_claudes_links_only(web) -> None:
+    web[PICTURE] = (_png(), "image/png")
+    found, searches = find_subject("Yunara", [PICTURE], None)
+    assert found is not None and found.url == PICTURE, f"Got {found}"
+    assert searches == 0, f"No key means no search, got {searches}"
+
+
+def test_find_reference_transparent_picture_keeps_its_cutout(web) -> None:
+    web[PICTURE] = (_png(color=(0, 0, 0, 0)), "image/png")
+    found = find_reference([PICTURE])
+    assert found is not None and found.cutout is not None, "Cutout missing"
+    assert found.cutout.getpixel((0, 0))[3] == 0, "Transparency was lost"
+
+
+def test_find_reference_opaque_picture_has_no_cutout(web) -> None:
+    web[PICTURE] = (_png(), "image/png")
+    found = find_reference([PICTURE])
+    assert found is not None and found.cutout is None, f"Got {found}"
+
+
+def test_find_reference_skips_a_preview_drawn_from_svg(web) -> None:
+    logo = "https://upload.example.org/thumb/Tower_logo.svg/960px-Tower_logo.svg.png"
+    web[PAGE] = (_page(f'<meta property="og:image" content="{logo}">'), "text/html")
+    web[logo] = (_png(), "image/png")
+    assert find_reference([PAGE]) is None, "An SVG logo is not the subject"

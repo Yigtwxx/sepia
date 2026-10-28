@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TypeVar, cast, get_args
 
+from PIL import Image
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
 from rich.live import Live
@@ -28,14 +29,16 @@ from sepia.config import (
     load_settings,
     pollinations_key,
     save_api_key,
+    search_key,
 )
-from sepia.director import Director, DirectorError, create_client
+from sepia.director import Direction, Director, DirectorError, create_client
 from sepia.ipc import Host, Message
 from sepia.launcher import VIEWER_COLS, VIEWER_ROWS, LaunchError, open_viewer
 from sepia.painter import FallbackPainter, PainterError, Painting, build_painter
 from sepia.painter import image_size as paint_size
 from sepia.picker import choose
-from sepia.reference import Reference, find_reference, split_links
+from sepia.raster import letterbox
+from sepia.reference import Reference, find_reference, find_subject, split_links
 from sepia.scene import Canvas, Scene
 from sepia.usage import SESSION_FORMAT, Ledger, Usage, estimate_earlier
 
@@ -74,6 +77,11 @@ def named_option(options: tuple[str, ...], argument: str) -> str | None:
     return name if name in options else None
 
 
+def _host(url: str) -> str:
+    """The site a picture came from, for the reply under it."""
+    return urllib.parse.urlsplit(url).hostname or url
+
+
 def new_session_dir(root: Path, keep: int = KEEP_SESSIONS) -> Path:
     """A fresh folder for this session's pictures; prunes the oldest ones."""
     root.mkdir(parents=True, exist_ok=True)
@@ -94,6 +102,7 @@ class Repl:
         painter: FallbackPainter,
         folder: Path,
         ledger: Ledger,
+        search_key: str | None = None,
     ) -> None:
         self.console = console
         self.words = words
@@ -104,6 +113,8 @@ class Repl:
         self.scene = Scene()
         self.usage = Usage()
         self.ledger = ledger
+        self.search_key = search_key
+        """Brave Search API key: named subjects come from an image search."""
         self.style: ArtStyle = settings.style
         self.charset: Charset = settings.charset
         self.canvas = Canvas(VIEWER_COLS, VIEWER_ROWS)
@@ -226,39 +237,37 @@ class Repl:
     def _draw(self, request: str, add: bool) -> None:
         """Paint `request`: a new picture, or with `add` an addition to this one.
 
-        /add on an empty scene simply paints a new picture.
+        /add on an empty scene simply paints a new picture. A bare name ("yunara
+        lol") or a bare picture link shows the subject's picture as it is.
         """
         add = add and not self.scene.is_empty
         if not add:
             self.scene.reset()
         self._ensure_viewer()
         words, links = split_links(request)
-        linked: Reference | None = None
+        found: Reference | None = None
         if links:
-            linked = self._wait(lambda: find_reference(links), self.words("looking"))
-            if linked is None:
+            found = self._wait(lambda: find_reference(links), self.words("looking"))
+            if found is None:
                 self.console.print(ui.reply(self.words("link_unusable"), failed=True))
                 if not words:
                     return
-        picture = linked.image if linked is not None else None
-        try:
-            direction = self._wait(
-                lambda: self.director.direct(words, self.scene, picture),
-                self.words("directing"),
-            )
-        except DirectorError as exc:
-            self.console.print(
-                ui.reply(self.words(f"failure.{exc.failure}"), failed=True)
-            )
+            elif not words and not add:
+                self._present(request, found, self.words("showing_link"))
+                return
+        direction = self._direct(words, found)
+        if direction is None:
             return
-        self._tally(lambda usage: usage.add_direction(direction))
+        if found is None and (direction.subject or direction.references):
+            found = self._find_subject(direction)
+            if found is not None and direction.show:
+                self._present(words, found, direction.message)
+                return
+            if found is not None:
+                # Claude now sees the picture, so the prompt describes the real look.
+                direction = self._direct(words, found) or direction
         # A new picture starts from an empty scene; /add keeps the last reference.
-        likeness = linked or self.scene.likeness
-        if linked is None and direction.references:
-            found = self._wait(
-                lambda: find_reference(direction.references), self.words("looking")
-            )
-            likeness = found or likeness
+        likeness = found or self.scene.likeness
         self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
         reference = self.scene.image if add else None
         size = paint_size(self.canvas.aspect)
@@ -279,15 +288,63 @@ class Repl:
         self._tally(
             lambda usage: usage.add_painting(painting, referenced=used is not None)
         )
-        self._count += 1
-        path = self.folder / f"{self._count:02d}.png"
-        painting.image.save(path)
-        self._show(path)
+        self._keep(painting.image)
         detail = f"{self.words(f'source.{painting.source}')} · {painting.seconds:.1f}s"
         if used is not None:
-            host = urllib.parse.urlsplit(used.url).hostname or used.url
-            detail += f" · {self.words('reference', host=host)}"
+            detail += f" · {self.words('reference', host=_host(used.url))}"
         self.console.print(ui.reply(direction.message, detail))
+
+    def _direct(self, words: str, found: Reference | None) -> Direction | None:
+        """Claude's direction for `words`, shown `found` when there is one; None
+        after saying why it failed."""
+        picture = found.image if found is not None else None
+        try:
+            direction = self._wait(
+                lambda: self.director.direct(words, self.scene, picture),
+                self.words("directing"),
+            )
+        except DirectorError as exc:
+            self.console.print(
+                ui.reply(self.words(f"failure.{exc.failure}"), failed=True)
+            )
+            return None
+        self._tally(lambda usage: usage.add_direction(direction))
+        return direction
+
+    def _find_subject(self, direction: Direction) -> Reference | None:
+        """The picture of the subject Claude named: an image search first, with a
+        key, then Claude's links. Says so when none of them has a usable one."""
+        found, searches = self._wait(
+            lambda: find_subject(
+                direction.subject, direction.references, self.search_key
+            ),
+            self.words("looking"),
+        )
+        if searches:
+            self._tally(lambda usage: usage.add_image_searches(searches))
+        if found is None:
+            subject = direction.subject or self.words("the_subject")
+            message = self.words("no_reference", subject=subject)
+            self.console.print(ui.reply(message, failed=True))
+        return found
+
+    def _present(self, request: str, found: Reference, message: str) -> None:
+        """Show `found` itself as the picture, whole and on black: what a search
+        shows for a bare name, or the picture a bare link points to."""
+        width, height = paint_size(self.canvas.aspect)
+        image = letterbox(found.cutout or found.image, width, height)
+        self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
+        self.scene.record(request, "", image, found)
+        self._keep(image)
+        detail = self.words("shown", host=_host(found.url))
+        self.console.print(ui.reply(message, detail))
+
+    def _keep(self, image: Image.Image) -> None:
+        """Save the scene's new picture to the session folder and show it."""
+        self._count += 1
+        path = self.folder / f"{self._count:02d}.png"
+        image.save(path)
+        self._show(path)
 
     def _tally(self, change: Callable[[Usage], None]) -> None:
         """Count something used, for this session and for all time."""
@@ -393,7 +450,10 @@ def run_repl() -> int:
     # Before this session's requests reach the history and its folder prunes one.
     ledger.read()
     folder = new_session_dir(config_dir() / "sessions")
-    return Repl(console, words, settings, director, painter, folder, ledger).run()
+    repl = Repl(
+        console, words, settings, director, painter, folder, ledger, search_key()
+    )
+    return repl.run()
 
 
 def _ask_for_key(console: Console, words: ui.Words) -> str | None:

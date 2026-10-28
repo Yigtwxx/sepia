@@ -1,13 +1,16 @@
 """Find a picture of a named subject on the web, so the painter can copy its look.
 
 The image models know no names: asked for a game character they paint a stranger,
-however well the prompt describes her. The director links pages about the subject
-(a wiki article, or a direct image link); this module takes each page's preview
-picture (`og:image`) and keeps the first one that is a real picture of usable size.
+however well the prompt describes her. With a Brave Search key, the top results of
+an image search come first, the pictures a search engine shows for the name.
+Otherwise, or when none is usable, the director's links follow: pages about the
+subject (a wiki article, or a direct image link), of which this module takes the
+preview picture (`og:image`). The first real picture of usable size wins.
 """
 
 import io
 import ipaddress
+import json
 import re
 import socket
 import urllib.error
@@ -33,6 +36,9 @@ USER_AGENT = f"sepia-cli/{__version__} (https://github.com/Yigtwxx/sepia)"
 LINK = re.compile(r"https?://\S+")
 TRAILING = ".,;:!?'\""
 """Punctuation after a pasted link that belongs to the sentence, not the link."""
+IMAGE_SEARCH = "https://api.search.brave.com/res/v1/images/search"
+IMAGE_RESULTS = 5
+"""Search results tried, best first; a site that refuses downloads skips to the next."""
 PREVIEW_KEYS = (
     "og:image",
     "og:image:url",
@@ -49,6 +55,9 @@ class Reference:
 
     url: str
     image: Image.Image
+    cutout: Image.Image | None = None
+    """The picture with its transparency, when it has any, so a picture shown as it
+    is can stand on the terminal's black instead of a wiki page's white."""
 
 
 class UnusableLink(Exception):
@@ -83,6 +92,52 @@ def find_reference(links: Sequence[str]) -> Reference | None:
     return None
 
 
+def find_subject(
+    subject: str, links: Sequence[str], search_key: str | None
+) -> tuple[Reference | None, int]:
+    """The best picture of a named subject, and the image searches it took.
+
+    With a key, Brave's top image results for `subject` come first, as a search
+    engine shows them; the pages Claude linked follow when none is usable.
+    """
+    searches = 0
+    if search_key and subject:
+        searches = 1
+        found = find_reference(image_search(subject, search_key))
+        if found is not None:
+            return found, searches
+    return find_reference(links), searches
+
+
+def image_search(query: str, key: str) -> list[str]:
+    """Picture links for `query` from Brave's image search, best first: each
+    result's original picture, then Brave's 500-pixel copy of it, which loads even
+    where the original's site refuses. Empty when the search fails."""
+    params = urllib.parse.urlencode({"q": query, "count": IMAGE_RESULTS})
+    request = urllib.request.Request(
+        f"{IMAGE_SEARCH}?{params}",
+        headers={"Accept": "application/json", "X-Subscription-Token": key},
+    )
+    try:
+        with urllib.request.build_opener().open(
+            request, timeout=TIMEOUT_SECONDS
+        ) as reply:
+            data = json.loads(reply.read(MAX_BYTES))
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return []
+    links: list[str] = []
+    results = data.get("results") if isinstance(data, dict) else None
+    for result in results if isinstance(results, list) else []:
+        if not isinstance(result, dict):
+            continue
+        for part, key_name in (("properties", "url"), ("thumbnail", "src")):
+            section = result.get(part)
+            link = section.get(key_name) if isinstance(section, dict) else None
+            if isinstance(link, str) and link.startswith("https://"):
+                links.append(link)
+    return links
+
+
 def preview_image(html: str, base: str) -> str | None:
     """The page's preview picture (og:image, else twitter:image) as a full URL."""
     parser = _MetaParser()
@@ -112,10 +167,12 @@ class CheckedRedirects(urllib.request.HTTPRedirectHandler):
 def _picture(url: str, follow_page: bool) -> Reference:
     data, kind, final = _download(url)
     if kind.startswith("image/"):
-        return Reference(final, _decode(data))
+        image, cutout = _decode(data)
+        return Reference(final, image, cutout)
     if kind == "text/html" and follow_page:
         found = preview_image(data.decode("utf-8", errors="replace"), final)
-        if found:
+        # A preview drawn from an SVG file is a logo, map or diagram, not the subject.
+        if found and ".svg" not in urllib.parse.urlsplit(found).path.lower():
             return _picture(found, follow_page=False)
     raise UnusableLink(url)
 
@@ -153,8 +210,9 @@ def _check(url: str) -> None:
         raise UnusableLink(url)
 
 
-def _decode(data: bytes) -> Image.Image:
-    """The picture as RGB; transparent parts become white, as on a wiki page."""
+def _decode(data: bytes) -> tuple[Image.Image, Image.Image | None]:
+    """The picture as RGB, transparent parts made white as on a wiki page, and the
+    picture with its transparency when it has any."""
     try:
         image = Image.open(io.BytesIO(data))
         image.load()
@@ -164,7 +222,9 @@ def _decode(data: bytes) -> Image.Image:
         raise UnusableLink("too small")
     layer = image.convert("RGBA")
     white = Image.new("RGBA", layer.size, (255, 255, 255, 255))
-    return Image.alpha_composite(white, layer).convert("RGB")
+    flat = Image.alpha_composite(white, layer).convert("RGB")
+    opaque = layer.getchannel("A").getextrema() == (255, 255)
+    return flat, (None if opaque else layer)
 
 
 class _MetaParser(HTMLParser):

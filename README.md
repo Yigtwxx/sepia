@@ -33,7 +33,7 @@ Pollinations web API ---- fails or rate limited ----> FLUX.2 [klein] 4B on your 
                                     +--- path over a loopback socket --->  photo -> colored characters
 ```
 
-1. **Direct.** Claude (`claude-haiku-5-5` at high effort by default) first looks for an idea, a striking scene rather than the first cliché, then turns the request and the scene so far into a detailed English photo prompt written for symbol rendering: one dominant shape, strong light, saturated color, no text. It also decides whether the request edits the current picture or starts a new one, and writes a one-sentence reply. The reply comes back as structured output (JSON with a fixed schema). The image models know no names, so when a request names a specific character, creature, product or landmark ("yunara lol"), Claude searches the web and links the subject's wiki page; sepia takes that page's preview picture and the image model paints from it, so the subject keeps its real look. You can also paste a link to a picture, or to a page with a preview picture, into the request ("yunara https://…"): sepia uses that picture as the reference, shows it to Claude so it can describe the subject, and skips the search. Reference pictures work with a Pollinations key and with the local model; the keyless API ignores them.
+1. **Direct.** Claude (`claude-haiku-5-5` at high effort by default) first looks for an idea, a striking scene rather than the first cliché, then turns the request and the scene so far into a detailed English photo prompt written for symbol rendering: one dominant shape, strong light, saturated color, no text. It also decides whether the request edits the current picture or starts a new one, and writes a one-sentence reply. The reply comes back as structured output (JSON with a fixed schema). The image models know no names, so when a request names a specific character, creature, product or landmark ("yunara lol"), Claude names it, and sepia finds its picture: the top result of an image search with a Brave Search key, otherwise the preview picture of the wiki page Claude links. A bare name ("yunara lol") shows that picture as it is. With a scene ("yunara on a beach") Claude sees the picture and describes the subject from it, and the image model paints from it, so the subject keeps its real look. You can also paste a link to a picture, or to a page with a preview picture, into the request ("yunara https://…"): sepia uses that picture as the reference, shows it to Claude so it can describe the subject, and skips the search. Reference pictures work with a Pollinations key and with the local model; the keyless API ignores them.
 2. **Paint.** The prompt goes to [Pollinations](https://pollinations.ai) first. If the API fails or rate limits, sepia paints the picture locally with [FLUX.2 [klein] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0), if you installed the local extra. The picture is painted at the viewer window's aspect ratio.
 3. **Show.** The picture is saved as a PNG, and the viewer window is told where it is. The viewer stretches contrast, boosts saturation, crops the picture to the window, and draws every cell as one character whose density matches the brightness, in 24-bit color where the terminal supports it (256 colors otherwise). Resizing the window redraws the picture without new API calls.
 
@@ -103,6 +103,7 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | none | Required. Asked for on the first run if missing and saved to the user config `.env`. |
+| `BRAVE_SEARCH_API_KEY` | none | Optional key from [brave.com/search/api](https://brave.com/search/api) (monthly free credits, about 1,000 searches). Named subjects come from the top pictures of an image search instead of wiki pages. |
 | `POLLINATIONS_KEY` | none | Optional free key from [enter.pollinations.ai](https://enter.pollinations.ai). Uses the keyed endpoint with `flux.2-klein-4b` and no logo. |
 | `SEPIA_MODEL` | `claude-haiku-5-5` | The art director model. `claude-sonnet-5-5` also works, at about 15 times the price. |
 | `SEPIA_EFFORT` | `high` | Starting Claude effort: `low`, `medium`, `high`, `xhigh` or `max`. `/effort` changes it while sepia runs. |
@@ -137,6 +138,7 @@ The model loads on the first local picture, so that picture takes longer. Edits 
 | Part | Cost |
 | --- | --- |
 | Claude Haiku as art director | About $0.001 per request with the default model and effort, plus $0.01 per web search |
+| Brave image search | About $0.005 per named subject, covered by Brave's monthly free credits |
 | Pollinations | Free (keyless, or with the free key) |
 | Local model | Free, runs on your hardware |
 

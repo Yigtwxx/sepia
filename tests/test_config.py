@@ -11,6 +11,7 @@ from sepia.config import (
     load_settings,
     pollinations_key,
     save_api_key,
+    search_key,
 )
 
 
@@ -77,3 +78,15 @@ def test_load_environment_never_overrides_existing_variables(
 )
 def test_pollinations_key_is_optional(environ: dict[str, str], expected) -> None:
     assert pollinations_key(environ) == expected, f"Expected {expected!r}"
+
+
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [
+        ({}, None),
+        ({"BRAVE_SEARCH_API_KEY": " "}, None),
+        ({"BRAVE_SEARCH_API_KEY": "bk"}, "bk"),
+    ],
+)
+def test_search_key_is_optional(environ: dict[str, str], expected) -> None:
+    assert search_key(environ) == expected, f"Expected {expected!r}"

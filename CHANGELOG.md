@@ -19,6 +19,13 @@ tag all carry.
   that picture: sepia downloads it first, Claude sees it and writes the
   subject's look into the prompt without a web search, and the image model
   copies it. A link without a usable picture is reported.
+- A bare name ("yunara lol") shows the subject's picture as it is, whole and
+  on black, instead of a painting of a stranger. With a scene ("yunara on a
+  beach") Claude now sees the picture before writing the prompt, so the
+  description matches the real look.
+- With `BRAVE_SEARCH_API_KEY`, a named subject's picture comes from the top
+  results of an image search, as a search engine shows them; without it,
+  from the wiki pages Claude links. `/usage` counts the image searches.
 - `/usage` shows all-time totals under the session's, kept in `usage.json` in
   the config folder and shared by every sepia window. Use from before tracking
   began is estimated once from the prompt history and the saved sessions.
@@ -35,6 +42,11 @@ tag all carry.
 
 ### Fixed
 
+- A subject whose only links were fandom wikis, which refuse sepia's
+  downloads, was painted without its picture and without a word. Claude now
+  prefers the official wiki, and sepia says when it finds no usable picture.
+- A wiki page whose preview picture is an SVG logo no longer becomes the
+  reference.
 - `/usage` bars no longer leave a stray empty cell when the parts round down.
 - Web searches are priced even when the model has no known price.
 

@@ -139,3 +139,10 @@ def test_words_describe_every_effort_level() -> None:
     words = ui.Words()
     missing = [level for level in get_args(Effort) if not words(f"effort.{level}")]
     assert not missing, f"No description for {missing}"
+
+
+def test_usage_view_lists_image_searches_once_there_are_some() -> None:
+    usage = _usage()
+    usage.image_searches = 4
+    text = _view_text(usage, AllTime(since=datetime(2026, 10, 29), total=usage))
+    assert "4 image searches" in text, f"Image searches missing from: {text!r}"

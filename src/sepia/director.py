@@ -62,8 +62,18 @@ REPLY_SCHEMA: dict[str, Any] = {
             "description": "Up to three links that show the named subject, best "
             "first; empty when the request names nothing specific.",
         },
+        "subject": {
+            "type": "string",
+            "description": "A short image search query for the named subject, "
+            "such as 'Yunara League of Legends'; empty when there is none.",
+        },
+        "show": {
+            "type": "boolean",
+            "description": "True when the request is the named subject and nothing "
+            "else, so sepia shows its picture as it is instead of painting.",
+        },
     },
-    "required": ["message", "prompt", "edit", "references"],
+    "required": ["message", "prompt", "edit", "references", "subject", "show"],
     "additionalProperties": False,
 }
 
@@ -94,6 +104,8 @@ class _Reply(BaseModel):
     prompt: str = Field(min_length=1)
     edit: bool
     references: list[str] = Field(default_factory=list)
+    subject: str = ""
+    show: bool = False
 
 
 @dataclass(frozen=True)
@@ -108,6 +120,10 @@ class Direction:
     searches: int
     input_tokens: int
     output_tokens: int
+    subject: str = ""
+    """An image search query for the named subject, for `reference.find_subject`."""
+    show: bool = False
+    """Show the subject's picture as it is: the request was only its name."""
 
 
 def create_client(api_key: str) -> anthropic.Anthropic:
@@ -134,8 +150,9 @@ class Director:
     ) -> Direction:
         """Turn `request`, in the context of `scene`, into an image prompt.
 
-        `linked` is a picture the person linked; Claude sees it, so it can write
-        the subject's look into the prompt without searching.
+        `linked` is a picture of the subject, linked by the person or found by
+        sepia; Claude sees it, so it can write the subject's look into the prompt
+        without searching.
         """
         output_config: BetaOutputConfigParam = {
             "effort": self._effort,
@@ -180,15 +197,18 @@ class Director:
             reply = _Reply.model_validate_json(text)
         except ValidationError as exc:
             raise DirectorError(Failure.INVALID) from exc
+        edit = reply.edit and not scene.is_empty
         return Direction(
             message=reply.message.strip(),
             prompt=reply.prompt.strip(),
-            edit=reply.edit and not scene.is_empty,
+            edit=edit,
             references=_links(reply.references),
             model=message.model,
             searches=_searches(message.usage),
             input_tokens=message.usage.input_tokens,
             output_tokens=message.usage.output_tokens,
+            subject=reply.subject.strip(),
+            show=reply.show and not edit,
         )
 
 
@@ -234,7 +254,7 @@ def build_request(request: str, scene: Scene, linked: bool = False) -> str:
             f"<previous_prompt>{scene.prompts[-1]}</previous_prompt>"
         )
     picture = (
-        "<linked_picture>the picture above, linked by the person</linked_picture>\n"
+        "<reference_picture>the picture above shows the subject</reference_picture>\n"
         if linked
         else ""
     )

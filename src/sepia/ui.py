@@ -75,6 +75,11 @@ STRINGS: dict[str, str] = {
     "painting": "Working on it… (painting · {source})",
     "looking": "Working on it… (finding a reference picture)",
     "reference": "after a picture from {host}",
+    "shown": "shown as found · {host}",
+    "showing_link": "Showing the picture you linked.",
+    "no_reference": "Found no usable picture of {subject}; painting from the "
+    "description.",
+    "the_subject": "the subject",
     "link_unusable": "That link gave no usable picture (https, 256 px or larger).",
     "opening": "Opening the picture window…",
     "add_usage": "Say what to add: /add snowy mountains",
@@ -129,7 +134,9 @@ STRINGS: dict[str, str] = {
     "usage_unpriced": "{n} requests on a model without a known price are left out",
     "usage_scale": "Session bars are drawn against all time; "
     "their gray rest is earlier use.",
-    "usage_note": "Estimated from list prices; Pollinations bills its own account.",
+    "usage_image_searches": "{n} image searches",
+    "usage_note": "Estimated from list prices; Pollinations and Brave bill their "
+    "own accounts.",
 }
 
 COMMANDS: Sequence[tuple[str, str]] = (
@@ -305,6 +312,9 @@ def _picture_lines(
         for source, count in counts
     ]
     painted = sum(usage.pictures.values())
+    tail = words("usage_referenced", n=usage.referenced)
+    if usage.image_searches:
+        tail += f" · {words('usage_image_searches', n=usage.image_searches)}"
     notes: list[RenderableType] = []
     if earlier is None:
         seconds = f"{usage.paint_seconds:.1f}"
@@ -319,7 +329,7 @@ def _picture_lines(
     return [
         _heading(words("usage_pictures"), ""),
         _bar(parts, size, label, whole),
-        _legend(items, words("usage_referenced", n=usage.referenced)),
+        _legend(items, tail),
         *notes,
     ]
 

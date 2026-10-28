@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from sepia.raster import fit_image
+from sepia.raster import fit_image, letterbox
 
 RED, BLUE = (255, 0, 0), (0, 0, 255)
 
@@ -46,3 +46,22 @@ def test_fit_image_empty_canvas_raises_value_error(
 ) -> None:
     with pytest.raises(ValueError, match="canvas"):
         fit_image(wide_image, width, height)
+
+
+def test_letterbox_keeps_the_whole_picture_on_black(wide_image: Image.Image) -> None:
+    boxed = letterbox(wide_image, 200, 200)
+    assert boxed.size == (200, 200), f"Got {boxed.size}"
+    corners = (boxed.getpixel((0, 0)), boxed.getpixel((199, 199)))
+    assert corners == ((0, 0, 0), (0, 0, 0)), f"Expected black bars, got {corners}"
+    assert boxed.getpixel((100, 100)) == BLUE, "The picture's middle must stay"
+
+
+def test_letterbox_transparent_parts_become_black() -> None:
+    clear = Image.new("RGBA", (50, 50), (255, 255, 255, 0))
+    boxed = letterbox(clear, 50, 50)
+    assert boxed.getpixel((25, 25)) == (0, 0, 0), "Transparency must show black"
+
+
+def test_letterbox_empty_canvas_raises() -> None:
+    with pytest.raises(ValueError):
+        letterbox(Image.new("RGB", (4, 4)), 0, 10)

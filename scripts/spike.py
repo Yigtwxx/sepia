@@ -24,11 +24,12 @@ from sepia.config import (
     load_environment,
     load_settings,
     pollinations_key,
+    search_key,
 )
 from sepia.director import Director, DirectorError, create_client
-from sepia.painter import PainterError, build_painter, image_size
-from sepia.raster import enhance, fit_image
-from sepia.reference import find_reference
+from sepia.painter import PainterError, Painting, build_painter, image_size
+from sepia.raster import enhance, fit_image, letterbox
+from sepia.reference import find_subject
 from sepia.scene import Canvas, Scene
 
 FONTS = [
@@ -66,25 +67,36 @@ def main() -> int:
         return 1
     director = Director(create_client(key), settings.model, settings.effort)
     painter, _ = build_painter(pollinations_key(), settings.image_model)
+    brave = search_key()
     args.out.mkdir(exist_ok=True)
     scene = Scene()
     for index, request in enumerate(args.prompts, 1):
         if not args.chain:
             scene.reset()
+        # The same steps as the prompt window: find a named subject's picture, show
+        # it for a bare name, else let Claude see it before painting.
+        size = image_size(canvas.aspect)
         try:
             direction = director.direct(request, scene)
-            reference = scene.image if direction.edit else None
-            likeness = find_reference(direction.references) or scene.likeness
-            painting = painter.paint(
-                direction.prompt,
-                image_size(canvas.aspect),
-                scene.seed,
-                reference,
-                likeness,
-            )
+            found, _ = find_subject(direction.subject, direction.references, brave)
+            if found is not None and direction.show:
+                image = letterbox(found.cutout or found.image, *size)
+                painting = Painting(image, "api", 0.0)
+            else:
+                if found is not None:
+                    direction = director.direct(request, scene, found.image)
+                reference = scene.image if direction.edit else None
+                painting = painter.paint(
+                    direction.prompt,
+                    size,
+                    scene.seed,
+                    reference,
+                    found or scene.likeness,
+                )
         except (DirectorError, PainterError) as exc:
             console.print(f"[red]{request!r} failed: {exc}[/red]")
             continue
+        likeness = found or scene.likeness
         scene.record(request, direction.prompt, painting.image, likeness)
         path = args.out / f"{index:02d}-{slug(request)}.png"
         painting.image.save(path)
@@ -94,6 +106,8 @@ def main() -> int:
             "prompt": direction.prompt,
             "edit": direction.edit,
             "references": list(direction.references),
+            "subject": direction.subject,
+            "show": direction.show,
             "likeness": likeness.url if likeness else None,
             "source": painting.source,
             "paint_seconds": round(painting.seconds, 1),

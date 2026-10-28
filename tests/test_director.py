@@ -148,9 +148,9 @@ def test_build_request_first_picture_says_so() -> None:
 
 def test_build_request_linked_picture_is_marked() -> None:
     text = build_request("at night", Scene(), linked=True)
-    assert "<linked_picture>" in text, f"Linked-picture note missing in {text!r}"
+    assert "<reference_picture>" in text, f"Linked-picture note missing in {text!r}"
     plain = build_request("at night", Scene())
-    assert "<linked_picture>" not in plain, f"Note without a picture in {plain!r}"
+    assert "<reference_picture>" not in plain, f"Note without a picture in {plain!r}"
 
 
 def test_director_direct_linked_picture_is_shown_before_the_request(
@@ -163,7 +163,7 @@ def test_director_direct_linked_picture_is_shown_before_the_request(
     image, text = messages[0]["content"]
     assert image["type"] == "image", f"Expected the picture first, got {image}"
     assert image["source"]["media_type"] == "image/jpeg", f"Got {image['source']}"
-    assert "<linked_picture>" in text["text"], f"Got {text}"
+    assert "<reference_picture>" in text["text"], f"Got {text}"
 
 
 def test_director_direct_linked_picture_is_shrunk_for_claude(
@@ -248,3 +248,27 @@ def test_director_direct_without_searches_counts_zero(
     set_final_message(make_message(REPLY))
     direction = Director(fake_client, "m", "low").direct("x", Scene())
     assert direction.searches == 0, f"Got {direction.searches}"
+
+
+def test_director_reply_schema_requires_subject_and_show() -> None:
+    required = set(REPLY_SCHEMA["required"])
+    assert {"subject", "show"} <= required, f"Got {required}"
+
+
+def test_director_direct_returns_subject_and_show(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    reply = {**REPLY, "subject": " Yunara League of Legends ", "show": True}
+    set_final_message(make_message(reply))
+    direction = Director(fake_client, "m", "low").direct("yunara lol", Scene())
+    got = (direction.subject, direction.show)
+    assert got == ("Yunara League of Legends", True), f"Got {got}"
+
+
+def test_director_direct_never_shows_when_adding_to_a_picture(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    reply = {**REPLY, "edit": True, "subject": "Yunara", "show": True}
+    set_final_message(make_message(reply))
+    direction = Director(fake_client, "m", "low").direct("yunara", _painted_scene())
+    assert direction.show is False, "An addition must be painted, not shown"

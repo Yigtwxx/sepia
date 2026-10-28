@@ -23,6 +23,7 @@ way), and the extra thought goes into finding an idea for the picture."""
 DEFAULT_STYLE: ArtStyle = "ink"
 DEFAULT_CHARSET: Charset = "classic"
 API_KEY_VAR = "ANTHROPIC_API_KEY"
+SEARCH_KEY_VAR = "BRAVE_SEARCH_API_KEY"
 
 
 class ConfigError(ValueError):
@@ -74,6 +75,11 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
 
 def api_key(environ: Mapping[str, str] = os.environ) -> str | None:
     return environ.get(API_KEY_VAR, "").strip() or None
+
+
+def search_key(environ: Mapping[str, str] = os.environ) -> str | None:
+    """Optional Brave Search API key: named subjects come from an image search."""
+    return environ.get(SEARCH_KEY_VAR, "").strip() or None
 
 
 def pollinations_key(environ: Mapping[str, str] = os.environ) -> str | None:
