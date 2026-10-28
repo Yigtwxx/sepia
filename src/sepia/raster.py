@@ -15,11 +15,13 @@ class RenderError(ValueError):
     """The SVG could not be parsed or rendered."""
 
 
-def render_svg(svg: str, width: int, height: int, background: str = "#000000") -> RGBImage:
+def render_svg(
+    svg: str, width: int, height: int, background: str = "#000000"
+) -> RGBImage:
     """Render `svg` to exactly `width` x `height` pixels.
 
-    The drawing is scaled to cover the whole canvas and center-cropped, so a window whose
-    aspect ratio differs from the SVG never shows empty bars.
+    The drawing is scaled to cover the whole canvas and center-cropped, so a window
+    whose aspect ratio differs from the SVG never shows empty bars.
     """
     if width <= 0 or height <= 0:
         raise ValueError(f"canvas must be positive, got {width}x{height}")
