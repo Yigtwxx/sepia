@@ -7,7 +7,6 @@ from typing import Literal
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
-from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 
@@ -23,105 +22,37 @@ GOOD = "#c084fc"
 SPINNER = "✻✽✶✳✢·"
 PROMPT = " › "
 
-# Lowercase letters on a pixel grid: rows 0-1 hold the dot of the i, rows 2-6 the
-# x-height, rows 7-8 the descender of the p. Each pixel prints two columns wide.
-_GLYPHS: dict[str, tuple[str, ...]] = {
-    "s": (
-        ".....",
-        ".....",
-        ".####",
-        "#....",
-        ".###.",
-        "....#",
-        "####.",
-        ".....",
-        ".....",
-    ),
-    "e": (
-        ".....",
-        ".....",
-        ".###.",
-        "#...#",
-        "#####",
-        "#....",
-        ".####",
-        ".....",
-        ".....",
-    ),
-    "p": (
-        ".....",
-        ".....",
-        "####.",
-        "#...#",
-        "#...#",
-        "#...#",
-        "####.",
-        "#....",
-        "#....",
-    ),
-    "i": ("#", ".", "#", "#", "#", "#", "#", ".", "."),
-    "a": (
-        ".....",
-        ".....",
-        ".###.",
-        "....#",
-        ".####",
-        "#...#",
-        ".####",
-        ".....",
-        ".....",
-    ),
-}
-_GAP = 1
+BLOCK = "█"
+"""The cell the letters are made of; every other glyph of the mark is shadow."""
+
+# The figlet font ANSI Shadow, six rows like the wordmarks of the owner's other
+# terminal tools (spiyweb, proofpath), so the family reads as one. The font has
+# capitals only; the name stays lowercase everywhere else.
+WORDMARK: tuple[str, ...] = (
+    "███████╗███████╗██████╗ ██╗ █████╗ ",
+    "██╔════╝██╔════╝██╔══██╗██║██╔══██╗",
+    "███████╗█████╗  ██████╔╝██║███████║",
+    "╚════██║██╔══╝  ██╔═══╝ ██║██╔══██║",
+    "███████║███████╗██║     ██║██║  ██║",
+    "╚══════╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝",
+)
 
 
-def wordmark(word: str = "sepia") -> Text:
-    """The name in half-block pixels, banded purple to pink, with a drop shadow."""
-    columns = [list(col) for col in _pixel_columns(word)]
-    width = len(columns) * 2
-    height = len(_GLYPHS["s"]) + 1
-    grid: list[list[str | None]] = [[None] * width for _ in range(height)]
-    for x, column in enumerate(columns):
-        for y, on in enumerate(column):
-            if on:
-                for dx in (0, 1):
-                    if grid[y + 1][2 * x + dx] is None:
-                        grid[y + 1][2 * x + dx] = SHADOW
-    for x, column in enumerate(columns):
-        band = BANDS[min(len(BANDS) - 1, x * len(BANDS) // len(columns))]
-        for y, on in enumerate(column):
-            if on:
-                grid[y][2 * x] = grid[y][2 * x + 1] = band
-    if len(grid) % 2:
-        grid.append([None] * width)
+def wordmark() -> Text:
+    """The mark: letters banded pink to purple left to right, shadow in one color."""
+    width = max(len(line) for line in WORDMARK)
     text = Text(no_wrap=True)
-    for top_row, bottom_row in zip(grid[0::2], grid[1::2], strict=True):
-        for top, bottom in zip(top_row, bottom_row, strict=True):
-            text.append(*_half_block(top, bottom))
-        text.append("\n")
-    text.rstrip()
+    for index, line in enumerate(WORDMARK):
+        for column, char in enumerate(line.ljust(width)):
+            if char == " ":
+                text.append(char)
+            elif char == BLOCK:
+                text.append(char, BANDS[column * len(BANDS) // width])
+            else:
+                text.append(char, SHADOW)
+        if index < len(WORDMARK) - 1:
+            text.append("\n")
     return text
-
-
-def _pixel_columns(word: str) -> list[list[bool]]:
-    columns: list[list[bool]] = []
-    for index, letter in enumerate(word):
-        rows = _GLYPHS[letter]
-        for x in range(len(rows[0])):
-            columns.append([row[x] == "#" for row in rows])
-        if index < len(word) - 1:
-            columns.extend([[False] * len(rows)] * _GAP)
-    return columns
-
-
-def _half_block(top: str | None, bottom: str | None) -> tuple[str, Style | str]:
-    if top and bottom:
-        return ("▀", Style(color=top, bgcolor=bottom)) if top != bottom else ("█", top)
-    if top:
-        return "▀", top
-    if bottom:
-        return "▄", bottom
-    return " ", ""
 
 
 Language = Literal["en", "tr"]

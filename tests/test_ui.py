@@ -6,8 +6,8 @@ from sepia import ui
 def test_wordmark_is_compact_and_uses_the_band_colors() -> None:
     mark = ui.wordmark()
     lines = mark.plain.split("\n")
-    assert len(lines) == 5, f"Expected 5 rows of half blocks, got {len(lines)}"
-    assert max(len(line) for line in lines) <= 60, "Wordmark must fit beside text"
+    assert len(lines) == 6, f"Expected the six ANSI Shadow rows, got {len(lines)}"
+    assert {len(line) for line in lines} == {35}, "Every row must be 35 columns"
     styles = " ".join(str(span.style) for span in mark.spans)
     assert ui.BANDS[0] in styles and ui.BANDS[-1] in styles, "Gradient ends missing"
 
