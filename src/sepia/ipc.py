@@ -13,6 +13,7 @@ import stat
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from multiprocessing import AuthenticationError
 from multiprocessing.connection import Client, Listener
 from pathlib import Path
 from typing import Any, Protocol
@@ -134,12 +135,16 @@ class Host:
             self._listener.close()
 
     def _accept(self) -> None:
-        try:
-            channel = Channel(self._listener.accept())
-        except (OSError, EOFError):  # listener closed, or a peer failed the handshake
-            with self._lock:
-                self._accepting = False
-            return
+        while True:
+            try:
+                channel = Channel(self._listener.accept())
+                break
+            except (AuthenticationError, EOFError):
+                continue  # a peer without the key; keep waiting for the real viewer
+            except OSError:  # the listener was closed
+                with self._lock:
+                    self._accepting = False
+                return
         with self._lock:
             self._channel = channel
             self._accepting = False

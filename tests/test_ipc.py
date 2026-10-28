@@ -1,4 +1,5 @@
 import threading
+from multiprocessing import AuthenticationError
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,9 @@ def test_connect_with_wrong_key_is_rejected(host_inbox) -> None:
     host, _, _ = host_inbox
     host.accept_in_background()
     impostor = Session(port=host.session.port, authkey=b"wrong-key")
-    with pytest.raises(Exception):  # noqa: B017 - AuthenticationError or EOFError
+    with pytest.raises(AuthenticationError):
         connect(impostor)
     assert not host.connected, "An impostor must not count as a viewer"
+    viewer = connect(host.session)  # the real viewer can still get in afterwards
+    assert host.wait_connected(5), "Host stopped accepting after a failed handshake"
+    viewer.close()
