@@ -75,6 +75,8 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "ANN", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"]
+# The prompt window draws with typographic glyphs (› ⏺ ※ ·) on purpose.
+"src/sepia/ui.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
