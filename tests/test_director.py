@@ -3,22 +3,19 @@ from unittest.mock import MagicMock
 import anthropic
 import httpx2
 import pytest
+from PIL import Image
 
-from sepia.artist import (
+from sepia.director import (
     FALLBACK_BETA,
     REPLY_SCHEMA,
-    Artist,
-    ArtistError,
+    Director,
+    DirectorError,
     Failure,
     build_request,
 )
-from sepia.scene import Canvas, Scene
+from sepia.scene import Scene
 
-CANVAS = Canvas(cols=120, rows=40)
-SVG = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">'
-    '<rect width="1200" height="800" fill="#123456"/></svg>'
-)
+REPLY = {"message": "Şelale çiziyorum.", "prompt": "A waterfall.", "edit": False}
 _REQUEST = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
 
 
@@ -26,56 +23,85 @@ def _status_error(cls: type[anthropic.APIStatusError], code: int) -> Exception:
     return cls("error", response=httpx2.Response(code, request=_REQUEST), body=None)
 
 
-def test_artist_draw_sends_model_effort_fallback_and_schema(
+def _painted_scene() -> Scene:
+    scene = Scene()
+    scene.record("şelale", "A waterfall in a canyon.", Image.new("RGB", (4, 4)))
+    return scene
+
+
+@pytest.mark.parametrize(
+    ("model", "with_fallback"),
+    [("claude-haiku-5-5", False), ("claude-sonnet-5-5", True)],
+)
+def test_director_direct_sends_fallback_only_for_supporting_models(
+    fake_client: MagicMock, make_message, set_final_message, model: str, with_fallback
+) -> None:
+    set_final_message(make_message(REPLY))
+    Director(fake_client, model, "low").direct("şelale", Scene())
+    kwargs = fake_client.beta.messages.stream.call_args.kwargs
+    has_fallback = kwargs["fallbacks"] == "default"
+    assert has_fallback is with_fallback, f"{model}: fallbacks={kwargs['fallbacks']}"
+    if with_fallback:
+        assert FALLBACK_BETA in kwargs["betas"], f"Missing beta in {kwargs['betas']}"
+
+
+def test_director_direct_requests_schema_and_effort(
     fake_client: MagicMock, make_message, set_final_message
 ) -> None:
-    set_final_message(make_message({"message": "Done.", "svg": SVG}))
-    Artist(fake_client, "claude-opus-5-5", "high").draw("waterfall", Scene(), CANVAS)
+    set_final_message(make_message(REPLY))
+    Director(fake_client, "claude-haiku-5-5", "low").direct("şelale", Scene())
     kwargs = fake_client.beta.messages.stream.call_args.kwargs
-    assert kwargs["model"] == "claude-opus-5-5", f"Wrong model: {kwargs['model']}"
-    assert kwargs["fallbacks"] == "default", f"Wrong fallbacks: {kwargs['fallbacks']}"
-    assert FALLBACK_BETA in kwargs["betas"], f"Missing beta in {kwargs['betas']}"
     expected = {
-        "effort": "high",
+        "effort": "low",
         "format": {"type": "json_schema", "schema": REPLY_SCHEMA},
     }
     assert kwargs["output_config"] == expected, f"Got {kwargs['output_config']}"
-    assert "illustrator inside sepia" in kwargs["system"], "System prompt not loaded"
+    assert "art director inside sepia" in kwargs["system"], "System prompt not loaded"
 
 
-def test_artist_draw_valid_reply_returns_stripped_drawing(
+def test_director_direct_valid_reply_returns_direction(
     fake_client: MagicMock, make_message, set_final_message
 ) -> None:
-    reply = {"message": "  A blue night.  ", "svg": f"\n{SVG}\n"}
-    set_final_message(make_message(reply))
-    drawing = Artist(fake_client, "m", "medium").draw("night", Scene(), CANVAS)
-    assert drawing.message == "A blue night.", f"Got {drawing.message!r}"
-    assert drawing.svg == SVG, f"Got {drawing.svg!r}"
-    tokens = (drawing.input_tokens, drawing.output_tokens)
+    set_final_message(make_message({**REPLY, "prompt": "  A waterfall.  "}))
+    direction = Director(fake_client, "m", "low").direct("şelale", Scene())
+    assert direction.message == "Şelale çiziyorum.", f"Got {direction.message!r}"
+    assert direction.prompt == "A waterfall.", f"Got {direction.prompt!r}"
+    tokens = (direction.input_tokens, direction.output_tokens)
     assert tokens == (1200, 3400), f"Got {tokens}"
+
+
+def test_director_direct_edit_on_empty_scene_becomes_new_picture(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message({**REPLY, "edit": True}))
+    direction = Director(fake_client, "m", "low").direct("şelale", Scene())
+    assert direction.edit is False, "Nothing to edit before the first picture"
+
+
+def test_director_direct_edit_on_painted_scene_is_kept(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message({**REPLY, "edit": True}))
+    direction = Director(fake_client, "m", "low").direct("dağlar", _painted_scene())
+    assert direction.edit is True, "An edit of an existing picture must stay an edit"
 
 
 @pytest.mark.parametrize(
     ("reply", "stop_reason", "failure"),
     [
-        ({"message": "x", "svg": SVG}, "refusal", Failure.REFUSED),
-        ({"message": "x", "svg": SVG}, "max_tokens", Failure.TRUNCATED),
+        (REPLY, "refusal", Failure.REFUSED),
+        (REPLY, "max_tokens", Failure.TRUNCATED),
         ("not json", "end_turn", Failure.INVALID),
-        ({"message": "x"}, "end_turn", Failure.INVALID),
-        ({"message": "x", "svg": "<svg"}, "end_turn", Failure.INVALID),
+        ({"message": "x", "prompt": "y"}, "end_turn", Failure.INVALID),
+        ({"message": "", "prompt": "y", "edit": False}, "end_turn", Failure.INVALID),
     ],
 )
-def test_artist_draw_bad_response_raises_matching_failure(
-    fake_client: MagicMock,
-    make_message,
-    set_final_message,
-    reply,
-    stop_reason: str,
-    failure: Failure,
+def test_director_direct_bad_response_raises_matching_failure(
+    fake_client: MagicMock, make_message, set_final_message, reply, stop_reason, failure
 ) -> None:
     set_final_message(make_message(reply, stop_reason))
-    with pytest.raises(ArtistError) as exc:
-        Artist(fake_client, "m", "medium").draw("x", Scene(), CANVAS)
+    with pytest.raises(DirectorError) as exc:
+        Director(fake_client, "m", "low").direct("x", Scene())
     assert exc.value.failure is failure, f"Expected {failure}, got {exc.value.failure}"
 
 
@@ -90,26 +116,23 @@ def test_artist_draw_bad_response_raises_matching_failure(
         (anthropic.APIConnectionError(request=_REQUEST), Failure.CONNECTION),
     ],
 )
-def test_artist_draw_api_error_raises_matching_failure(
+def test_director_direct_api_error_raises_matching_failure(
     fake_client: MagicMock, error: Exception, failure: Failure
 ) -> None:
     fake_client.beta.messages.stream.side_effect = error
-    with pytest.raises(ArtistError) as exc:
-        Artist(fake_client, "m", "medium").draw("x", Scene(), CANVAS)
+    with pytest.raises(DirectorError) as exc:
+        Director(fake_client, "m", "low").direct("x", Scene())
     assert exc.value.failure is failure, f"Expected {failure}, got {exc.value.failure}"
 
 
-def test_build_request_empty_scene_asks_for_new_picture() -> None:
-    text = build_request("  waterfall ", Scene(), CANVAS)
-    assert "<request>waterfall</request>" in text, f"Request missing in {text!r}"
-    assert "new picture" in text, f"Empty-scene note missing in {text!r}"
-    assert 'viewBox="0 0 1200 800"' in text, f"Wrong viewBox in {text!r}"
+def test_build_request_first_picture_says_so() -> None:
+    text = build_request("  şelale ", Scene())
+    assert "<request>şelale</request>" in text, f"Request missing in {text!r}"
+    assert "first picture" in text, f"First-picture note missing in {text!r}"
 
 
-def test_build_request_existing_scene_includes_history_and_svg() -> None:
-    scene = Scene()
-    scene.record("waterfall", SVG)
-    text = build_request("mountains", scene, CANVAS)
-    assert "1. waterfall" in text, f"History missing in {text!r}"
-    assert f"<current_svg>\n{SVG}\n</current_svg>" in text, "Current SVG missing"
-    assert "<request>mountains</request>" in text, f"Request missing in {text!r}"
+def test_build_request_follow_up_includes_history_and_last_prompt() -> None:
+    text = build_request("dağlar", _painted_scene())
+    assert "1. şelale" in text, f"History missing in {text!r}"
+    expected = "<previous_prompt>A waterfall in a canyon.</previous_prompt>"
+    assert expected in text, f"Last prompt missing in {text!r}"

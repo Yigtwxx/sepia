@@ -27,8 +27,12 @@ dependencies = [
     "prompt-toolkit>=3.0.53",
     "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
-    "resvg-py>=0.5.0",
     "rich>=15.0.0",
+    "torch>=2.14.1",
+    "diffusers>=0.42.1",
+    "transformers>=4.57",
+    "accelerate>=1.10",
+    "bitsandbytes>=0.50.2; sys_platform != 'darwin'",
 ]
 
 [project.urls]
@@ -45,6 +49,15 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "sepia"
+
+# CUDA builds of torch on Windows and Linux; macOS takes the PyPI build, which has MPS.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cuda", marker = "sys_platform != 'darwin'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
 
 [dependency-groups]
 dev = [
@@ -67,6 +80,11 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "ANN", "RUF"]
 python_version = "3.12"
 strict = true
 files = ["src"]
+
+# diffusers ships without type information; treat it as untyped.
+[[tool.mypy.overrides]]
+module = ["diffusers", "diffusers.*"]
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,37 +1,35 @@
-"""Quality spike: paint prompts with Claude and show them in both symbol styles.
+"""Quality spike: run prompts through the whole pipeline and save previews.
 
-    uv run python scripts/spike.py "night city"                 # one picture
+    uv run python scripts/spike.py "night city"                  # one picture
     uv run python scripts/spike.py --chain "waterfall" "mountains"  # one evolving scene
-    uv run python scripts/spike.py --show spike-output          # re-show, no API calls
+    uv run python scripts/spike.py --show spike-output           # re-show, no API calls
 
-Each drawing is saved to spike-output/ as SVG, plus PNG previews of the symbol art
-(the same characters and colors, rasterized with a terminal font) for both styles.
+Each picture is saved to spike-output/ with PNG previews of its symbol art (the same
+characters and colors, drawn with a terminal font) in both styles.
 """
 
 import argparse
 import json
 import re
 import sys
-import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 from rich.console import Console
 
-from sepia.artist import Artist, ArtistError, create_client
-from sepia.ascii_art import (
-    CELL_HEIGHT,
-    CELL_WIDTH,
-    ArtStyle,
-    SymbolArt,
-    image_to_art,
-    to_text,
+from sepia.ascii_art import CELL_HEIGHT, CELL_WIDTH, ArtStyle, SymbolArt, image_to_art
+from sepia.ascii_art import to_text as art_text
+from sepia.config import (
+    api_key,
+    load_environment,
+    load_settings,
+    pollinations_key,
 )
-from sepia.config import api_key, load_environment, load_settings
-from sepia.raster import render_svg
+from sepia.director import Director, DirectorError, create_client
+from sepia.painter import PainterError, build_painter, image_size
+from sepia.raster import enhance, fit_image
 from sepia.scene import Canvas, Scene
 
-PRICE_PER_MTOK = {"claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.0)}
 FONTS = [
     "C:/Windows/Fonts/CascadiaMono.ttf",
     "C:/Windows/Fonts/consola.ttf",
@@ -44,21 +42,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("prompts", nargs="*")
     parser.add_argument("--chain", action="store_true", help="build one scene")
-    parser.add_argument("--show", type=Path, help="re-render saved SVGs only")
-    parser.add_argument("--cols", type=int, default=100)
-    parser.add_argument("--rows", type=int, default=32)
+    parser.add_argument("--show", type=Path, help="re-render saved pictures only")
+    parser.add_argument("--cols", type=int, default=160)
+    parser.add_argument("--rows", type=int, default=50)
     parser.add_argument("--out", type=Path, default=Path("spike-output"))
     args = parser.parse_args()
     console = Console(highlight=False)
     canvas = Canvas(args.cols, args.rows)
 
     if args.show:
-        for svg_path in sorted(args.show.glob("*.svg")):
-            svg = svg_path.read_text(encoding="utf-8")
-            for style in STYLES:
-                art = art_for(svg, canvas, style)
-                save_png(art, svg_path.with_name(f"{svg_path.stem}-{style}.png"))
-            show(console, svg_path.stem, svg, canvas)
+        for path in sorted(args.show.glob("*.jpg")) + sorted(args.show.glob("*.png")):
+            if "-ink" in path.stem or "-fill" in path.stem:
+                continue
+            show(console, path, canvas)
         return 0
 
     load_environment()
@@ -67,70 +63,63 @@ def main() -> int:
     if key is None:
         console.print("ANTHROPIC_API_KEY is not set (put it in .env)")
         return 1
-    artist = Artist(create_client(key), settings.model, settings.effort)
+    director = Director(create_client(key), settings.model, settings.effort)
+    painter, _ = build_painter(pollinations_key(), settings.image_model)
     args.out.mkdir(exist_ok=True)
     scene = Scene()
-    total = 0.0
-    for index, prompt in enumerate(args.prompts, 1):
+    for index, request in enumerate(args.prompts, 1):
         if not args.chain:
             scene.reset()
-        started = time.perf_counter()
         try:
-            drawing = artist.draw(prompt, scene, canvas)
-        except ArtistError as exc:
-            console.print(f"[red]{prompt!r} failed: {exc.failure}[/red]")
+            direction = director.direct(request, scene)
+            reference = scene.image if direction.edit else None
+            painting = painter.paint(
+                direction.prompt, image_size(canvas.aspect), scene.seed, reference
+            )
+        except (DirectorError, PainterError) as exc:
+            console.print(f"[red]{request!r} failed: {exc}[/red]")
             continue
-        seconds = time.perf_counter() - started
-        scene.record(prompt, drawing.svg)
-        price_in, price_out = PRICE_PER_MTOK.get(settings.model, (0.0, 0.0))
-        cost = (
-            drawing.input_tokens * price_in + drawing.output_tokens * price_out
-        ) / 1e6
-        total += cost
-        name = f"{index:02d}-{slug(prompt)}"
-        (args.out / f"{name}.svg").write_text(drawing.svg, encoding="utf-8")
+        scene.record(request, direction.prompt, painting.image)
+        path = args.out / f"{index:02d}-{slug(request)}.png"
+        painting.image.save(path)
         meta = {
-            "prompt": prompt,
-            "message": drawing.message,
-            "model": settings.model,
-            "effort": settings.effort,
-            "input_tokens": drawing.input_tokens,
-            "output_tokens": drawing.output_tokens,
-            "cost_usd": round(cost, 4),
-            "seconds": round(seconds, 1),
-            "svg_chars": len(drawing.svg),
+            "request": request,
+            "message": direction.message,
+            "prompt": direction.prompt,
+            "edit": direction.edit,
+            "source": painting.source,
+            "paint_seconds": round(painting.seconds, 1),
+            "tokens": [direction.input_tokens, direction.output_tokens],
         }
-        (args.out / f"{name}.json").write_text(
-            json.dumps(meta, ensure_ascii=False, indent=2)
+        path.with_suffix(".json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        console.print(f"[bold]{prompt}[/bold] -> {drawing.message}")
-        console.print(f"  {json.dumps(meta, ensure_ascii=False)}")
-        for style in STYLES:
-            art = art_for(drawing.svg, canvas, style)
-            save_png(art, args.out / f"{name}-{style}.png")
-        show(console, name, drawing.svg, canvas)
-    console.print(f"total ${total:.3f}")
+        console.print(json.dumps(meta, ensure_ascii=False))
+        show(console, path, canvas)
     return 0
 
 
-def art_for(svg: str, canvas: Canvas, style: ArtStyle) -> SymbolArt:
-    pixels = render_svg(svg, canvas.cols * CELL_WIDTH, canvas.rows * CELL_HEIGHT)
-    return image_to_art(pixels, canvas.cols, canvas.rows, style)
+def art_for(path: Path, canvas: Canvas, style: ArtStyle) -> SymbolArt:
+    picture = enhance(Image.open(path))
+    pixels = fit_image(picture, canvas.cols * CELL_WIDTH, canvas.rows * CELL_HEIGHT)
+    return image_to_art(pixels, canvas.cols, canvas.rows, style=style)
 
 
-def show(console: Console, title: str, svg: str, canvas: Canvas) -> None:
+def show(console: Console, path: Path, canvas: Canvas) -> None:
     for style in STYLES:
-        console.rule(f"{title} [{style}]")
-        console.print(to_text(art_for(svg, canvas, style)))
+        art = art_for(path, canvas, style)
+        save_png(art, path.with_name(f"{path.stem}-{style}.png"))
+        console.rule(f"{path.stem} [{style}]")
+        console.print(art_text(art))
 
 
-def save_png(art: SymbolArt, path: Path, cell_w: int = 10, cell_h: int = 20) -> None:
+def save_png(art: SymbolArt, path: Path, cell_w: int = 7, cell_h: int = 14) -> None:
     """Rasterize the symbol art the way a dark terminal would show it."""
     font = next(
         (ImageFont.truetype(f, cell_h - 3) for f in FONTS if Path(f).exists()),
         ImageFont.load_default(),
     )
-    image = Image.new("RGB", (art.cols * cell_w, art.rows * cell_h), (12, 12, 16))
+    image = Image.new("RGB", (art.cols * cell_w, art.rows * cell_h), (0, 0, 0))
     draw = ImageDraw.Draw(image)
     for row in range(art.rows):
         for col in range(art.cols):

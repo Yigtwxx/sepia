@@ -57,14 +57,3 @@ def make_canvas() -> Canvas:
         return np.full(shape, value, dtype=np.uint8)
 
     return make
-
-
-@pytest.fixture
-def wide_svg() -> str:
-    """A 2:1 red drawing with a blue square in its middle."""
-    return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50">'
-        '<rect width="100" height="50" fill="#ff0000"/>'
-        '<rect x="40" y="15" width="20" height="20" fill="#0000ff"/>'
-        "</svg>"
-    )

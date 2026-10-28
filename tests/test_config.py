@@ -4,7 +4,14 @@ from pathlib import Path
 import pytest
 
 from sepia import config
-from sepia.config import ConfigError, Settings, api_key, load_settings, save_api_key
+from sepia.config import (
+    ConfigError,
+    Settings,
+    api_key,
+    load_settings,
+    pollinations_key,
+    save_api_key,
+)
 
 
 def test_load_settings_empty_environment_uses_defaults() -> None:
@@ -14,12 +21,16 @@ def test_load_settings_empty_environment_uses_defaults() -> None:
 
 def test_load_settings_overrides_are_normalized() -> None:
     environ = {"SEPIA_MODEL": " claude-sonnet-5-5 ", "SEPIA_EFFORT": "HIGH"}
-    settings = load_settings(environ | {"SEPIA_STYLE": "ink"})
-    expected = Settings(model="claude-sonnet-5-5", effort="high", style="ink")
+    settings = load_settings(
+        environ | {"SEPIA_STYLE": "fill", "SEPIA_CHARSET": "symbols"}
+    )
+    expected = Settings(
+        model="claude-sonnet-5-5", effort="high", style="fill", charset="symbols"
+    )
     assert settings == expected, f"Expected {expected}, got {settings}"
 
 
-@pytest.mark.parametrize("name", ["SEPIA_EFFORT", "SEPIA_STYLE"])
+@pytest.mark.parametrize("name", ["SEPIA_EFFORT", "SEPIA_STYLE", "SEPIA_CHARSET"])
 def test_load_settings_unknown_choice_raises_config_error(name: str) -> None:
     with pytest.raises(ConfigError, match=name):
         load_settings({name: "loud"})
@@ -58,3 +69,11 @@ def test_load_environment_never_overrides_existing_variables(
     config.load_environment(cwd=tmp_path)
     assert os.environ["ANTHROPIC_API_KEY"] == "from-shell", "Shell value was replaced"
     assert os.environ["SEPIA_STYLE"] == "fill", "Value from .env was not loaded"
+
+
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [({}, None), ({"POLLINATIONS_KEY": " "}, None), ({"POLLINATIONS_KEY": "pk"}, "pk")],
+)
+def test_pollinations_key_is_optional(environ: dict[str, str], expected) -> None:
+    assert pollinations_key(environ) == expected, f"Expected {expected!r}"

@@ -1,32 +1,50 @@
+from pathlib import Path
+
 import pytest
+from PIL import Image
 
 from sepia.viewer import ViewerState, render_frame
 
 
-def test_viewer_state_scene_message_sets_svg_and_style(wide_svg: str) -> None:
+@pytest.fixture
+def picture(tmp_path: Path) -> str:
+    path = tmp_path / "01.png"
+    image = Image.new("RGB", (200, 100), (200, 40, 40))
+    image.paste((40, 40, 200), (80, 30, 120, 70))
+    image.save(path)
+    return str(path)
+
+
+def test_viewer_state_image_message_sets_path_style_and_charset(picture: str) -> None:
     state = ViewerState()
-    keep_going = state.apply({"type": "scene", "svg": wide_svg, "style": "ink"})
-    assert keep_going, "A scene message must not stop the viewer"
-    assert state.svg == wide_svg, "SVG was not stored"
-    assert state.style == "ink", f"Expected ink, got {state.style}"
+    message = {"type": "image", "path": picture, "style": "fill", "charset": "symbols"}
+    assert state.apply(message), "An image message must not stop the viewer"
+    assert state.path == picture, "Path was not stored"
+    assert (state.style, state.charset) == ("fill", "symbols"), "Options not applied"
 
 
-def test_viewer_state_clear_message_forgets_picture(wide_svg: str) -> None:
-    state = ViewerState(svg=wide_svg)
+def test_viewer_state_clear_message_forgets_picture(picture: str) -> None:
+    state = ViewerState(path=picture)
     state.apply({"type": "clear"})
-    assert state.svg is None, "Clear must forget the picture"
+    assert state.path is None, "Clear must forget the picture"
 
 
 @pytest.mark.parametrize(
     "message",
-    [{"type": "style", "style": "neon"}, {"type": "scene", "svg": 42}, {"type": "?"}],
+    [
+        {"type": "style", "style": "neon"},
+        {"type": "style", "charset": "emoji"},
+        {"type": "image", "path": 42},
+        {"type": "?"},
+    ],
 )
 def test_viewer_state_malformed_message_changes_nothing(
-    wide_svg: str, message: dict
+    picture: str, message: dict
 ) -> None:
-    state = ViewerState(svg=wide_svg, style="fill")
+    state = ViewerState(path=picture, style="ink", charset="classic")
     state.apply(message)
-    assert (state.svg, state.style) == (wide_svg, "fill"), f"Changed by {message}"
+    current = (state.path, state.style, state.charset)
+    assert current == (picture, "ink", "classic"), f"Changed by {message}"
 
 
 def test_viewer_state_bye_message_stops_viewer() -> None:
@@ -38,7 +56,7 @@ def test_render_frame_before_first_picture_is_blank() -> None:
     assert frame.plain == "", f"Expected a blank frame, got {frame.plain!r}"
 
 
-def test_render_frame_fills_the_window(wide_svg: str) -> None:
-    lines = render_frame(ViewerState(svg=wide_svg), 30, 10).plain.split("\n")
+def test_render_frame_fills_the_window(picture: str) -> None:
+    lines = render_frame(ViewerState(path=picture), 30, 10).plain.split("\n")
     assert len(lines) == 10, f"Expected 10 rows, got {len(lines)}"
     assert {len(line) for line in lines} == {30}, "Every row must span the window"

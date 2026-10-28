@@ -9,13 +9,21 @@ from functools import lru_cache
 from pathlib import Path
 from typing import cast, get_args
 
+from PIL import Image, UnidentifiedImageError
 from rich.console import Console
 from rich.text import Text
 
-from sepia.ascii_art import CELL_HEIGHT, CELL_WIDTH, ArtStyle, image_to_art, to_text
-from sepia.config import DEFAULT_STYLE
+from sepia.ascii_art import (
+    CELL_HEIGHT,
+    CELL_WIDTH,
+    ArtStyle,
+    Charset,
+    image_to_art,
+    to_text,
+)
+from sepia.config import DEFAULT_CHARSET, DEFAULT_STYLE
 from sepia.ipc import Channel, Message, Session, connect
-from sepia.raster import RenderError, render_svg
+from sepia.raster import enhance, fit_image
 
 POLL_SECONDS = 0.05
 """How long to wait for a message before checking the window size again."""
@@ -25,35 +33,47 @@ RESIZE_SETTLE_SECONDS = 0.15
 
 @dataclass
 class ViewerState:
-    svg: str | None = None
+    path: str | None = None
     style: ArtStyle = DEFAULT_STYLE
+    charset: Charset = DEFAULT_CHARSET
 
     def apply(self, message: Message) -> bool:
         """Update from one message; False means the prompt asked the viewer to quit."""
         kind = message.get("type")
         if kind == "bye":
             return False
-        if kind == "scene" and isinstance(message.get("svg"), str):
-            self.svg = message["svg"]
+        if kind == "image" and isinstance(message.get("path"), str):
+            self.path = message["path"]
         if kind == "clear":
-            self.svg = None
-        style = message.get("style")
-        if kind in ("scene", "style") and style in get_args(ArtStyle):
-            self.style = cast(ArtStyle, style)
+            self.path = None
+        if kind in ("image", "style"):
+            style, charset = message.get("style"), message.get("charset")
+            if style in get_args(ArtStyle):
+                self.style = cast(ArtStyle, style)
+            if charset in get_args(Charset):
+                self.charset = cast(Charset, charset)
         return True
 
 
 def render_frame(state: ViewerState, cols: int, rows: int) -> Text:
     """The picture sized to the window, or a blank screen before the first one."""
-    if state.svg is None or cols <= 0 or rows <= 0:
+    if state.path is None or cols <= 0 or rows <= 0:
         return Text("")
-    return _art_text(state.svg, state.style, cols, rows)
+    return _art_text(state.path, state.style, state.charset, cols, rows)
 
 
 @lru_cache(maxsize=4)
-def _art_text(svg: str, style: ArtStyle, cols: int, rows: int) -> Text:
-    pixels = render_svg(svg, cols * CELL_WIDTH, rows * CELL_HEIGHT)
-    return to_text(image_to_art(pixels, cols, rows, style))
+def _art_text(
+    path: str, style: ArtStyle, charset: Charset, cols: int, rows: int
+) -> Text:
+    pixels = fit_image(_picture(path), cols * CELL_WIDTH, rows * CELL_HEIGHT)
+    return to_text(image_to_art(pixels, cols, rows, style=style, charset=charset))
+
+
+@lru_cache(maxsize=2)
+def _picture(path: str) -> Image.Image:
+    with Image.open(path) as image:
+        return enhance(image)
 
 
 def run_viewer(session_file: Path) -> int:
@@ -93,7 +113,7 @@ def _loop(channel: Channel, console: Console) -> None:
                         {"type": "size", "cols": size.width, "rows": size.height}
                     )
             if dirty and time.monotonic() - changed_at >= RESIZE_SETTLE_SECONDS:
-                with contextlib.suppress(RenderError):
+                with contextlib.suppress(OSError, UnidentifiedImageError, ValueError):
                     frame = render_frame(state, size.width, size.height)
                 screen.update(frame)
                 dirty = False

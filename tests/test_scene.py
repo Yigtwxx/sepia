@@ -1,31 +1,35 @@
 import pytest
+from PIL import Image
 
 from sepia.scene import Canvas, Scene
 
 
 @pytest.mark.parametrize(
     ("cols", "rows", "expected"),
-    [(120, 40, (1200, 800)), (100, 50, (1200, 1200)), (200, 25, (1200, 300))],
+    [(120, 40, 1.5), (100, 50, 1.0), (200, 25, 4.0)],
 )
-def test_canvas_viewbox_matches_window_pixel_shape(
-    cols: int, rows: int, expected: tuple[int, int]
+def test_canvas_aspect_matches_window_pixel_shape(
+    cols: int, rows: int, expected: float
 ) -> None:
-    viewbox = Canvas(cols, rows).viewbox()
-    assert viewbox == expected, f"Expected {expected}, got {viewbox}"
+    aspect = Canvas(cols, rows).aspect
+    assert aspect == pytest.approx(expected), f"Expected {expected}, got {aspect}"
 
 
-def test_scene_record_keeps_history_and_latest_svg() -> None:
+def test_scene_record_keeps_history_and_latest_image() -> None:
+    first, second = Image.new("RGB", (2, 2)), Image.new("RGB", (3, 3))
     scene = Scene()
-    scene.record("waterfall", "<svg>1</svg>")
-    scene.record("mountains", "<svg>2</svg>")
-    assert scene.requests == ["waterfall", "mountains"], f"Got {scene.requests}"
-    assert scene.svg == "<svg>2</svg>", f"Got {scene.svg}"
-    assert not scene.is_empty, "Scene with a drawing must not be empty"
+    scene.record("şelale", "A waterfall.", first)
+    scene.record("dağlar", "A waterfall with mountains.", second)
+    assert scene.requests == ["şelale", "dağlar"], f"Got {scene.requests}"
+    assert scene.prompts[-1] == "A waterfall with mountains.", f"Got {scene.prompts}"
+    assert scene.image is second, "Latest image must replace the previous one"
+    assert not scene.is_empty, "Scene with a picture must not be empty"
 
 
-def test_scene_reset_clears_everything() -> None:
+def test_scene_reset_clears_everything_and_picks_new_seed() -> None:
     scene = Scene()
-    scene.record("waterfall", "<svg/>")
+    scene.record("şelale", "A waterfall.", Image.new("RGB", (2, 2)))
     scene.reset()
     assert scene.is_empty, "Reset scene must be empty"
-    assert scene.requests == [], f"Expected no requests, got {scene.requests}"
+    assert scene.requests == [] and scene.prompts == [], "History must be cleared"
+    assert 0 <= scene.seed < 2**31, f"Seed out of range: {scene.seed}"

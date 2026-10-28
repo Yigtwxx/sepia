@@ -11,13 +11,15 @@ from typing import Literal, cast, get_args
 from dotenv import load_dotenv
 from platformdirs import user_config_path
 
-from sepia.ascii_art import ArtStyle
+from sepia.ascii_art import ArtStyle, Charset
+from sepia.painter import DEFAULT_IMAGE_MODEL
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
 
-DEFAULT_MODEL = "claude-opus-5-5"
-DEFAULT_EFFORT: Effort = "medium"
-DEFAULT_STYLE: ArtStyle = "fill"
+DEFAULT_MODEL = "claude-haiku-5-5"
+DEFAULT_EFFORT: Effort = "low"
+DEFAULT_STYLE: ArtStyle = "ink"
+DEFAULT_CHARSET: Charset = "classic"
 API_KEY_VAR = "ANTHROPIC_API_KEY"
 
 
@@ -30,6 +32,8 @@ class Settings:
     model: str = DEFAULT_MODEL
     effort: Effort = DEFAULT_EFFORT
     style: ArtStyle = DEFAULT_STYLE
+    charset: Charset = DEFAULT_CHARSET
+    image_model: str = DEFAULT_IMAGE_MODEL
 
 
 def config_dir() -> Path:
@@ -53,15 +57,26 @@ def load_environment(cwd: Path | None = None) -> None:
 
 def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
     model = environ.get("SEPIA_MODEL", "").strip() or DEFAULT_MODEL
+    image_model = environ.get("SEPIA_IMAGE_MODEL", "").strip() or DEFAULT_IMAGE_MODEL
     effort = _choice(environ, "SEPIA_EFFORT", get_args(Effort), DEFAULT_EFFORT)
     style = _choice(environ, "SEPIA_STYLE", get_args(ArtStyle), DEFAULT_STYLE)
+    charset = _choice(environ, "SEPIA_CHARSET", get_args(Charset), DEFAULT_CHARSET)
     return Settings(
-        model=model, effort=cast(Effort, effort), style=cast(ArtStyle, style)
+        model=model,
+        effort=cast(Effort, effort),
+        style=cast(ArtStyle, style),
+        charset=cast(Charset, charset),
+        image_model=image_model,
     )
 
 
 def api_key(environ: Mapping[str, str] = os.environ) -> str | None:
     return environ.get(API_KEY_VAR, "").strip() or None
+
+
+def pollinations_key(environ: Mapping[str, str] = os.environ) -> str | None:
+    """Optional key from enter.pollinations.ai: no logo and better models."""
+    return environ.get("POLLINATIONS_KEY", "").strip() or None
 
 
 def save_api_key(key: str, path: Path | None = None) -> Path:
