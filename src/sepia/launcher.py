@@ -1,14 +1,23 @@
 """Open the picture window in a new terminal window."""
 
+import contextlib
+import json
+import os
 import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-VIEWER_COLS = 120
-VIEWER_ROWS = 40
+VIEWER_COLS = 110
+VIEWER_ROWS = 36
+"""Window size in cells of the default font; the small profile font fits about
+1.8x as many in each direction."""
+VIEWER_FONT_SIZE = 6
+"""Points. More, smaller cells give the picture more detail."""
 LAUNCH_TIMEOUT_SECONDS = 15
+PROFILE_NAME = "sepia"
+PROFILE_GUID = "{6f1c2b9e-3a57-4d0e-9c84-5e2f7a1d3b60}"
 
 
 class LaunchError(RuntimeError):
@@ -43,6 +52,8 @@ def windows_terminal_command(wt: str, command: list[str]) -> list[str]:
         "--size",
         f"{VIEWER_COLS},{VIEWER_ROWS}",
         "new-tab",
+        "--profile",
+        PROFILE_NAME,
         "--title",
         "sepia",
         "--suppressApplicationTitle",
@@ -61,9 +72,56 @@ def macos_script(command: list[str]) -> str:
     return f'tell application "Terminal"\n  do script "{quoted}"\n  activate\nend tell'
 
 
+def windows_profile() -> dict[str, object]:
+    """A Windows Terminal profile for the picture: tiny font, black, no padding."""
+    return {
+        "guid": PROFILE_GUID,
+        "name": PROFILE_NAME,
+        "commandline": "cmd.exe",
+        "font": {"face": "Cascadia Mono", "size": VIEWER_FONT_SIZE},
+        "padding": "0",
+        "background": "#000000",
+        "scrollbarState": "hidden",
+        "closeOnExit": "always",
+        "bellStyle": "none",
+    }
+
+
+def install_windows_profile(local_app_data: Path | None = None) -> Path | None:
+    """Write sepia's profile as a Windows Terminal fragment; None when not possible.
+
+    Fragments live in their own folder, so the user's settings.json is never touched,
+    and deleting the folder removes the profile again.
+    """
+    base = local_app_data or Path(os.environ.get("LOCALAPPDATA", ""))
+    if not base.is_dir():
+        return None
+    target = (
+        base / "Microsoft" / "Windows Terminal" / "Fragments" / "sepia" / "sepia.json"
+    )
+    content = json.dumps({"profiles": [windows_profile()]}, indent=2)
+    with contextlib.suppress(OSError):
+        if not target.exists() or target.read_text(encoding="utf-8") != content:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+        return target
+    return None
+
+
+def find_windows_terminal(local_app_data: Path | None = None) -> str | None:
+    """wt.exe from PATH, or from its app alias folder, which PATH may not include."""
+    found = shutil.which("wt")
+    if found is not None:
+        return found
+    base = local_app_data or Path(os.environ.get("LOCALAPPDATA", ""))
+    alias = base / "Microsoft" / "WindowsApps" / "wt.exe"
+    return str(alias) if alias.is_file() else None
+
+
 def _open_windows(command: list[str]) -> None:
-    wt = shutil.which("wt")
+    wt = find_windows_terminal()
     if wt is not None:
+        install_windows_profile()
         subprocess.run(
             windows_terminal_command(wt, command),
             check=True,

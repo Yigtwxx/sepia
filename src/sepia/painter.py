@@ -27,7 +27,12 @@ STEPS = 4
 GUIDANCE = 1.0
 """Distilled models are trained for CFG 1.0; higher values oversaturate."""
 PIXELS = 1024 * 640
-"""Target image area. The symbol grid needs far less, so more only costs time."""
+"""Target image area for the API; the symbol grid needs less, so more costs time."""
+LOCAL_PIXELS = 768 * 512
+"""Largest area the local model paints. Above it an 8 GB card spills into shared
+memory and a 3 second picture takes a minute."""
+LOCAL_EDIT_PIXELS = 640 * 416
+"""Editing also holds the reference picture, so it gets a smaller budget."""
 
 KEYLESS_URL = "https://image.pollinations.ai/prompt/"
 """Pollinations' anonymous endpoint: about one image per 15 seconds, with a logo."""
@@ -194,7 +199,10 @@ class LocalPainter:
         import torch
 
         self.load()
+        budget = LOCAL_PIXELS if reference is None else LOCAL_EDIT_PIXELS
         width, height = size
+        if width * height > budget:
+            width, height = image_size(width / height, budget)
         started = time.perf_counter()
         options: dict[str, Any] = {
             "prompt": prompt,
