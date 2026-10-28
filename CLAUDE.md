@@ -13,7 +13,7 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 
 - `src/sepia/cli.py`: argparse entry point; `--download`, `--version`, hidden `--viewer <session file>`.
 - `src/sepia/repl.py`: the prompt window loop, slash commands, spinner, session folders, viewer relaunch.
-- `src/sepia/ui.py`: wordmark, palette, spinner frames, replies, English and Turkish strings, language detection.
+- `src/sepia/ui.py`: wordmark, palette, spinner frames, replies, interface strings (English only).
 - `src/sepia/director.py`: one Claude call per request; structured JSON reply (`message`, `prompt`, `edit`); maps API errors to `Failure`.
 - `src/sepia/prompts/`: `director.md` (system prompt) and `request.md` (per-request template).
 - `src/sepia/painter.py`: `ApiPainter` (Pollinations), `LocalPainter` (FLUX.2 [klein]), `FallbackPainter` with 120 s cooldown, `select_device`, model download.

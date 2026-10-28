@@ -65,7 +65,7 @@ uv run python scripts/spike.py --show spike-output               # re-render sav
 
 ## Code
 
-- Code, identifiers and comments are in English. User-facing strings live in `src/sepia/ui.py` in English and Turkish; add both.
+- Code, identifiers and comments are in English. User-facing strings live in `src/sepia/ui.py` and are English only.
 - Type annotations everywhere; mypy runs in strict mode on `src/`.
 - ruff formats at 88 columns and lints with the rule set in `pyproject.toml`.
 - Prompts for Claude live in `src/sepia/prompts/` as Markdown files, not inline in code.

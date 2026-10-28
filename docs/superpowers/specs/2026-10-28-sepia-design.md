@@ -69,7 +69,7 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
 | `ipc` | Authenticated JSON messages over `127.0.0.1` | `multiprocessing.connection` |
 | `launcher` | Opens the viewer in a new window on each OS | `subprocess` |
 | `viewer` | Full-screen picture display, redraw on resize | `ipc`, `raster`, `ascii_art`, `rich` |
-| `ui` | Wordmark, palette, replies, English and Turkish strings | `rich` |
+| `ui` | Wordmark, palette, replies, interface strings (English) | `rich` |
 | `repl` | The prompt loop, commands, spinner, session folders | `director`, `painter`, `ipc`, `launcher`, `ui` |
 
 ## Request pipeline
@@ -130,8 +130,8 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
 - A panel with the wordmark in the figlet font ANSI Shadow, like spiyweb's (letters banded pink to purple, shadow in deep purple), a tip line, then
   a `›` prompt with file history, slash-command completion and a bottom bar (model, style/charset, window status).
 - While working, a `✻✽✶✳✢·` spinner with "Working on it…"; then a `⏺` reply with the source and time.
-- Commands: `/new`, `/style [ink|fill]`, `/charset [classic|symbols]`, `/help`, `/exit` (also `/quit`, `/q`, Ctrl+D).
-- UI strings in English and Turkish, chosen by `SEPIA_LANG` or the system locale.
+- Commands: `/new`, `/clear`, `/style [ink|fill]`, `/charset [classic|symbols]`, `/help`, `/exit` (also `/quit`, `/q`, Ctrl+D).
+- The interface and Claude's replies are English only.
 
 ## Configuration and secrets
 
@@ -139,7 +139,7 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
   config folder. If none is found, sepia asks once with hidden input and stores it in the user config `.env` with
   user-only permissions. Keys are never printed or logged.
 - Optional: `POLLINATIONS_KEY`, `SEPIA_MODEL`, `SEPIA_EFFORT`, `SEPIA_STYLE` (default `ink`), `SEPIA_CHARSET` (default
-  `classic`), `SEPIA_IMAGE_MODEL`, `SEPIA_LANG`.
+  `classic`), `SEPIA_IMAGE_MODEL`.
 - Pictures are saved per session under the user config folder; the newest 10 sessions are kept.
 - The IPC session file (port and one-time 32-byte key) is written with user-only permissions. Messages are JSON and are
   never unpickled.

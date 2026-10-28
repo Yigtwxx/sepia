@@ -76,6 +76,7 @@ On the first run sepia asks for your Anthropic API key (hidden input) and saves 
 | Command | What it does |
 | --- | --- |
 | `/new` | Start a fresh picture. The next request does not build on the old one. |
+| `/clear` | Clear the screen and start a fresh picture. |
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background (made for dark backgrounds); `fill` also paints each cell's background, which works on any theme. Without an argument it switches to the other style. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. Without an argument it switches to the other set. |
 | `/help` | List the commands. |
@@ -91,8 +92,6 @@ Command-line flags:
 | `--version` | Print the version. |
 | `--help` | Print usage. |
 
-The interface speaks English and Turkish. It follows the system language unless `SEPIA_LANG` is set.
-
 ## Configuration
 
 sepia reads settings from the environment, then from `.env` in the current directory, then from `.env` in the user config folder. A value that is already set is never overridden by a later source. See [.env.example](.env.example).
@@ -106,7 +105,6 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | `SEPIA_STYLE` | `ink` | Starting style: `ink` or `fill`. |
 | `SEPIA_CHARSET` | `classic` | Starting character set: `classic` or `symbols`. |
 | `SEPIA_IMAGE_MODEL` | `black-forest-labs/FLUX.2-klein-4B` | Hugging Face id of the local model. |
-| `SEPIA_LANG` | system language | Interface language: `en` or `tr`. Set it in the shell environment; it is read before the `.env` files load. |
 
 An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE` or `SEPIA_CHARSET` stops sepia at startup.
 

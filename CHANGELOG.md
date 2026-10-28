@@ -10,6 +10,25 @@ tag all carry.
 
 ## [Unreleased]
 
+### Added
+
+- `/clear` clears the screen and starts a fresh picture.
+
+### Changed
+
+- The chat bar is one framed block (border, input, border, status) that
+  starts under the welcome box and moves down with the conversation, as in
+  Claude Code; once it reaches the bottom the welcome box scrolls away.
+- Starting sepia clears the screen and the scrollback.
+- The wordmark uses the ANSI Shadow font, like spiyweb's.
+- With the local model downloaded, a keyed request that runs out of
+  credit falls back to the local model before the keyless API.
+- The interface and Claude's replies are English only.
+
+### Removed
+
+- `SEPIA_LANG` and the Turkish interface strings.
+
 ## [0.1.0] - 2026-10-29
 
 The first release. Type a short request, and a second terminal window shows it
