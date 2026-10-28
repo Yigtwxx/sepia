@@ -71,7 +71,7 @@ A manual run (*Actions* → *release* → *Run workflow*) rebuilds the current
 `main` and skips files PyPI already has, so it is safe to start by hand.
 
 **A version number burns on upload.** PyPI will not let a file be replaced,
-only yanked, so a broken `0.1.0a1` is fixed by releasing `0.1.0a2`.
+only yanked, so a broken `0.1.0` is fixed by releasing `0.1.1`.
 
 To try a pre-release from PyPI, pin it, since installers skip pre-releases
-by default: `uvx --from sepia-cli==0.1.0a1 sepia --help`.
+by default: `uvx --from sepia-cli==0.2.0a1 sepia --help`.
