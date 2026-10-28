@@ -11,7 +11,7 @@ from typing import TypeVar, cast, get_args
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
-from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style as PromptStyle
 from rich.console import Console
@@ -107,10 +107,10 @@ class Repl:
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sepia-work")
 
     def run(self) -> int:
-        self.console.clear()
-        self.console.print(ui.welcome(self.words, self.console.width))
-        self.console.print(ui.tip(self.words))
+        self._open_screen()
         session: PromptSession[str] = PromptSession(
+            erase_when_done=True,  # the bar is redrawn at the bottom every turn
+            reserve_space_for_menu=0,
             history=FileHistory(str(config_dir() / "history")),
             completer=WordCompleter(
                 [usage.split()[0] for usage, _ in self.words.commands],
@@ -123,15 +123,17 @@ class Repl:
                 {
                     "bottom-toolbar": f"noreverse {ui.MUTED}",
                     "prompt": f"bold {ui.ACCENT}",
+                    "frame": ui.FRAME,
+                    "rprompt": ui.FRAME,
                 }
             ),
         )
         try:
             while True:
-                self.console.print()
                 try:
                     line = session.prompt(
-                        [("class:prompt", ui.PROMPT)],
+                        self._bar_message,
+                        rprompt=[("class:frame", "│")],
                         placeholder=[(f"fg:{ui.MUTED}", self.words("placeholder"))],
                         bottom_toolbar=self._toolbar,
                     ).strip()
@@ -139,8 +141,10 @@ class Repl:
                     continue
                 if not line:
                     continue
+                self.console.print(ui.echo(line))
                 if not self._handle(line):
                     return 0
+                self.console.print()
         except EOFError:
             return 0
         finally:
@@ -266,11 +270,35 @@ class Repl:
         if isinstance(cols, int) and isinstance(rows, int) and cols > 0 and rows > 0:
             self.canvas = Canvas(cols, rows)
 
-    def _toolbar(self) -> HTML:
+    def _open_screen(self) -> None:
+        """Welcome box at the top, then blank lines so the chat bar starts at the
+        bottom; from then on the transcript scrolls up above it."""
+        self.console.clear()
+        welcome = ui.welcome(self.words, self.console.width)
+        used = len(self.console.render_lines(welcome, pad=False)) + 1
+        self.console.print(welcome)
+        self.console.print(ui.tip(self.words))
+        blank = self.console.height - used - ui.BAR_ROWS
+        if blank > 0:
+            self.console.print("\n" * (blank - 1))
+
+    def _bar_message(self) -> FormattedText:
+        width = shutil.get_terminal_size().columns
+        return FormattedText(
+            [
+                ("class:frame", ui.bar_top(width) + "\n"),
+                ("class:frame", "│"),
+                ("class:prompt", ui.PROMPT),
+            ]
+        )
+
+    def _toolbar(self) -> FormattedText:
+        width = shutil.get_terminal_size().columns
         window = "●" if self.host.connected else "○"
         model = self.settings.model.removeprefix("claude-")
-        return HTML(
-            f"  /help · {model} · {self.style}/{self.charset} · {window} window"
+        status = f"  /help · {model} · {self.style}/{self.charset} · {window} window"
+        return FormattedText(
+            [("class:frame", ui.bar_bottom(width) + "\n"), ("", status)]
         )
 
 

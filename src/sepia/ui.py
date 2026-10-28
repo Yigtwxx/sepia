@@ -21,6 +21,9 @@ WARN = "#fb7185"
 GOOD = "#c084fc"
 SPINNER = "✻✽✶✳✢·"
 PROMPT = " › "
+FRAME = "#5b5b6b"
+BAR_ROWS = 4
+"""The chat bar: top border, input line, bottom border, status line."""
 
 BLOCK = "█"
 """The cell the letters are made of; every other glyph of the mark is shadow."""
@@ -185,6 +188,14 @@ def tip(words: Words) -> Text:
     text.append(f"{label}:", style="bold")
     text.append(rest, style=MUTED)
     return text
+
+
+def bar_top(width: int) -> str:
+    return "╭" + "─" * max(width - 2, 0) + "╮"
+
+
+def bar_bottom(width: int) -> str:
+    return "╰" + "─" * max(width - 2, 0) + "╯"
 
 
 def echo(line: str) -> Text:
