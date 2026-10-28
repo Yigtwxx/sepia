@@ -94,7 +94,7 @@ class SymbolArt:
 
 
 def image_to_art(
-    pixels: RGBImage, cols: int, rows: int, style: ArtStyle = "ink"
+    pixels: RGBImage, cols: int, rows: int, style: ArtStyle = "fill"
 ) -> SymbolArt:
     """Convert `pixels` into `cols` x `rows` cells of colored symbols.
 

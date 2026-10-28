@@ -22,7 +22,7 @@ def test_ramp_symbols_include_requested_and_exclude_outlines() -> None:
 
 
 def test_image_to_art_grid_matches_requested_shape(make_canvas: Canvas) -> None:
-    art = image_to_art(make_canvas(12, 5), cols=12, rows=5)
+    art = image_to_art(make_canvas(12, 5), cols=12, rows=5, style="ink")
     assert (art.rows, art.cols) == (5, 12), f"Expected 5x12, got {art.rows}x{art.cols}"
     assert art.fg.shape == (5, 12, 3), f"Expected fg (5, 12, 3), got {art.fg.shape}"
     assert art.bg is None, "Ink style must not paint a background"

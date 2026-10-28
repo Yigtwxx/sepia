@@ -14,8 +14,8 @@ def test_load_settings_empty_environment_uses_defaults() -> None:
 
 def test_load_settings_overrides_are_normalized() -> None:
     environ = {"SEPIA_MODEL": " claude-sonnet-5-5 ", "SEPIA_EFFORT": "HIGH"}
-    settings = load_settings(environ | {"SEPIA_STYLE": "fill"})
-    expected = Settings(model="claude-sonnet-5-5", effort="high", style="fill")
+    settings = load_settings(environ | {"SEPIA_STYLE": "ink"})
+    expected = Settings(model="claude-sonnet-5-5", effort="high", style="ink")
     assert settings == expected, f"Expected {expected}, got {settings}"
 
 

@@ -17,7 +17,7 @@ Effort = Literal["low", "medium", "high", "xhigh", "max"]
 
 DEFAULT_MODEL = "claude-opus-5-5"
 DEFAULT_EFFORT: Effort = "medium"
-DEFAULT_STYLE: ArtStyle = "ink"
+DEFAULT_STYLE: ArtStyle = "fill"
 API_KEY_VAR = "ANTHROPIC_API_KEY"
 
 
