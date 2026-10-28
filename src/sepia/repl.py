@@ -2,6 +2,7 @@
 
 import shutil
 import time
+import urllib.parse
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -32,7 +33,10 @@ from sepia.ipc import Host, Message
 from sepia.launcher import VIEWER_COLS, VIEWER_ROWS, LaunchError, open_viewer
 from sepia.painter import FallbackPainter, PainterError, Painting, build_painter
 from sepia.painter import image_size as paint_size
+from sepia.picker import choose
+from sepia.reference import find_reference
 from sepia.scene import Canvas, Scene
+from sepia.usage import Usage
 
 T = TypeVar("T")
 
@@ -63,11 +67,10 @@ def parse_command(line: str) -> Command | None:
     return Command(name.strip().lower(), argument.strip())
 
 
-def toggle(current: str, options: tuple[str, ...], requested: str) -> str:
-    """The requested option if valid, otherwise the next one after `current`."""
-    if requested in options:
-        return requested
-    return options[(options.index(current) + 1) % len(options)]
+def named_option(options: tuple[str, ...], argument: str) -> str | None:
+    """The option `argument` names (`/style ink`), or None to ask with a menu."""
+    name = argument.strip().lower()
+    return name if name in options else None
 
 
 def new_session_dir(root: Path, keep: int = KEEP_SESSIONS) -> Path:
@@ -97,6 +100,7 @@ class Repl:
         self.painter = painter
         self.folder = folder
         self.scene = Scene()
+        self.usage = Usage()
         self.style: ArtStyle = settings.style
         self.charset: Charset = settings.charset
         self.canvas = Canvas(VIEWER_COLS, VIEWER_ROWS)
@@ -124,6 +128,8 @@ class Repl:
                 except KeyboardInterrupt:
                     continue
                 finally:
+                    # The live bar erased itself; a still copy keeps it in view.
+                    self.bar.hold(bar.still(shutil.get_terminal_size().columns))
                     self.bar.to_transcript()
                 if not line:
                     continue
@@ -150,6 +156,10 @@ class Repl:
             return False
         if command.name == "help":
             self.console.print(ui.help_table(self.words))
+        elif command.name == "usage":
+            model = self.settings.model
+            view = ui.usage_view(self.words, self.usage, model, self.console.width)
+            self.console.print(view)
         elif command.name == "clear":
             self.scene.reset()
             self.host.send({"type": "clear"})
@@ -162,14 +172,16 @@ class Repl:
         elif command.name in ("style", "charset"):
             if command.name == "style":
                 styles = cast(tuple[str, ...], get_args(ArtStyle))
-                self.style = cast(
-                    ArtStyle, toggle(self.style, styles, command.argument.lower())
-                )
+                picked = self._pick("style", styles, self.style, command.argument)
+                if picked is None:
+                    return True
+                self.style = cast(ArtStyle, picked)
             else:
                 sets = cast(tuple[str, ...], get_args(Charset))
-                self.charset = cast(
-                    Charset, toggle(self.charset, sets, command.argument.lower())
-                )
+                picked = self._pick("charset", sets, self.charset, command.argument)
+                if picked is None:
+                    return True
+                self.charset = cast(Charset, picked)
             self.host.send(
                 {"type": "style", "style": self.style, "charset": self.charset}
             )
@@ -179,6 +191,21 @@ class Repl:
             unknown = self.words("unknown", command=f"/{command.name}")
             self.console.print(ui.reply(unknown, failed=True))
         return True
+
+    def _pick(
+        self, kind: str, options: tuple[str, ...], current: str, argument: str
+    ) -> str | None:
+        """The option named after the command, else one picked from a menu; None
+        when the menu is closed without a choice."""
+        named = named_option(options, argument)
+        if named is not None:
+            return named
+        return choose(
+            self.words(f"pick_{kind}"),
+            [(option, self.words(f"{kind}.{option}")) for option in options],
+            current,
+            self.words("pick_hint"),
+        )
 
     def _draw(self, request: str, add: bool) -> None:
         """Paint `request`: a new picture, or with `add` an addition to this one.
@@ -199,13 +226,21 @@ class Repl:
                 ui.reply(self.words(f"failure.{exc.failure}"), failed=True)
             )
             return
+        self.usage.add_direction(direction)
+        # A new picture starts from an empty scene; /add keeps the last reference.
+        likeness = self.scene.likeness
+        if direction.references:
+            found = self._wait(
+                lambda: find_reference(direction.references), self.words("looking")
+            )
+            likeness = found or likeness
         self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
         reference = self.scene.image if add else None
         size = paint_size(self.canvas.aspect)
         try:
             painting: Painting = self._wait(
                 lambda: self.painter.paint(
-                    direction.prompt, size, self.scene.seed, reference
+                    direction.prompt, size, self.scene.seed, reference, likeness
                 ),
                 self.words("painting", source=self.words("source.api")),
             )
@@ -213,12 +248,18 @@ class Repl:
             message = self.words("failure.paint", error=str(exc))
             self.console.print(ui.reply(message, failed=True))
             return
-        self.scene.record(request, direction.prompt, painting.image)
+        self.scene.record(request, direction.prompt, painting.image, likeness)
+        # The keyless API ignores reference pictures, so such a picture had none.
+        used = likeness if painting.source != "keyless" else None
+        self.usage.add_painting(painting, referenced=used is not None)
         self._count += 1
         path = self.folder / f"{self._count:02d}.png"
         painting.image.save(path)
         self._show(path)
         detail = f"{self.words(f'source.{painting.source}')} · {painting.seconds:.1f}s"
+        if used is not None:
+            host = urllib.parse.urlsplit(used.url).hostname or used.url
+            detail += f" · {self.words('reference', host=host)}"
         self.console.print(ui.reply(direction.message, detail))
 
     def _show(self, path: Path) -> None:

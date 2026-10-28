@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from sepia import ui
+
 VIEWER_COLS = 110
 VIEWER_ROWS = 36
 """Window size in cells of the default font; the small profile font fits about
@@ -18,6 +20,8 @@ VIEWER_FONT_SIZE = 6
 LAUNCH_TIMEOUT_SECONDS = 15
 PROFILE_NAME = "sepia"
 PROFILE_GUID = "{6f1c2b9e-3a57-4d0e-9c84-5e2f7a1d3b60}"
+TAB_COLOR = ui.ACCENT
+"""The theme's pinkish purple, the same as the prompt and the replies."""
 
 
 class LaunchError(RuntimeError):
@@ -43,12 +47,14 @@ def open_viewer(session_file: Path) -> None:
 
 
 def windows_terminal_command(wt: str, command: list[str]) -> list[str]:
-    """A new Windows Terminal window in focus mode: no tab bar and no title bar."""
+    """A new Windows Terminal window with a purple "sepia" tab.
+
+    The tab row stays visible: it is the handle that drags the window around.
+    """
     return [
         wt,
         "--window",
         "new",
-        "--focus",
         "--size",
         f"{VIEWER_COLS},{VIEWER_ROWS}",
         "new-tab",
@@ -56,6 +62,8 @@ def windows_terminal_command(wt: str, command: list[str]) -> list[str]:
         PROFILE_NAME,
         "--title",
         "sepia",
+        "--tabColor",
+        TAB_COLOR,
         "--suppressApplicationTitle",
         "--",
         *command,

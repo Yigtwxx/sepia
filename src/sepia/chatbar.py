@@ -1,26 +1,33 @@
-"""The chat bar: a framed input box pinned to the bottom rows of the window.
+"""The chat bar: an input line between two rules, pinned to the bottom rows.
 
-`ChatBar` draws the whole bar as one block: top border, the input between side
-borders, bottom border and a status line. (A `PromptSession` puts its bottom
-toolbar on the screen's last row, which split the frame in two.)
+`ChatBar` draws the whole bar as one block: top rule, the input, bottom rule and a
+status line. (A `PromptSession` puts its bottom toolbar on the screen's last row,
+which split the block in two.)
 
 `BottomBar` keeps that block on the window's last rows. A terminal scroll region
 covers every row above it, so the transcript starts under the welcome box and, once
 it reaches the bar, scrolls the welcome box out of view while the bar never moves.
 """
 
+import io
 import shutil
 from collections.abc import Callable, Sequence
 
 from prompt_toolkit.application import Application
+from prompt_toolkit.application.current import get_app_session
 from prompt_toolkit.auto_suggest import AutoSuggest, Suggestion
 from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.data_structures import Size
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import Condition
-from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.formatted_text import (
+    FormattedText,
+    StyleAndTextTuples,
+    fragment_list_width,
+)
 from prompt_toolkit.history import History
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
-from prompt_toolkit.layout import FormattedTextControl, HSplit, Layout, VSplit, Window
+from prompt_toolkit.layout import FormattedTextControl, HSplit, Layout, Window
 from prompt_toolkit.layout.controls import BufferControl
 from prompt_toolkit.layout.processors import (
     AfterInput,
@@ -28,12 +35,14 @@ from prompt_toolkit.layout.processors import (
     BeforeInput,
     ConditionalProcessor,
 )
+from prompt_toolkit.output.vt100 import Vt100_Output
+from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.styles import Style
 
 from sepia import ui
 
 BAR_ROWS = 4
-"""Top border, input line, bottom border, status line."""
+"""Top rule, input line, bottom rule, status line."""
 
 STYLE = Style.from_dict(
     {
@@ -61,18 +70,26 @@ class BottomBar:
 
     def to_bar(self) -> None:
         """Remember the transcript position and move to the bar's first row."""
-        height = self._rows()
         # Re-applying the region follows window resizes; it homes the cursor, so
         # the transcript position is saved first and put back afterwards.
         self._write(self.SAVE + self._region() + self.RESTORE + self.SAVE)
-        self._write(f"\x1b[{max(height - BAR_ROWS + 1, 1)};1H")
+        self._write(f"\x1b[{self._top()};1H")
+
+    def hold(self, rows: Sequence[str]) -> None:
+        """Draw a still copy of the bar on its rows, one finished row at a time."""
+        top = self._top()
+        for offset, row in enumerate(rows):
+            self._write(f"\x1b[{top + offset};1H\x1b[2K{row}")
 
     def to_transcript(self) -> None:
         self._write(self.RESTORE)
 
     def stop(self) -> None:
-        """Give the whole screen back and leave the cursor on the last row."""
-        self._write(f"{self.RESET}\x1b[{self._rows()};1H\n")
+        """Give the whole screen back and clear the bar, leaving the cursor there."""
+        self._write(f"{self.RESET}\x1b[{self._top()};1H\x1b[J")
+
+    def _top(self) -> int:
+        return max(self._rows() - BAR_ROWS + 1, 1)
 
     def _region(self) -> str:
         return f"\x1b[1;{max(self._rows() - BAR_ROWS, 1)}r"
@@ -119,12 +136,30 @@ class ChatBar:
         result: str = self._application().run()
         return result
 
+    def still(self, width: int) -> list[str]:
+        """The empty bar as rows of text with escape codes, `width` columns wide.
+
+        The live bar erases itself when a line is submitted; drawing this copy in
+        its place keeps the bar on screen while sepia works on the request.
+        """
+        room = max(width - len(ui.PROMPT), 0)
+        rows: list[StyleAndTextTuples] = [
+            [("class:frame", ui.bar_rule(width))],
+            [
+                ("class:prompt", ui.PROMPT),
+                ("class:placeholder", self._placeholder[:room]),
+            ],
+            [("class:frame", ui.bar_rule(width))],
+            [("class:status", self._status()[:width])],
+        ]
+        return [_escaped(row) for row in rows]
+
     def _application(self) -> Application[str]:
         buffer = Buffer(
             history=self._history,
             auto_suggest=self._suggest,
             multiline=False,
-            accept_handler=lambda buf: _accept(buf.text),
+            accept_handler=lambda buf: _accept(buf),
         )
         empty = Condition(lambda: not buffer.text)
         field = Window(
@@ -142,18 +177,21 @@ class ChatBar:
             height=1,
             dont_extend_height=True,
         )
-        side = Window(FormattedTextControl([("class:frame", "│")]), width=1)
         body = HSplit(
             [
-                _line(lambda w: ui.bar_top(w), "class:frame"),
-                VSplit([side, field, side]),
-                _line(lambda w: ui.bar_bottom(w), "class:frame"),
+                _line(ui.bar_rule, "class:frame"),
+                field,
+                _line(ui.bar_rule, "class:frame"),
                 _line(lambda _: self._status(), "class:status"),
             ]
         )
 
-        def _accept(text: str) -> bool:
-            app.exit(result=text)
+        def _accept(buf: Buffer) -> bool:
+            # Enter on a partial command runs the one suggested for it: /us -> /usage.
+            suggestion = self._suggest.get_suggestion(buf, buf.document)
+            if suggestion is not None:
+                buf.text += suggestion.text
+            app.exit(result=buf.text)
             return True  # keep the text out of the buffer reset; history still saves
 
         keys = KeyBindings()
@@ -193,3 +231,17 @@ def _line(text: Callable[[int], str], style: str) -> Window:
         return FormattedText([(style, text(shutil.get_terminal_size().columns))])
 
     return Window(FormattedTextControl(render), height=1, dont_extend_height=True)
+
+
+def _escaped(fragments: StyleAndTextTuples) -> str:
+    """Styled fragments as text with escape codes, in the live bar's colors."""
+    text = io.StringIO()
+    width = fragment_list_width(fragments)
+    print_formatted_text(
+        FormattedText(fragments),
+        end="",
+        style=STYLE,
+        output=Vt100_Output(text, lambda: Size(rows=1, columns=width)),
+        color_depth=get_app_session().output.get_default_color_depth(),
+    )
+    return text.getvalue()

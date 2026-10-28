@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sepia import launcher
+from sepia import launcher, ui
 from sepia.launcher import (
     LaunchError,
     macos_script,
@@ -24,12 +24,21 @@ def test_viewer_command_runs_sepia_viewer_with_current_python() -> None:
     assert command == expected, f"Got {command}"
 
 
-def test_windows_terminal_command_opens_new_focus_mode_window() -> None:
+def test_windows_terminal_command_opens_new_window_with_tab_row() -> None:
     args = windows_terminal_command("wt.exe", ["python", "-m", "sepia"])
     head = args[: args.index("new-tab")]
     assert head[:3] == ["wt.exe", "--window", "new"], f"Not a new window: {head}"
-    assert "--focus" in head, f"Focus mode hides tab and title bars: {head}"
+    assert "--focus" not in head, f"Focus mode hides the tab row: {head}"
     assert args[-4:] == ["--", "python", "-m", "sepia"], f"Command not last: {args}"
+
+
+def test_windows_terminal_command_names_the_tab_sepia_in_purple() -> None:
+    args = windows_terminal_command("wt.exe", ["python"])
+    title = args[args.index("--title") + 1]
+    color = args[args.index("--tabColor") + 1]
+    assert title == "sepia", f"Wrong tab title: {args}"
+    assert color == launcher.TAB_COLOR == ui.ACCENT, f"Tab not in theme: {args}"
+    assert "--suppressApplicationTitle" in args, f"Title can be overwritten: {args}"
 
 
 def test_macos_script_escapes_quotes_and_execs_viewer() -> None:

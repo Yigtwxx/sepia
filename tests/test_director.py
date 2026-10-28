@@ -159,3 +159,44 @@ def test_director_direct_reads_json_from_the_last_text_block(
     set_final_message(message)
     direction = Director(fake_client, "m", "low").direct("yunara lol", Scene())
     assert direction.prompt == "A waterfall.", f"Got {direction.prompt!r}"
+
+
+def test_director_reply_schema_asks_for_reference_links() -> None:
+    field = REPLY_SCHEMA["properties"].get("references", {})
+    assert field.get("type") == "array", f"Got {field}"
+    assert "references" in REPLY_SCHEMA["required"], "References must be required"
+
+
+def test_director_direct_keeps_up_to_three_clean_reference_links(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    links = [" https://a.example/1 ", "", "https://b.example/2", "https://c/3", "x"]
+    set_final_message(make_message({**REPLY, "references": links}))
+    direction = Director(fake_client, "m", "low").direct("yunara lol", Scene())
+    expected = ("https://a.example/1", "https://b.example/2", "https://c/3")
+    assert direction.references == expected, f"Got {direction.references}"
+
+
+def test_director_direct_reply_without_references_has_none(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message(REPLY))
+    direction = Director(fake_client, "m", "low").direct("şelale", Scene())
+    assert direction.references == (), f"Got {direction.references}"
+
+
+def test_director_direct_reports_serving_model_and_searches(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message(REPLY, searches=2))
+    direction = Director(fake_client, "m", "low").direct("yunara lol", Scene())
+    got = (direction.model, direction.searches)
+    assert got == ("claude-haiku-5-5", 2), f"Got {got}"
+
+
+def test_director_direct_without_searches_counts_zero(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message(REPLY))
+    direction = Director(fake_client, "m", "low").direct("x", Scene())
+    assert direction.searches == 0, f"Got {direction.searches}"

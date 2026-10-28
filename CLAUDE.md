@@ -14,14 +14,17 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/cli.py`: argparse entry point; `--download`, `--version`, hidden `--viewer <session file>`.
 - `src/sepia/repl.py`: the prompt window loop, slash commands, spinner, session folders, viewer relaunch.
 - `src/sepia/ui.py`: wordmark, palette, spinner frames, replies, interface strings (English only).
-- `src/sepia/director.py`: one Claude call per request; structured JSON reply (`message`, `prompt`, `edit`); maps API errors to `Failure`.
+- `src/sepia/director.py`: one Claude call per request; structured JSON reply (`message`, `prompt`, `edit`, `references`); maps API errors to `Failure`.
 - `src/sepia/prompts/`: `director.md` (system prompt) and `request.md` (per-request template).
+- `src/sepia/reference.py`: finds a reference picture for a named subject (link or page `og:image`), https and public hosts only.
 - `src/sepia/painter.py`: `ApiPainter` (Pollinations), `LocalPainter` (FLUX.2 [klein]), `FallbackPainter` with 120 s cooldown, `select_device`, model download.
+- `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`).
+- `src/sepia/usage.py`: session totals for `/usage` (tokens, searches, estimated cost from list prices, pictures per source).
 - `src/sepia/scene.py`: `Scene` (requests, prompts, latest image, fixed seed) and `Canvas` (viewer size in cells).
 - `src/sepia/raster.py`: autocontrast, saturation boost, cover-crop to the grid.
 - `src/sepia/ascii_art.py`: pixels to `SymbolArt` (density ramps, Bayer dither, ink/fill colors, optional Sobel outlines) and to rich `Text`.
 - `src/sepia/ipc.py`: HMAC-authenticated loopback channel, JSON messages only, session file.
-- `src/sepia/launcher.py`: opens the viewer (Windows Terminal focus mode with a fragment profile, conhost fallback, Terminal.app via osascript).
+- `src/sepia/launcher.py`: opens the viewer (Windows Terminal window with a purple "sepia" tab and a fragment profile, conhost fallback, Terminal.app via osascript).
 - `src/sepia/viewer.py`: full-screen picture window; redraws on resize and on messages.
 - `src/sepia/config.py`: settings from env and `.env` files, key storage, config dir.
 - `tests/`: one `test_<module>.py` per module, shared fixtures in `conftest.py`.

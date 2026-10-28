@@ -1,10 +1,16 @@
+import io
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
+from prompt_toolkit.application import create_app_session
+from prompt_toolkit.data_structures import Size
+from prompt_toolkit.input import create_pipe_input
+from prompt_toolkit.input.base import PipeInput
+from prompt_toolkit.output.vt100 import Vt100_Output
 
 from sepia.ascii_art import CELL_HEIGHT, CELL_WIDTH
 
@@ -16,16 +22,24 @@ def make_message() -> Callable[..., SimpleNamespace]:
     """Factory for objects shaped like the SDK's final streamed message."""
 
     def make(
-        reply: dict[str, str] | str | None = None, stop_reason: str = "end_turn"
+        reply: dict[str, object] | str | None = None,
+        stop_reason: str = "end_turn",
+        searches: int | None = None,
     ) -> SimpleNamespace:
         text = reply if isinstance(reply, str) else json.dumps(reply or {})
+        server = (
+            None if searches is None else SimpleNamespace(web_search_requests=searches)
+        )
         return SimpleNamespace(
+            model="claude-haiku-5-5",
             stop_reason=stop_reason,
             content=[
                 SimpleNamespace(type="thinking", thinking=""),
                 SimpleNamespace(type="text", text=text),
             ],
-            usage=SimpleNamespace(input_tokens=1200, output_tokens=3400),
+            usage=SimpleNamespace(
+                input_tokens=1200, output_tokens=3400, server_tool_use=server
+            ),
         )
 
     return make
@@ -57,3 +71,45 @@ def make_canvas() -> Canvas:
         return np.full(shape, value, dtype=np.uint8)
 
     return make
+
+
+@pytest.fixture
+def web(monkeypatch: pytest.MonkeyPatch) -> dict[str, tuple[bytes, str]]:
+    """A fake public internet for `sepia.reference`: map url -> (body, type).
+
+    Every host resolves to a public address; unknown urls answer 404.
+    """
+    import socket
+    import urllib.error
+    import urllib.request
+
+    pages: dict[str, tuple[bytes, str]] = {}
+
+    def open_url(request: urllib.request.Request, timeout: float) -> MagicMock:
+        url = request.full_url
+        if url not in pages:
+            raise urllib.error.HTTPError(url, 404, "Not Found", None, None)  # type: ignore[arg-type]
+        body, kind = pages[url]
+        reply = MagicMock()
+        reply.__enter__.return_value = reply
+        reply.read.side_effect = lambda limit=-1: body if limit < 0 else body[:limit]
+        reply.headers.get_content_type.return_value = kind
+        reply.geturl.return_value = url
+        return reply
+
+    opener = MagicMock()
+    opener.open.side_effect = open_url
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *handlers: opener)
+    public = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: public)
+    return pages
+
+
+@pytest.fixture
+def terminal() -> Iterator[tuple[PipeInput, io.StringIO]]:
+    """A fake 80x24 terminal: keystrokes go in through the pipe, drawing comes out."""
+    screen = io.StringIO()
+    with create_pipe_input() as keys:
+        output = Vt100_Output(screen, lambda: Size(rows=24, columns=80), term="xterm")
+        with create_app_session(input=keys, output=output):
+            yield keys, screen

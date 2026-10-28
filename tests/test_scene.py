@@ -1,6 +1,7 @@
 import pytest
 from PIL import Image
 
+from sepia.reference import Reference
 from sepia.scene import Canvas, Scene
 
 
@@ -33,3 +34,12 @@ def test_scene_reset_clears_everything_and_picks_new_seed() -> None:
     assert scene.is_empty, "Reset scene must be empty"
     assert scene.requests == [] and scene.prompts == [], "History must be cleared"
     assert 0 <= scene.seed < 2**31, f"Seed out of range: {scene.seed}"
+
+
+def test_scene_record_keeps_the_reference_until_reset() -> None:
+    likeness = Reference("https://img.example.org/a.png", Image.new("RGB", (2, 2)))
+    scene = Scene()
+    scene.record("yunara lol", "The character.", Image.new("RGB", (2, 2)), likeness)
+    assert scene.likeness is likeness, "The reference must stay for /add"
+    scene.reset()
+    assert scene.likeness is None, "A fresh picture starts without a reference"

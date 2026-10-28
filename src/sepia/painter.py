@@ -11,6 +11,8 @@ from typing import Any, Literal, Protocol
 
 from PIL import Image, UnidentifiedImageError
 
+from sepia.reference import Reference
+
 DEFAULT_IMAGE_MODEL = "black-forest-labs/FLUX.2-klein-4B"
 """The local model: Apache 2.0, four steps, image editing built in."""
 MODEL_FILES = [
@@ -44,7 +46,7 @@ COOLDOWN_SECONDS = 120
 """After the API says "too many requests", go straight to the local model this long."""
 
 Device = Literal["cuda", "mps", "cpu"]
-Source = Literal["api", "local"]
+Source = Literal["api", "keyless", "local"]
 
 
 class PainterError(RuntimeError):
@@ -69,7 +71,11 @@ class Painter(Protocol):
         size: tuple[int, int],
         seed: int,
         reference: Image.Image | None = None,
-    ) -> Painting: ...
+        likeness: Reference | None = None,
+    ) -> Painting:
+        """Paint `prompt`. `reference` is the picture to edit; `likeness` is a
+        picture of the subject whose look the painting copies."""
+        ...
 
 
 def image_size(aspect: float, pixels: int = PIXELS) -> tuple[int, int]:
@@ -86,7 +92,9 @@ class ApiPainter:
     """Paints through Pollinations.
 
     The API cannot see the previous picture, so an edit is repainted from the full
-    prompt with the scene's fixed seed, which keeps the composition close.
+    prompt with the scene's fixed seed, which keeps the composition close. A
+    likeness is on the web already: the keyed endpoint fetches it by its link,
+    while the keyless one ignores reference pictures.
     """
 
     def __init__(self, key: str | None = None, model: str = DEFAULT_API_MODEL) -> None:
@@ -99,9 +107,10 @@ class ApiPainter:
         size: tuple[int, int],
         seed: int,
         reference: Image.Image | None = None,
+        likeness: Reference | None = None,
     ) -> Painting:
         started = time.perf_counter()
-        request = self.request(prompt, size, seed)
+        request = self.request(prompt, size, seed, likeness)
         try:
             with urllib.request.urlopen(request, timeout=API_TIMEOUT_SECONDS) as reply:
                 kind = reply.headers.get_content_type()
@@ -119,10 +128,15 @@ class ApiPainter:
             image.load()
         except (UnidentifiedImageError, OSError) as exc:
             raise PainterError("image API returned an unreadable image") from exc
-        return Painting(image, "api", time.perf_counter() - started)
+        source: Source = "keyless" if self._key is None else "api"
+        return Painting(image, source, time.perf_counter() - started)
 
     def request(
-        self, prompt: str, size: tuple[int, int], seed: int
+        self,
+        prompt: str,
+        size: tuple[int, int],
+        seed: int,
+        likeness: Reference | None = None,
     ) -> urllib.request.Request:
         width, height = size
         query: dict[str, str | int] = {"width": width, "height": height, "seed": seed}
@@ -135,6 +149,8 @@ class ApiPainter:
             base = KEYED_URL
             query |= {"model": self._model}
             headers |= {"Authorization": f"Bearer {self._key}"}
+            if likeness is not None:
+                query["image"] = likeness.url
         path = urllib.parse.quote(prompt, safe="")
         url = f"{base}{path}?{urllib.parse.urlencode(query)}"
         return urllib.request.Request(url, headers=headers)
@@ -210,12 +226,17 @@ class LocalPainter:
         size: tuple[int, int],
         seed: int,
         reference: Image.Image | None = None,
+        likeness: Reference | None = None,
     ) -> Painting:
-        """Paint `prompt`; with `reference`, edit that image instead of a new one."""
+        """Paint `prompt`; with `reference`, edit that image instead of a new one,
+        and with `likeness`, copy the subject's look from that picture."""
         self.load()  # first: it explains a missing extra before torch is imported
         import torch
 
-        budget = LOCAL_PIXELS if reference is None else LOCAL_EDIT_PIXELS
+        sources = [reference] if reference is not None else []
+        if likeness is not None:
+            sources.append(likeness.image)
+        budget = LOCAL_EDIT_PIXELS if sources else LOCAL_PIXELS
         width, height = size
         if width * height > budget:
             width, height = image_size(width / height, budget)
@@ -228,8 +249,8 @@ class LocalPainter:
             "guidance_scale": GUIDANCE,
             "generator": torch.Generator(device="cpu").manual_seed(seed),
         }
-        if reference is not None:
-            options["image"] = [reference.convert("RGB")]
+        if sources:
+            options["image"] = [source.convert("RGB") for source in sources]
         with self._lock, torch.inference_mode():
             try:
                 image = self._pipe(**options).images[0]
@@ -296,10 +317,11 @@ class FallbackPainter:
         size: tuple[int, int],
         seed: int,
         reference: Image.Image | None = None,
+        likeness: Reference | None = None,
     ) -> Painting:
         if time.monotonic() >= self._skip_until:
             try:
-                painting = self._primary.paint(prompt, size, seed, reference)
+                painting = self._primary.paint(prompt, size, seed, reference, likeness)
             except PainterError as exc:
                 self.last_error = exc
                 if exc.rate_limited:
@@ -307,7 +329,7 @@ class FallbackPainter:
             else:
                 self.last_error = None
                 return painting
-        return self._fallback.paint(prompt, size, seed, reference)
+        return self._fallback.paint(prompt, size, seed, reference, likeness)
 
 
 def build_painter(

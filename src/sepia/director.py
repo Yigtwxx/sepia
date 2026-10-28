@@ -8,7 +8,11 @@ from string import Template
 from typing import Any
 
 import anthropic
-from anthropic.types.beta import BetaOutputConfigParam, BetaWebSearchTool20260209Param
+from anthropic.types.beta import (
+    BetaOutputConfigParam,
+    BetaUsage,
+    BetaWebSearchTool20260209Param,
+)
 from pydantic import BaseModel, Field, ValidationError
 
 from sepia.config import Effort
@@ -30,6 +34,8 @@ WEB_SEARCH: BetaWebSearchTool20260209Param = {
     "max_uses": 2,
 }
 """Lets Claude look up what an unfamiliar name looks like; about $0.01 a search."""
+MAX_REFERENCES = 3
+"""Links tried for a reference picture; the first usable one wins."""
 
 REPLY_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -43,8 +49,14 @@ REPLY_SCHEMA: dict[str, Any] = {
             "type": "boolean",
             "description": "True to repaint the previous picture, false for a new one.",
         },
+        "references": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Up to three links that show the named subject, best "
+            "first; empty when the request names nothing specific.",
+        },
     },
-    "required": ["message", "prompt", "edit"],
+    "required": ["message", "prompt", "edit", "references"],
     "additionalProperties": False,
 }
 
@@ -74,6 +86,7 @@ class _Reply(BaseModel):
     message: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
     edit: bool
+    references: list[str] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -81,6 +94,11 @@ class Direction:
     message: str
     prompt: str
     edit: bool
+    references: tuple[str, ...]
+    """Links to a picture of the subject, for `reference.find_reference`."""
+    model: str
+    """The model that answered; a server-side fallback can differ from the one asked."""
+    searches: int
     input_tokens: int
     output_tokens: int
 
@@ -140,9 +158,25 @@ class Director:
             message=reply.message.strip(),
             prompt=reply.prompt.strip(),
             edit=reply.edit and not scene.is_empty,
+            references=_links(reply.references),
+            model=message.model,
+            searches=_searches(message.usage),
             input_tokens=message.usage.input_tokens,
             output_tokens=message.usage.output_tokens,
         )
+
+
+def _searches(usage: BetaUsage) -> int:
+    """Web searches the request ran; None when it ran no server tool at all."""
+    server = usage.server_tool_use
+    return server.web_search_requests if server is not None else 0
+
+
+def _links(raw: list[str]) -> tuple[str, ...]:
+    """The first few https links, trimmed; anything else is dropped."""
+    links = [link.strip() for link in raw]
+    web = [link for link in links if link.startswith("https://")]
+    return tuple(web[:MAX_REFERENCES])
 
 
 @cache

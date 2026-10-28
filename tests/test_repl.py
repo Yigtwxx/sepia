@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sepia.repl import Command, new_session_dir, parse_command, toggle
+from sepia.repl import Command, named_option, new_session_dir, parse_command
 
 
 @pytest.mark.parametrize(
@@ -25,19 +25,14 @@ def test_parse_command_splits_slash_commands_only(
 
 
 @pytest.mark.parametrize(
-    ("current", "requested", "expected"),
-    [
-        ("ink", "fill", "fill"),
-        ("ink", "", "fill"),
-        ("fill", "", "ink"),
-        ("ink", "x", "fill"),
-    ],
+    ("argument", "expected"),
+    [("fill", "fill"), ("INK", "ink"), ("", None), ("x", None)],
 )
-def test_toggle_picks_requested_or_next_option(
-    current: str, requested: str, expected: str
+def test_named_option_matches_only_listed_options(
+    argument: str, expected: str | None
 ) -> None:
-    result = toggle(current, ("ink", "fill"), requested)
-    assert result == expected, f"Expected {expected}, got {result}"
+    result = named_option(("ink", "fill"), argument)
+    assert result == expected, f"{argument!r}: expected {expected}, got {result}"
 
 
 def test_new_session_dir_keeps_only_the_newest_folders(tmp_path: Path) -> None:

@@ -28,6 +28,7 @@ from sepia.config import (
 from sepia.director import Director, DirectorError, create_client
 from sepia.painter import PainterError, build_painter, image_size
 from sepia.raster import enhance, fit_image
+from sepia.reference import find_reference
 from sepia.scene import Canvas, Scene
 
 FONTS = [
@@ -73,13 +74,18 @@ def main() -> int:
         try:
             direction = director.direct(request, scene)
             reference = scene.image if direction.edit else None
+            likeness = find_reference(direction.references) or scene.likeness
             painting = painter.paint(
-                direction.prompt, image_size(canvas.aspect), scene.seed, reference
+                direction.prompt,
+                image_size(canvas.aspect),
+                scene.seed,
+                reference,
+                likeness,
             )
         except (DirectorError, PainterError) as exc:
             console.print(f"[red]{request!r} failed: {exc}[/red]")
             continue
-        scene.record(request, direction.prompt, painting.image)
+        scene.record(request, direction.prompt, painting.image, likeness)
         path = args.out / f"{index:02d}-{slug(request)}.png"
         painting.image.save(path)
         meta = {
@@ -87,6 +93,8 @@ def main() -> int:
             "message": direction.message,
             "prompt": direction.prompt,
             "edit": direction.edit,
+            "references": list(direction.references),
+            "likeness": likeness.url if likeness else None,
             "source": painting.source,
             "paint_seconds": round(painting.seconds, 1),
             "tokens": [direction.input_tokens, direction.output_tokens],

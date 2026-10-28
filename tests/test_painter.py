@@ -2,6 +2,7 @@ import io
 import sys
 import urllib.error
 import urllib.parse
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -18,8 +19,10 @@ from sepia.painter import (
     image_size,
     select_device,
 )
+from sepia.reference import Reference
 
 SIZE = (64, 48)
+LIKENESS = Reference("https://img.example.org/Yunara.png", Image.new("RGB", (8, 8)))
 
 
 def _jpeg_bytes() -> bytes:
@@ -40,9 +43,11 @@ class _StubPainter:
     def __init__(self, error: PainterError | None = None) -> None:
         self.error = error
         self.calls = 0
+        self.likeness: Reference | None = None
 
-    def paint(self, prompt, size, seed, reference=None) -> Painting:
+    def paint(self, prompt, size, seed, reference=None, likeness=None) -> Painting:
         self.calls += 1
+        self.likeness = likeness
         if self.error is not None:
             raise self.error
         return Painting(Image.new("RGB", size), "local", 0.0)
@@ -82,7 +87,7 @@ def test_api_painter_paint_returns_decoded_image(
     reply = _reply(_jpeg_bytes(), "image/jpeg")
     monkeypatch.setattr(painter.urllib.request, "urlopen", lambda *a, **k: reply)
     painting = ApiPainter().paint("apple", SIZE, 1)
-    assert painting.source == "api", f"Got {painting.source}"
+    assert painting.source == "keyless", f"Got {painting.source}"
     assert painting.image.size == SIZE, f"Got {painting.image.size}"
 
 
@@ -171,3 +176,50 @@ def test_local_painter_without_extra_raises_install_hint(
     monkeypatch.setattr(painter, "local_installed", lambda: False)
     with pytest.raises(PainterError, match=r"sepia-cli\[local\]"):
         painter.LocalPainter().paint("x", SIZE, 1)
+
+
+def test_api_painter_keyed_request_sends_the_reference_link() -> None:
+    request = ApiPainter(key="pk-test").request("x", SIZE, 1, LIKENESS)
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(request.full_url).query)
+    assert query["image"] == [LIKENESS.url], f"Reference link missing: {query}"
+
+
+def test_api_painter_keyless_request_leaves_the_reference_out() -> None:
+    request = ApiPainter().request("x", SIZE, 1, LIKENESS)
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(request.full_url).query)
+    assert "image" not in query, f"Keyless endpoint ignores references: {query}"
+
+
+def test_fallback_painter_passes_the_reference_to_the_painter_it_uses() -> None:
+    primary, fallback = _StubPainter(PainterError("down")), _StubPainter()
+    FallbackPainter(primary, fallback).paint("x", SIZE, 1, likeness=LIKENESS)
+    assert primary.likeness is LIKENESS, "Primary must get the reference"
+    assert fallback.likeness is LIKENESS, "Fallback must get the reference"
+
+
+def test_local_painter_paints_from_previous_picture_and_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_torch = SimpleNamespace(
+        Generator=MagicMock(), inference_mode=lambda: nullcontext()
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr(painter, "local_installed", lambda: True)
+    local = painter.LocalPainter()
+    local._pipe = MagicMock()
+    local._pipe.return_value.images = [Image.new("RGB", SIZE)]
+    previous = Image.new("RGB", (8, 8), (1, 2, 3))
+    local.paint("x", SIZE, 1, previous, LIKENESS)
+    images = local._pipe.call_args.kwargs["image"]
+    sources = [image.getpixel((0, 0)) for image in images]
+    expected = [(1, 2, 3), LIKENESS.image.getpixel((0, 0))]
+    assert sources == expected, f"Expected previous picture then reference: {sources}"
+
+
+def test_api_painter_keyed_paint_reports_the_api_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reply = _reply(_jpeg_bytes(), "image/jpeg")
+    monkeypatch.setattr(painter.urllib.request, "urlopen", lambda *a, **k: reply)
+    painting = ApiPainter(key="pk-test").paint("apple", SIZE, 1)
+    assert painting.source == "api", f"Got {painting.source}"

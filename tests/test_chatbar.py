@@ -1,29 +1,12 @@
-import io
 import re
-from collections.abc import Iterator
 
 import pytest
-from prompt_toolkit.application import create_app_session
-from prompt_toolkit.data_structures import Size
 from prompt_toolkit.history import InMemoryHistory
-from prompt_toolkit.input import create_pipe_input
-from prompt_toolkit.input.base import PipeInput
-from prompt_toolkit.output.vt100 import Vt100_Output
 
 from sepia.chatbar import ChatBar
 from sepia.ui import PROMPT
 
 COMMANDS = (("/new", "start a fresh picture"), ("/help", "show this list"))
-
-
-@pytest.fixture
-def terminal() -> Iterator[tuple[PipeInput, io.StringIO]]:
-    """A fake 80x24 terminal: keystrokes go in through the pipe, drawing comes out."""
-    screen = io.StringIO()
-    with create_pipe_input() as keys:
-        output = Vt100_Output(screen, lambda: Size(rows=24, columns=80), term="xterm")
-        with create_app_session(input=keys, output=output):
-            yield keys, screen
 
 
 def _bar() -> ChatBar:
@@ -51,21 +34,31 @@ def test_chatbar_read_ctrl_d_on_empty_bar_raises_eof(terminal) -> None:
         _bar().read()
 
 
-def test_chatbar_draws_frame_input_and_status_as_one_block(terminal) -> None:
+def test_chatbar_draws_open_rules_input_and_status_as_one_block(terminal) -> None:
     keys, screen = terminal
     keys.send_text("x\r")
     _bar().read()
     drawn = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|[\r\n]", "", screen.getvalue())
-    pieces = ["╭", "╮", "│", PROMPT, "describe a picture", "│", "╰", "╯", "status"]
-    positions = [drawn.find(piece) for piece in pieces]
-    assert -1 not in positions, f"Missing a piece of the bar in {drawn!r}"
+    rule = "─" * 80
+    first = drawn.find(rule)
     order = [
-        drawn.index("╭"),
-        drawn.index(PROMPT),
-        drawn.index("╰"),
-        drawn.index("status"),
+        first,
+        drawn.find(PROMPT),
+        drawn.find(rule, first + len(rule)),
+        drawn.find("status"),
     ]
+    assert -1 not in order, f"Missing a piece of the bar in {drawn!r}"
     assert order == sorted(order), f"Bar pieces out of order in {drawn!r}"
+    corners = [c for c in "╭╮╰╯│" if c in drawn]
+    assert not corners, f"The rules must have open ends, found {corners}"
+
+
+def test_chatbar_still_is_the_empty_bar_row_by_row(terminal) -> None:
+    rows = _bar().still(20)
+    plain = [re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", row) for row in rows]
+    typed_row = f"{PROMPT}describe a picture"[:20]
+    expected = ["─" * 20, typed_row, "─" * 20, "status"]
+    assert plain == expected, f"Expected {expected}, got {plain}"
 
 
 @pytest.mark.parametrize(
@@ -93,3 +86,18 @@ def test_chatbar_tab_accepts_the_command_suggestion(terminal) -> None:
         InMemoryHistory(), (("/clear", "x"),), "describe", lambda: "status"
     ).read()
     assert line == "/clear", f"Expected '/clear', got {line!r}"
+
+
+def test_chatbar_enter_on_a_partial_command_runs_the_suggested_one(terminal) -> None:
+    keys, _ = terminal
+    keys.send_text("/us\r")
+    commands = (("/add <text>", "x"), ("/usage", "y"), ("/help", "z"))
+    line = ChatBar(InMemoryHistory(), commands, "describe", lambda: "status").read()
+    assert line == "/usage", f"Expected the first suggestion, got {line!r}"
+
+
+def test_chatbar_enter_on_a_full_command_keeps_it(terminal) -> None:
+    keys, _ = terminal
+    keys.send_text("/help\r")
+    line = ChatBar(InMemoryHistory(), (("/help", "z"),), "d", lambda: "s").read()
+    assert line == "/help", f"Got {line!r}"
