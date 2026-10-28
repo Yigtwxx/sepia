@@ -1,13 +1,13 @@
 [project]
 name = "sepia-cli"
 version = "0.1.0"
-description = "Type a prompt, get a colored symbol painting in a second terminal window. Drawn by Claude."
+description = "Describe a picture and watch it appear as colored text in a second terminal window."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Yiğit Erdoğan" }]
 requires-python = ">=3.12"
-keywords = ["ascii-art", "cli", "terminal", "claude", "svg", "generative-art"]
+keywords = ["ascii-art", "cli", "terminal", "claude", "image-generation", "flux"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",

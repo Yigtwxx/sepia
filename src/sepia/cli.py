@@ -13,7 +13,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sepia",
         description=(
-            "Type a prompt, get a colored symbol painting in a second terminal window."
+            "Describe a picture and watch it appear as colored text in a second "
+            "terminal window."
         ),
     )
     parser.add_argument("--version", action="version", version=f"sepia {__version__}")
