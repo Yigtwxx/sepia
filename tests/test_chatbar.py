@@ -66,3 +66,30 @@ def test_chatbar_draws_frame_input_and_status_as_one_block(terminal) -> None:
         drawn.index("status"),
     ]
     assert order == sorted(order), f"Bar pieces out of order in {drawn!r}"
+
+
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [("/c", "lear"), ("/he", "lp"), ("/help", None), ("hello", None), ("/new x", None)],
+)
+def test_command_suggest_completes_slash_commands_inline(
+    typed: str, expected: str | None
+) -> None:
+    from prompt_toolkit.buffer import Buffer
+    from prompt_toolkit.document import Document
+
+    from sepia.chatbar import CommandSuggest
+
+    suggest = CommandSuggest(["/new", "/clear", "/help"])
+    suggestion = suggest.get_suggestion(Buffer(), Document(typed))
+    got = suggestion.text if suggestion else None
+    assert got == expected, f"{typed!r}: expected {expected!r}, got {got!r}"
+
+
+def test_chatbar_tab_accepts_the_command_suggestion(terminal) -> None:
+    keys, _ = terminal
+    keys.send_text("/cl\t\r")
+    line = ChatBar(
+        InMemoryHistory(), (("/clear", "x"),), "describe", lambda: "status"
+    ).read()
+    assert line == "/clear", f"Expected '/clear', got {line!r}"

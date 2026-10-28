@@ -16,7 +16,7 @@ from rich.text import Text
 
 from sepia import ui
 from sepia.ascii_art import ArtStyle, Charset
-from sepia.chatbar import ChatBar
+from sepia.chatbar import BottomBar, ChatBar
 from sepia.config import (
     ConfigError,
     Settings,
@@ -102,6 +102,7 @@ class Repl:
         self._launched_at = 0.0
         self._count = 0
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sepia-work")
+        self.bar = BottomBar(self._write, lambda: shutil.get_terminal_size().lines)
 
     def run(self) -> int:
         self._open_screen()
@@ -113,10 +114,13 @@ class Repl:
         )
         try:
             while True:
+                self.bar.to_bar()
                 try:
                     line = bar.read().strip()
                 except KeyboardInterrupt:
                     continue
+                finally:
+                    self.bar.to_transcript()
                 if not line:
                     continue
                 self.console.print(ui.echo(line))
@@ -127,6 +131,7 @@ class Repl:
         except EOFError:
             return 0
         finally:
+            self.bar.stop()
             self.host.send({"type": "bye"})
             self.host.close()
             self._pool.shutdown(wait=False, cancel_futures=True)
@@ -254,18 +259,21 @@ class Repl:
             self.canvas = Canvas(cols, rows)
 
     def _open_screen(self) -> None:
-        """Welcome box, then the chat bar right under it, like Claude Code.
+        """A clean window: welcome box on top, the chat bar on the bottom rows.
 
-        Each turn erases the bar, prints the exchange where it stood and draws the
-        bar again below, so the bar walks down to the bottom of the window and stays
-        there while the terminal scrolls the welcome box away.
+        The transcript starts under the welcome box and scrolls it away once it
+        reaches the bar, which never moves.
         """
         if self.console.is_terminal:
-            self.console.file.write(ui.CLEAR)
-            self.console.file.flush()
+            self._write(ui.CLEAR)
+        self.bar.start()
         self.console.print(ui.welcome(self.words, self.console.width))
         self.console.print(ui.tip(self.words))
         self.console.print()
+
+    def _write(self, sequence: str) -> None:
+        self.console.file.write(sequence)
+        self.console.file.flush()
 
     def _status(self) -> str:
         window = "●" if self.host.connected else "○"
