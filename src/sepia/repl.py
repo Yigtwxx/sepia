@@ -21,6 +21,7 @@ from rich.text import Text
 from sepia import ui
 from sepia.ascii_art import ArtStyle, Charset
 from sepia.config import (
+    ConfigError,
     Settings,
     api_key,
     config_dir,
@@ -275,9 +276,13 @@ class Repl:
 
 def run_repl() -> int:
     console = Console(highlight=False)
+    load_environment()  # first: SEPIA_LANG and the rest may come from a .env file
     words = ui.Words(ui.detect_language())
-    load_environment()
-    settings = load_settings()
+    try:
+        settings = load_settings()
+    except ConfigError as exc:
+        console.print(ui.reply(str(exc), failed=True))
+        return 2
     key = api_key()
     if key is None:
         key = _ask_for_key(console, words)
