@@ -93,6 +93,7 @@ files = ["src"]
 [[tool.mypy.overrides]]
 module = ["diffusers", "diffusers.*"]
 follow_imports = "skip"
+ignore_missing_imports = true
 
 # The local extra may not be installed (CI type-checks without it).
 [[tool.mypy.overrides]]
