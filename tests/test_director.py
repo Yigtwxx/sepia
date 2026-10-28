@@ -60,6 +60,17 @@ def test_director_direct_requests_schema_and_effort(
     assert "art director inside sepia" in kwargs["system"], "System prompt not loaded"
 
 
+def test_director_effort_change_applies_to_the_next_request(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message(REPLY))
+    director = Director(fake_client, "claude-haiku-5-5", "low")
+    director.effort = "max"
+    director.direct("şelale", Scene())
+    config = fake_client.beta.messages.stream.call_args.kwargs["output_config"]
+    assert config["effort"] == "max", f"Got {config}"
+
+
 def test_director_direct_valid_reply_returns_direction(
     fake_client: MagicMock, make_message, set_final_message
 ) -> None:

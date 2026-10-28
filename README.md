@@ -33,7 +33,7 @@ Pollinations web API ---- fails or rate limited ----> FLUX.2 [klein] 4B on your 
                                     +--- path over a loopback socket --->  photo -> colored characters
 ```
 
-1. **Direct.** Claude (`claude-haiku-5-5` at low effort by default) turns the request and the scene so far into a detailed English photo prompt written for symbol rendering: one clear subject, strong light, saturated color, no text. It also decides whether the request edits the current picture or starts a new one, and writes a one-sentence reply. The reply comes back as structured output (JSON with a fixed schema). The image models know no names, so when a request names a specific character, creature, product or landmark ("yunara lol"), Claude searches the web and links the subject's wiki page; sepia takes that page's preview picture and the image model paints from it, so the subject keeps its real look. Reference pictures work with a Pollinations key and with the local model; the keyless API ignores them.
+1. **Direct.** Claude (`claude-haiku-5-5` at high effort by default) first looks for an idea, a striking scene rather than the first cliché, then turns the request and the scene so far into a detailed English photo prompt written for symbol rendering: one dominant shape, strong light, saturated color, no text. It also decides whether the request edits the current picture or starts a new one, and writes a one-sentence reply. The reply comes back as structured output (JSON with a fixed schema). The image models know no names, so when a request names a specific character, creature, product or landmark ("yunara lol"), Claude searches the web and links the subject's wiki page; sepia takes that page's preview picture and the image model paints from it, so the subject keeps its real look. Reference pictures work with a Pollinations key and with the local model; the keyless API ignores them.
 2. **Paint.** The prompt goes to [Pollinations](https://pollinations.ai) first. If the API fails or rate limits, sepia paints the picture locally with [FLUX.2 [klein] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0), if you installed the local extra. The picture is painted at the viewer window's aspect ratio.
 3. **Show.** The picture is saved as a PNG, and the viewer window is told where it is. The viewer stretches contrast, boosts saturation, crops the picture to the window, and draws every cell as one character whose density matches the brightness, in 24-bit color where the terminal supports it (256 colors otherwise). Resizing the window redraws the picture without new API calls.
 
@@ -79,13 +79,14 @@ On the first run sepia asks for your Anthropic API key (hidden input) and saves 
 | `/clear` | Clear the screen and start a fresh picture. |
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background (made for dark backgrounds); `fill` also paints each cell's background, which works on any theme. Without an argument it opens a menu: arrow keys and Enter (or the option's number) pick, Esc cancels. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. Without an argument it opens a menu, like `/style`. |
-| `/usage` | Show what this session used: Claude's tokens, web searches and estimated cost, and the pictures painted per source. |
+| `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. Without an argument it opens a menu, like `/style`. |
+| `/usage` | Show what this session and all sessions used: Claude's tokens, web searches and estimated cost, and the pictures painted per source. The session bars are drawn against the all-time totals, so their gray rest is earlier use. Use from before tracking began is estimated once from the prompt history and the saved sessions. |
 | `/help` | List the commands. |
 | `/exit` | Close sepia and the viewer window. `/quit`, `/q` and Ctrl+D do the same. |
 
 Move the mouse over the picture window to glitch the picture around the pointer. It heals when the pointer stops. Windows Terminal and iTerm2 report pointer movement; macOS Terminal.app may not.
 
-Up and down arrows walk the request history, and typing `/` completes commands; Enter on a partial command runs the suggested one (`/us` opens `/usage`). The bottom bar shows the model, the current style and charset, and whether the viewer window is connected (`●`) or not (`○`). If you close the viewer, the next request opens it again.
+Up and down arrows walk the request history, and typing `/` completes commands; Enter on a partial command runs the suggested one (`/us` opens `/usage`). The bottom bar shows the model and its effort, the current style and charset, and whether the viewer window is connected (`●`) or not (`○`). If you close the viewer, the next request opens it again.
 
 Command-line flags:
 
@@ -103,8 +104,8 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | none | Required. Asked for on the first run if missing and saved to the user config `.env`. |
 | `POLLINATIONS_KEY` | none | Optional free key from [enter.pollinations.ai](https://enter.pollinations.ai). Uses the keyed endpoint with `flux.2-klein-4b` and no logo. |
-| `SEPIA_MODEL` | `claude-haiku-5-5` | The art director model. `claude-sonnet-5-5` writes richer prompts at a higher price. |
-| `SEPIA_EFFORT` | `low` | Claude effort: `low`, `medium`, `high`, `xhigh` or `max`. |
+| `SEPIA_MODEL` | `claude-haiku-5-5` | The art director model. `claude-sonnet-5-5` also works, at about 15 times the price. |
+| `SEPIA_EFFORT` | `high` | Starting Claude effort: `low`, `medium`, `high`, `xhigh` or `max`. `/effort` changes it while sepia runs. |
 | `SEPIA_STYLE` | `ink` | Starting style: `ink` or `fill`. |
 | `SEPIA_CHARSET` | `classic` | Starting character set: `classic` or `symbols`. |
 | `SEPIA_IMAGE_MODEL` | `black-forest-labs/FLUX.2-klein-4B` | Hugging Face id of the local model. |
@@ -135,7 +136,7 @@ The model loads on the first local picture, so that picture takes longer. Edits 
 
 | Part | Cost |
 | --- | --- |
-| Claude Haiku as art director | About $0.0003 per request with the default model and effort |
+| Claude Haiku as art director | About $0.001 per request with the default model and effort, plus $0.01 per web search |
 | Pollinations | Free (keyless, or with the free key) |
 | Local model | Free, runs on your hardware |
 

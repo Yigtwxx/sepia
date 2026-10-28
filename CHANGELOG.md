@@ -10,6 +10,30 @@ tag all carry.
 
 ## [Unreleased]
 
+### Added
+
+- `/effort [low|medium|high|xhigh|max]` sets how long Claude thinks about each
+  picture, from the next request on; without a name it opens a menu. The
+  bottom bar shows the current effort next to the model.
+- `/usage` shows all-time totals under the session's, kept in `usage.json` in
+  the config folder and shared by every sepia window. Use from before tracking
+  began is estimated once from the prompt history and the saved sessions.
+
+### Changed
+
+- The art director looks for an idea before writing the prompt: a striking,
+  concrete scene instead of the first cliché ("multiverse" no longer means a
+  row of glowing spheres). Prompts are 60 to 100 words.
+- Claude's default effort is `high` (was `low`). On Haiku 5.5 it costs about
+  the same, about $0.001 a request.
+- `/usage` session bars are drawn against the all-time totals on a gray track,
+  so the empty part of a bar reads as empty.
+
+### Fixed
+
+- `/usage` bars no longer leave a stray empty cell when the parts round down.
+- Web searches are priced even when the model has no known price.
+
 ## [0.2.0] - 2026-10-29
 
 ### Added

@@ -11,7 +11,7 @@ from rich.text import Text
 from sepia import __version__
 
 if TYPE_CHECKING:
-    from sepia.usage import Usage
+    from sepia.usage import AllTime, Earlier, Usage
 
 # Purple-pink, left to right across the wordmark, and one deep purple for its shadow.
 BANDS = ("#f9a8d4", "#f472b6", "#e879f9", "#c084fc", "#a78bfa")
@@ -78,6 +78,7 @@ STRINGS: dict[str, str] = {
     "opening": "Opening the picture window…",
     "add_usage": "Say what to add: /add snowy mountains",
     "style_set": "Style: {style} · charset: {charset}",
+    "effort_set": "Effort: {effort}, from the next picture on",
     "no_window": "Could not open the picture window: {error}",
     "unknown": "No such command {command}",
     "help_title": "commands",
@@ -98,12 +99,19 @@ STRINGS: dict[str, str] = {
     "pick_hint": "↑↓ to move · Enter to choose · Esc to cancel",
     "pick_style": "How should the picture be drawn?",
     "pick_charset": "Which characters should draw it?",
+    "pick_effort": "How long should Claude think about each picture?",
     "style.ink": "colored symbols on the terminal's background, made for dark themes",
     "style.fill": "also paints each cell's background, so it shows on any theme",
     "charset.classic": "the full ASCII-art alphabet, the finest shading for photos",
     "charset.symbols": "punctuation only, a lighter and sparser look",
+    "effort.low": "the quickest reply and the most literal idea",
+    "effort.medium": "a little more thought",
+    "effort.high": "time to find an idea for the picture (the default)",
+    "effort.xhigh": "longer thought, a slower reply",
+    "effort.max": "as much thought as Claude wants: the slowest and costliest",
     "usage_title": "Usage",
-    "usage_scope": "this session",
+    "usage_session": "this session",
+    "usage_all_time": "all time · since {since}",
     "usage_claude": "Claude",
     "usage_pictures": "Pictures",
     "usage_input": "input {tokens} tokens",
@@ -111,8 +119,15 @@ STRINGS: dict[str, str] = {
     "usage_searches": "{n} web searches",
     "usage_requests": "{n} requests",
     "usage_painted": "{n} pictures · {seconds}s",
+    "usage_count": "{n} pictures",
     "usage_referenced": "{n} after a reference picture",
+    "usage_earlier_claude": "before tracking: about {n} requests, ${cost}"
+    " (estimated from your prompt history)",
+    "usage_earlier_pictures": "before tracking: about {n} pictures"
+    " (estimated from your saved sessions and prompt history)",
     "usage_unpriced": "{n} requests on a model without a known price are left out",
+    "usage_scale": "Session bars are drawn against all time; "
+    "their gray rest is earlier use.",
     "usage_note": "Estimated from list prices; Pollinations bills its own account.",
 }
 
@@ -121,7 +136,8 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/clear", "clear the screen and start a fresh picture"),
     ("/style [ink|fill]", "choose how the picture is drawn"),
     ("/charset [classic|symbols]", "choose the characters that draw it"),
-    ("/usage", "show what this session used: Claude and the image models"),
+    ("/effort [low|medium|high|xhigh|max]", "choose how long Claude thinks"),
+    ("/usage", "show what Claude and the image models used, now and in all"),
     ("/help", "show this list"),
     ("/exit", "close sepia and its window (also Ctrl+D)"),
 )
@@ -194,68 +210,123 @@ def help_table(words: Words) -> Table:
 
 USAGE_BAR = 40
 """Width of a usage bar in cells, as in Claude Code's /usage."""
-EMPTY = "░"
-SOURCE_COLORS = {"api": ACCENT, "local": GOOD, "keyless": MUTED}
+TRACK = "#3a3a46"
+"""The empty part of a usage bar: a gray track, so the bar's whole length shows."""
+EARLIER = BANDS[0]
+"""What was used before tracking began, in the all-time bars."""
+DEEP = "#7c3aed"
+"""A third part of a bar, darker than the other two so the three stay apart."""
+SOURCES = ("api", "local", "keyless")
+SOURCE_COLORS = {"api": ACCENT, "local": GOOD, "keyless": DEEP}
 
 
-def usage_view(words: Words, usage: "Usage", model: str, width: int) -> Group:
-    """This session's usage as Claude Code shows its own: per service a heading, a
-    bar and a legend. Each bar shows what its total is made of."""
+def usage_view(
+    words: Words, session: "Usage", all_time: "AllTime", model: str, width: int
+) -> Group:
+    """Usage laid out like Claude Code's /usage: this session, then all time, each
+    service with a heading, a bar and a legend. A bar's colors show what its total
+    is made of. The session bars are drawn against the all-time totals, so their
+    gray rest is earlier use."""
     size = max(min(width - 26, USAGE_BAR), 10)
-    title = Text.assemble((f" {words('usage_title')}", "bold"))
-    title.append(f" · {words('usage_scope')}", style=MUTED)
-
-    claude = [
-        (usage.input_cost, ACCENT),
-        (usage.output_cost, BANDS[3]),
-        (usage.search_cost, BANDS[4]),
-    ]
-    claude_legend = _legend(
-        [
-            (words("usage_input", tokens=_count(usage.input_tokens)), ACCENT),
-            (words("usage_output", tokens=_count(usage.output_tokens)), BANDS[3]),
-            (words("usage_searches", n=usage.searches), BANDS[4]),
-        ],
-        words("usage_requests", n=usage.requests),
-    )
-    sources = [
-        (source, usage.pictures.get(source, 0))
-        for source in ("api", "local", "keyless")
-    ]
-    pictures_legend = _legend(
-        [
-            (f"{words(f'source.{source}')} {count}", SOURCE_COLORS[source])
-            for source, count in sources
-        ],
-        words("usage_referenced", n=usage.referenced),
-    )
-    painted = words(
-        "usage_painted",
-        n=sum(usage.pictures.values()),
-        seconds=f"{usage.paint_seconds:.1f}",
-    )
+    total, earlier = all_time.total, all_time.earlier
+    pictures = sum(total.pictures.values()) + earlier.pictures
+    since = words("usage_all_time", since=f"{all_time.since:%d %b %Y}")
     lines: list[RenderableType] = [
-        title,
+        _title(words, words("usage_session")),
         Text(""),
-        _heading(words("usage_claude"), model.removeprefix("claude-")),
-        _bar(claude, size, f"${usage.cost:.4f}"),
-        claude_legend,
-    ]
-    if usage.unpriced:
-        lines.append(Text(f" {words('usage_unpriced', n=usage.unpriced)}", MUTED))
-    lines += [
+        *_claude_lines(words, session, size, model, whole=total.cost + earlier.cost),
         Text(""),
-        _heading(words("usage_pictures"), ""),
-        _bar(
-            [(float(count), SOURCE_COLORS[source]) for source, count in sources],
-            size,
-            painted,
-        ),
-        pictures_legend,
+        *_picture_lines(words, session, size, whole=float(pictures)),
         Text(""),
+        _title(words, since),
+        Text(""),
+        *_claude_lines(words, total, size, "", earlier=earlier),
+        Text(""),
+        *_picture_lines(words, total, size, earlier=earlier),
+        Text(""),
+        Text(f" {words('usage_scale')}", style="dim"),
         Text(f" {words('usage_note')}", style="dim"),
     ]
     return Group(*lines)
+
+
+def _claude_lines(
+    words: Words,
+    usage: "Usage",
+    size: int,
+    model: str,
+    *,
+    whole: float | None = None,
+    earlier: "Earlier | None" = None,
+) -> list[RenderableType]:
+    parts = [
+        (usage.input_cost, ACCENT),
+        (usage.output_cost, BANDS[3]),
+        (usage.search_cost, DEEP),
+    ]
+    items = [
+        (words("usage_input", tokens=_count(usage.input_tokens)), ACCENT),
+        (words("usage_output", tokens=_count(usage.output_tokens)), BANDS[3]),
+        (words("usage_searches", n=usage.searches), DEEP),
+    ]
+    requests, cost = usage.requests, usage.cost
+    notes: list[RenderableType] = []
+    if earlier is not None and earlier.requests:
+        parts.append((earlier.cost, EARLIER))
+        requests += earlier.requests
+        cost += earlier.cost
+        label = words(
+            "usage_earlier_claude", n=earlier.requests, cost=f"{earlier.cost:.4f}"
+        )
+        notes.append(_note(label, EARLIER))
+    if usage.unpriced:
+        notes.append(Text(f" {words('usage_unpriced', n=usage.unpriced)}", MUTED))
+    return [
+        _heading(words("usage_claude"), model.removeprefix("claude-")),
+        _bar(parts, size, f"${cost:.4f}", whole),
+        _legend(items, words("usage_requests", n=requests)),
+        *notes,
+    ]
+
+
+def _picture_lines(
+    words: Words,
+    usage: "Usage",
+    size: int,
+    *,
+    whole: float | None = None,
+    earlier: "Earlier | None" = None,
+) -> list[RenderableType]:
+    counts = [(source, usage.pictures.get(source, 0)) for source in SOURCES]
+    parts = [(float(count), SOURCE_COLORS[source]) for source, count in counts]
+    items = [
+        (f"{words(f'source.{source}')} {count}", SOURCE_COLORS[source])
+        for source, count in counts
+    ]
+    painted = sum(usage.pictures.values())
+    notes: list[RenderableType] = []
+    if earlier is None:
+        seconds = f"{usage.paint_seconds:.1f}"
+        label = words("usage_painted", n=painted, seconds=seconds)
+    else:
+        if earlier.pictures:
+            parts.append((float(earlier.pictures), EARLIER))
+            painted += earlier.pictures
+            note = words("usage_earlier_pictures", n=earlier.pictures)
+            notes.append(_note(note, EARLIER))
+        label = words("usage_count", n=painted)
+    return [
+        _heading(words("usage_pictures"), ""),
+        _bar(parts, size, label, whole),
+        _legend(items, words("usage_referenced", n=usage.referenced)),
+        *notes,
+    ]
+
+
+def _title(words: Words, scope: str) -> Text:
+    title = Text.assemble((f" {words('usage_title')}", "bold"))
+    title.append(f" · {scope}", style=MUTED)
+    return title
 
 
 def _heading(name: str, detail: str) -> Text:
@@ -265,18 +336,30 @@ def _heading(name: str, detail: str) -> Text:
     return text
 
 
-def _bar(parts: Sequence[tuple[float, str]], size: int, label: str) -> Text:
-    """A bar `size` cells wide, split in proportion to `parts`; empty without any."""
+def _bar(
+    parts: Sequence[tuple[float, str]],
+    size: int,
+    label: str,
+    whole: float | None = None,
+) -> Text:
+    """A bar `size` cells wide on a gray track. The parts' total, measured against
+    `whole`, sets how much of it is colored (all of it by default), and each part
+    takes its share of that; any use at all shows at least one cell."""
     total = sum(value for value, _ in parts)
-    text = Text(" ")
-    used = 0
+    whole = total if whole is None else max(whole, total)
+    filled = 0
     if total > 0:
-        for value, color in parts:
-            cells = round(value / total * size)
-            cells = min(cells, size - used)
-            text.append("█" * cells, style=color)
-            used += cells
-    text.append(EMPTY * (size - used), style=FRAME)
+        filled = min(size, max(1, round(total / whole * size)))
+    text = Text(" ")
+    edge = 0.0
+    drawn = 0
+    for value, color in parts:
+        edge += value
+        # Rounding the running edge, not each part, keeps the cells adding up.
+        end = round(edge / total * filled) if total > 0 else 0
+        text.append(BLOCK * (end - drawn), style=color)
+        drawn = end
+    text.append(BLOCK * (size - drawn), style=TRACK)
     text.append(f"  {label}")
     return text
 
@@ -288,6 +371,10 @@ def _legend(items: Sequence[tuple[str, str]], tail: str) -> Text:
         text.append(f"{label}  ", style=MUTED)
     text.append(f"· {tail}", style=MUTED)
     return text
+
+
+def _note(label: str, color: str) -> Text:
+    return Text.assemble(" ", ("■ ", color), (label, MUTED))
 
 
 def _count(n: int) -> str:

@@ -20,6 +20,7 @@ from sepia.ascii_art import ArtStyle, Charset
 from sepia.chatbar import BottomBar, ChatBar
 from sepia.config import (
     ConfigError,
+    Effort,
     Settings,
     api_key,
     config_dir,
@@ -36,7 +37,7 @@ from sepia.painter import image_size as paint_size
 from sepia.picker import choose
 from sepia.reference import find_reference
 from sepia.scene import Canvas, Scene
-from sepia.usage import Usage
+from sepia.usage import SESSION_FORMAT, Ledger, Usage, estimate_earlier
 
 T = TypeVar("T")
 
@@ -76,7 +77,7 @@ def named_option(options: tuple[str, ...], argument: str) -> str | None:
 def new_session_dir(root: Path, keep: int = KEEP_SESSIONS) -> Path:
     """A fresh folder for this session's pictures; prunes the oldest ones."""
     root.mkdir(parents=True, exist_ok=True)
-    folder = root / datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    folder = root / datetime.now().strftime(SESSION_FORMAT)
     folder.mkdir()
     for old in sorted(p for p in root.iterdir() if p.is_dir())[:-keep]:
         shutil.rmtree(old, ignore_errors=True)
@@ -92,6 +93,7 @@ class Repl:
         director: Director,
         painter: FallbackPainter,
         folder: Path,
+        ledger: Ledger,
     ) -> None:
         self.console = console
         self.words = words
@@ -101,6 +103,7 @@ class Repl:
         self.folder = folder
         self.scene = Scene()
         self.usage = Usage()
+        self.ledger = ledger
         self.style: ArtStyle = settings.style
         self.charset: Charset = settings.charset
         self.canvas = Canvas(VIEWER_COLS, VIEWER_ROWS)
@@ -157,8 +160,14 @@ class Repl:
         if command.name == "help":
             self.console.print(ui.help_table(self.words))
         elif command.name == "usage":
-            model = self.settings.model
-            view = ui.usage_view(self.words, self.usage, model, self.console.width)
+            all_time = self.ledger.read()
+            view = ui.usage_view(
+                self.words,
+                self.usage,
+                all_time,
+                self.settings.model,
+                self.console.width,
+            )
             self.console.print(view)
         elif command.name == "clear":
             self.scene.reset()
@@ -169,6 +178,13 @@ class Repl:
                 self._draw(command.argument, add=True)
             else:
                 self.console.print(ui.reply(self.words("add_usage"), failed=True))
+        elif command.name == "effort":
+            levels = cast(tuple[str, ...], get_args(Effort))
+            effort = self.director.effort
+            picked = self._pick("effort", levels, effort, command.argument)
+            if picked is not None:
+                self.director.effort = cast(Effort, picked)
+                self.console.print(ui.reply(self.words("effort_set", effort=picked)))
         elif command.name in ("style", "charset"):
             if command.name == "style":
                 styles = cast(tuple[str, ...], get_args(ArtStyle))
@@ -226,7 +242,7 @@ class Repl:
                 ui.reply(self.words(f"failure.{exc.failure}"), failed=True)
             )
             return
-        self.usage.add_direction(direction)
+        self._tally(lambda usage: usage.add_direction(direction))
         # A new picture starts from an empty scene; /add keeps the last reference.
         likeness = self.scene.likeness
         if direction.references:
@@ -251,7 +267,9 @@ class Repl:
         self.scene.record(request, direction.prompt, painting.image, likeness)
         # The keyless API ignores reference pictures, so such a picture had none.
         used = likeness if painting.source != "keyless" else None
-        self.usage.add_painting(painting, referenced=used is not None)
+        self._tally(
+            lambda usage: usage.add_painting(painting, referenced=used is not None)
+        )
         self._count += 1
         path = self.folder / f"{self._count:02d}.png"
         painting.image.save(path)
@@ -261,6 +279,11 @@ class Repl:
             host = urllib.parse.urlsplit(used.url).hostname or used.url
             detail += f" · {self.words('reference', host=host)}"
         self.console.print(ui.reply(direction.message, detail))
+
+    def _tally(self, change: Callable[[Usage], None]) -> None:
+        """Count something used, for this session and for all time."""
+        change(self.usage)
+        self.ledger.add(change)
 
     def _show(self, path: Path) -> None:
         message: Message = {
@@ -330,7 +353,9 @@ class Repl:
 
     def _status(self) -> str:
         window = "●" if self.host.connected else "○"
-        model = self.settings.model.removeprefix("claude-")
+        model = (
+            f"{self.settings.model.removeprefix('claude-')} ({self.director.effort})"
+        )
         return f"  /help · {model} · {self.style}/{self.charset} · {window} window"
 
 
@@ -350,8 +375,16 @@ def run_repl() -> int:
             return 1
     director = Director(create_client(key), settings.model, settings.effort)
     painter, _ = build_painter(pollinations_key(), settings.image_model)
+    ledger = Ledger(
+        config_dir() / "usage.json",
+        lambda: estimate_earlier(
+            config_dir() / "history", config_dir() / "sessions", settings.model
+        ),
+    )
+    # Before this session's requests reach the history and its folder prunes one.
+    ledger.read()
     folder = new_session_dir(config_dir() / "sessions")
-    return Repl(console, words, settings, director, painter, folder).run()
+    return Repl(console, words, settings, director, painter, folder, ledger).run()
 
 
 def _ask_for_key(console: Console, words: ui.Words) -> str | None:

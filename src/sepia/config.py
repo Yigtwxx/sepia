@@ -17,7 +17,9 @@ from sepia.painter import DEFAULT_IMAGE_MODEL
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
 
 DEFAULT_MODEL = "claude-haiku-5-5"
-DEFAULT_EFFORT: Effort = "low"
+DEFAULT_EFFORT: Effort = "high"
+"""Haiku 5.5 thinks little more at high than at low (about $0.001 a request either
+way), and the extra thought goes into finding an idea for the picture."""
 DEFAULT_STYLE: ArtStyle = "ink"
 DEFAULT_CHARSET: Charset = "classic"
 API_KEY_VAR = "ANTHROPIC_API_KEY"

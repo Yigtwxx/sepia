@@ -113,6 +113,15 @@ class Director:
         self._model = model
         self._effort = effort
 
+    @property
+    def effort(self) -> Effort:
+        return self._effort
+
+    @effort.setter
+    def effort(self, effort: Effort) -> None:
+        """Takes effect from the next request; /effort sets it while sepia waits."""
+        self._effort = effort
+
     def direct(self, request: str, scene: Scene) -> Direction:
         """Turn `request`, in the context of `scene`, into an image prompt."""
         output_config: BetaOutputConfigParam = {

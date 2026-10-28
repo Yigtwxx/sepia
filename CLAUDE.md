@@ -18,8 +18,8 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/prompts/`: `director.md` (system prompt) and `request.md` (per-request template).
 - `src/sepia/reference.py`: finds a reference picture for a named subject (link or page `og:image`), https and public hosts only.
 - `src/sepia/painter.py`: `ApiPainter` (Pollinations), `LocalPainter` (FLUX.2 [klein]), `FallbackPainter` with 120 s cooldown, `select_device`, model download.
-- `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`).
-- `src/sepia/usage.py`: session totals for `/usage` (tokens, searches, estimated cost from list prices, pictures per source).
+- `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`, `/effort`).
+- `src/sepia/usage.py`: totals for `/usage` (tokens, searches, estimated cost from list prices, pictures per source); `Ledger` keeps all-time totals in `usage.json` in the config dir, with a one-time estimate of earlier use from the prompt history and session folders.
 - `src/sepia/scene.py`: `Scene` (requests, prompts, latest image, fixed seed) and `Canvas` (viewer size in cells).
 - `src/sepia/raster.py`: autocontrast, saturation boost, cover-crop to the grid.
 - `src/sepia/ascii_art.py`: pixels to `SymbolArt` (density ramps, Bayer dither, ink/fill colors, optional Sobel outlines) and to rich `Text`.
