@@ -77,6 +77,8 @@ On the first run sepia asks for your Anthropic API key (hidden input) and saves 
 | --- | --- |
 | `/new` | Start a fresh picture. The next request does not build on the old one. |
 | `/clear` | Clear the screen and start a fresh picture. |
+
+Move the mouse over the picture window to glitch the picture around the pointer. It heals when the pointer stops. Windows Terminal and iTerm2 report pointer movement; macOS Terminal.app may not.
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background (made for dark backgrounds); `fill` also paints each cell's background, which works on any theme. Without an argument it switches to the other style. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. Without an argument it switches to the other set. |
 | `/help` | List the commands. |

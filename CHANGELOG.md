@@ -13,6 +13,8 @@ tag all carry.
 ### Added
 
 - `/clear` clears the screen and starts a fresh picture.
+- Moving the mouse over the picture glitches it around the pointer: torn rows,
+  corrupted glyphs and split colors that fade out when the pointer stops.
 
 ### Changed
 
