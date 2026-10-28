@@ -311,16 +311,28 @@ class FallbackPainter:
 
 
 def build_painter(
-    pollinations_key: str | None, model_id: str = DEFAULT_IMAGE_MODEL
+    pollinations_key: str | None,
+    model_id: str = DEFAULT_IMAGE_MODEL,
+    prefer_local: bool | None = None,
 ) -> tuple[FallbackPainter, LocalPainter]:
-    """The painting chain: keyed API, then keyless API, then the local model.
+    """The painting chain, best quality first.
 
-    A keyed request that runs out of free credit falls back to the keyless endpoint
-    before the GPU is ever touched. The local painter is returned too, so callers can
-    report or warm it up.
+    With the local model downloaded: keyed API, then the local GPU, then the keyless
+    API. The keyed API and the local model run the same FLUX.2 [klein] 4B, while the
+    keyless endpoint uses a weaker model and adds a logo, so it comes last. Without
+    the local model: keyed API, then keyless API, then the local painter, which only
+    explains how to install it. `prefer_local` defaults to whether the model is
+    downloaded. The local painter is returned too, so callers can report on it.
     """
     local = LocalPainter(model_id)
-    chain = FallbackPainter(ApiPainter(), local)
+    keyless = ApiPainter()
+    if prefer_local is None:
+        prefer_local = local_model_ready(model_id)
+    rest = (
+        FallbackPainter(local, keyless)
+        if prefer_local
+        else FallbackPainter(keyless, local)
+    )
     if pollinations_key:
-        chain = FallbackPainter(ApiPainter(pollinations_key), chain)
-    return chain, local
+        return FallbackPainter(ApiPainter(pollinations_key), rest), local
+    return rest, local

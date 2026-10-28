@@ -129,10 +129,25 @@ def test_fallback_painter_rate_limit_skips_primary_during_cooldown() -> None:
 
 @pytest.mark.parametrize("key", [None, "pk-test"])
 def test_build_painter_chains_keyed_api_only_with_a_key(key: str | None) -> None:
-    chain, local = build_painter(key)
+    chain, local = build_painter(key, prefer_local=False)
     keyed = isinstance(chain._fallback, FallbackPainter)
     assert keyed is (key is not None), f"key={key!r}: nested chain={keyed}"
     assert local.model_id == painter.DEFAULT_IMAGE_MODEL, "Wrong local model"
+
+
+@pytest.mark.parametrize(
+    ("prefer_local", "second", "third"),
+    [(True, "local", "keyless"), (False, "keyless", "local")],
+)
+def test_build_painter_orders_local_before_keyless_when_downloaded(
+    prefer_local: bool, second: str, third: str
+) -> None:
+    chain, local = build_painter("pk-test", prefer_local=prefer_local)
+    rest = chain._fallback
+    assert isinstance(rest, FallbackPainter), "Expected a nested chain"
+    names = {id(local): "local"}
+    order = [names.get(id(p), "keyless") for p in (rest._primary, rest._fallback)]
+    assert order == [second, third], f"Expected {second} then {third}, got {order}"
 
 
 @pytest.mark.parametrize(
