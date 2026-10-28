@@ -1,0 +1,73 @@
+[project]
+name = "sepia-cli"
+version = "0.1.0a1"
+description = "Type a prompt, get a colored symbol painting in a second terminal window. Drawn by Claude."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Yiğit Erdoğan" }]
+requires-python = ">=3.12"
+keywords = ["ascii-art", "cli", "terminal", "claude", "svg", "generative-art"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Artistic Software",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    "anthropic>=2.3.0",
+    "numpy>=2.5.4",
+    "pillow>=13.0.0",
+    "platformdirs>=4.14.0",
+    "prompt-toolkit>=3.0.53",
+    "pydantic>=2.14.1",
+    "python-dotenv>=1.2.4",
+    "resvg-py>=0.5.0",
+    "rich>=15.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Yigtwxx/sepia"
+Repository = "https://github.com/Yigtwxx/sepia"
+Issues = "https://github.com/Yigtwxx/sepia/issues"
+
+[project.scripts]
+sepia = "sepia.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "sepia"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "ANN", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
