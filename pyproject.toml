@@ -1,6 +1,6 @@
 [project]
 name = "sepia-cli"
-version = "0.1.0a1"
+version = "0.1.0"
 description = "Type a prompt, get a colored symbol painting in a second terminal window. Drawn by Claude."
 readme = "README.md"
 license = "MIT"

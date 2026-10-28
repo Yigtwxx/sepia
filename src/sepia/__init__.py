@@ -1,3 +1,3 @@
 """sepia: prompts become colored symbol paintings in your terminal."""
 
-__version__ = "0.1.0a1"
+__version__ = "0.1.0"
