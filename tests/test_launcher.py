@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -49,6 +50,7 @@ def test_open_viewer_runs_platform_launcher(
     monkeypatch.setattr(sys, "platform", platform)
     monkeypatch.setattr(launcher.shutil, "which", lambda _: which)
     monkeypatch.setattr(launcher.subprocess, "run", run)
+    monkeypatch.setattr(launcher, "install_windows_profile", lambda: None)
     open_viewer(SESSION)
     called = run.call_args.args[0]
     assert called[0] == program, f"Expected {program}, got {called}"
@@ -70,3 +72,37 @@ def test_open_viewer_failed_launch_raises_launch_error(
     monkeypatch.setattr(launcher.subprocess, "run", MagicMock(side_effect=failure))
     with pytest.raises(LaunchError, match="could not open"):
         open_viewer(SESSION)
+
+
+def test_windows_terminal_command_uses_the_sepia_profile() -> None:
+    args = windows_terminal_command("wt.exe", ["python"])
+    index = args.index("--profile")
+    assert args[index + 1] == launcher.PROFILE_NAME, f"Wrong profile: {args}"
+
+
+def test_install_windows_profile_writes_fragment_once(tmp_path: Path) -> None:
+    target = launcher.install_windows_profile(tmp_path)
+    assert target is not None and target.is_file(), "Fragment was not written"
+    profile = json.loads(target.read_text(encoding="utf-8"))["profiles"][0]
+    assert profile["name"] == "sepia", f"Wrong profile: {profile}"
+    assert profile["font"]["size"] == launcher.VIEWER_FONT_SIZE, f"Got {profile}"
+    stamp = target.stat().st_mtime_ns
+    launcher.install_windows_profile(tmp_path)
+    assert target.stat().st_mtime_ns == stamp, "An unchanged fragment was rewritten"
+
+
+def test_install_windows_profile_without_app_data_returns_none(tmp_path: Path) -> None:
+    missing = tmp_path / "nope"
+    assert launcher.install_windows_profile(missing) is None, "Expected no fragment"
+
+
+def test_find_windows_terminal_falls_back_to_the_app_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(launcher.shutil, "which", lambda _: None)
+    alias = tmp_path / "Microsoft" / "WindowsApps" / "wt.exe"
+    alias.parent.mkdir(parents=True)
+    alias.write_bytes(b"")
+    assert launcher.find_windows_terminal(tmp_path) == str(alias), "Alias not found"
+    alias.unlink()
+    assert launcher.find_windows_terminal(tmp_path) is None, "Expected no terminal"
