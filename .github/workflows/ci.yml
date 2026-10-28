@@ -1,0 +1,40 @@
+name: ci
+
+# Lint, types and tests on both platforms sepia supports. The `local` extra
+# (torch, diffusers) is left out: the tests stub it, and installing 3 GB of
+# CUDA wheels on every push would buy nothing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check
+
+      - name: Format
+        run: uv run ruff format --check
+
+      - name: Types
+        run: uv run mypy
+
+      - name: Tests
+        run: uv run pytest
