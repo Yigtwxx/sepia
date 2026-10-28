@@ -3,15 +3,16 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 
-from sepia.ascii_art import _RAMP, CELL_HEIGHT, CELL_WIDTH, image_to_art, to_text
+from sepia.ascii_art import CELL_HEIGHT, CELL_WIDTH, RAMPS, image_to_art, to_text
 
 Canvas = Callable[..., np.ndarray]  # the `make_canvas` fixture from conftest.py
-RAMP_ORDER = [char for char, _ in _RAMP]
+RAMP_ORDER = [char for char, _ in RAMPS["symbols"]]
 
 
-def test_ramp_densities_strictly_increase() -> None:
-    densities = [density for _, density in _RAMP]
-    assert densities == sorted(set(densities)), f"Ramp out of order: {_RAMP}"
+@pytest.mark.parametrize("charset", ["classic", "symbols"])
+def test_ramp_densities_strictly_increase(charset: str) -> None:
+    densities = [density for _, density in RAMPS[charset]]
+    assert densities == sorted(set(densities)), f"{charset} ramp out of order"
 
 
 def test_ramp_symbols_include_requested_and_exclude_outlines() -> None:
@@ -41,7 +42,7 @@ def test_image_to_art_smooth_gradient_gets_denser_without_outlines(
 ) -> None:
     img = make_canvas(16, 2)
     img[:, :, :] = np.linspace(0, 255, 16 * CELL_WIDTH).astype(np.uint8)[None, :, None]
-    line = image_to_art(img, 16, 2).lines()[0]
+    line = image_to_art(img, 16, 2, charset="symbols").lines()[0]
     positions = [RAMP_ORDER.index(char) for char in line]  # raises on outline glyphs
     assert positions == sorted(positions), f"Density not increasing: {line!r}"
     assert positions[0] < positions[-1], f"Gradient collapsed to one symbol: {line!r}"
@@ -52,7 +53,7 @@ def test_image_to_art_vertical_step_draws_single_vertical_outline(
 ) -> None:
     img = make_canvas(8, 3)
     img[:, 4 * CELL_WIDTH :] = 255
-    lines = image_to_art(img, 8, 3).lines()
+    lines = image_to_art(img, 8, 3, charset="symbols", edges=True).lines()
     counts = [line.count("|") for line in lines]
     assert counts == [1, 1, 1], f"Expected one '|' per row, got {lines}"
 
@@ -63,7 +64,7 @@ def test_image_to_art_horizontal_step_draws_dash_or_underscore(
 ) -> None:
     img = make_canvas(6, 3)
     img[CELL_HEIGHT + row_in_cell :] = 255
-    middle = image_to_art(img, 6, 3).lines()[1]
+    middle = image_to_art(img, 6, 3, charset="symbols", edges=True).lines()[1]
     assert middle == glyph * 6, f"Expected {glyph * 6!r}, got {middle!r}"
 
 
@@ -77,7 +78,7 @@ def test_image_to_art_diagonal_step_draws_matching_slash(
     ys, xs = np.mgrid[0 : 10 * CELL_HEIGHT, 0 : 20 * CELL_WIDTH]
     img = make_canvas(20, 10)
     img[(xs + ys > 160) if bright_side == "anti_diagonal" else (ys > xs)] = 255
-    text = "".join(image_to_art(img, 20, 10).lines())
+    text = "".join(image_to_art(img, 20, 10, edges=True).lines())
     hits, misses = text.count(glyph), text.count(other)
     assert hits >= 5, f"Expected at least 5 {glyph!r}, got {hits}"
     assert hits > 3 * misses, f"Too many {other!r}: {misses} vs {hits}"
@@ -116,3 +117,12 @@ def test_image_to_art_impossible_grid_raises_value_error(
 ) -> None:
     with pytest.raises(ValueError):
         image_to_art(make_canvas(2, 1), cols, rows)
+
+
+def test_image_to_art_without_edges_uses_only_ramp_characters(
+    make_canvas: Canvas,
+) -> None:
+    img = make_canvas(8, 3)
+    img[:, 4 * CELL_WIDTH :] = 255
+    text = "".join(image_to_art(img, 8, 3, charset="symbols").lines())
+    assert set(text) <= set(RAMP_ORDER), f"Outline glyphs without edges: {text!r}"

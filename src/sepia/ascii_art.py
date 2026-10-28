@@ -20,10 +20,49 @@ ArtStyle = Literal["ink", "fill"]
 
 FloatArray = npt.NDArray[np.float32]
 
-# Symbols with the share of a cell their ink covers, measured in Cascadia Mono (the
-# Windows Terminal default) and cross-checked against Consolas. Directional glyphs stay
-# out of the ramp so that a texture never reads as an outline.
-_RAMP: tuple[tuple[str, float], ...] = (
+Charset = Literal["classic", "symbols"]
+"""`classic` is the full ASCII-art alphabet (letters, digits, symbols), which gives the
+finest shading for photographs. `symbols` uses punctuation only."""
+
+# Characters with the share of a cell their ink covers, averaged over Cascadia Mono
+# (the Windows Terminal default) and Consolas, each spaced at least 0.015 apart so that
+# neighbors in a ramp look different.
+_CLASSIC: tuple[tuple[str, float], ...] = (
+    (" ", 0.000),
+    ("`", 0.076),
+    ("'", 0.133),
+    ("-", 0.157),
+    (",", 0.177),
+    ("_", 0.200),
+    ("^", 0.246),
+    ('"', 0.262),
+    ("!", 0.290),
+    ("<", 0.347),
+    ("+", 0.365),
+    ("?", 0.410),
+    ("|", 0.427),
+    ("c", 0.443),
+    ("(", 0.475),
+    ("i", 0.491),
+    ("}", 0.507),
+    ("n", 0.529),
+    ("f", 0.545),
+    ("o", 0.575),
+    ("a", 0.600),
+    ("X", 0.622),
+    ("w", 0.651),
+    ("b", 0.695),
+    ("O", 0.734),
+    ("%", 0.763),
+    ("8", 0.792),
+    ("0", 0.812),
+    ("W", 0.839),
+    ("Q", 0.875),
+    ("@", 1.000),
+)
+# Punctuation only, measured the same way. Directional glyphs stay out so that a
+# texture never reads as an outline.
+_SYMBOLS: tuple[tuple[str, float], ...] = (
     (" ", 0.00),
     (".", 0.08),
     ("'", 0.15),
@@ -40,8 +79,14 @@ _RAMP: tuple[tuple[str, float], ...] = (
     ("&", 0.87),
     ("@", 1.00),
 )
-_RAMP_CHARS = np.array([char for char, _ in _RAMP])
-_RAMP_DENSITY = np.array([density for _, density in _RAMP])
+RAMPS: dict[Charset, tuple[tuple[str, float], ...]] = {
+    "classic": _CLASSIC,
+    "symbols": _SYMBOLS,
+}
+_RAMP_ARRAYS = {
+    name: (np.array([c for c, _ in ramp]), np.array([d for _, d in ramp]))
+    for name, ramp in RAMPS.items()
+}
 
 EDGE_STRENGTH = 0.35
 """Sobel magnitude (blurred luma) above which a pixel counts as part of an edge."""
@@ -51,11 +96,11 @@ CONTRAST_STRETCH = 0.6
 """How far luminance is stretched toward the full ramp (0 keeps, 1 stretches fully)."""
 SATURATION_BOOST = 1.2
 """Thin glyphs show less color than a filled cell, so ink colors are pushed a little."""
-INK_FLOOR = 0.35
+INK_FLOOR = 0.55
 """Lowest brightness of an ink color (its strongest channel, 0..1). Symbol density
 already shows how bright a cell is, so the color only has to carry its hue; without a
 floor, dark surfaces print as nearly invisible symbols."""
-DENSITY_GAMMA = 0.75
+DENSITY_GAMMA = 0.5
 """Curve from luminance to symbol density. Below 1 it lifts dark surfaces off the
 background so they read as texture instead of empty space."""
 FILL_BACKGROUND = 0.55
@@ -94,7 +139,12 @@ class SymbolArt:
 
 
 def image_to_art(
-    pixels: RGBImage, cols: int, rows: int, style: ArtStyle = "fill"
+    pixels: RGBImage,
+    cols: int,
+    rows: int,
+    style: ArtStyle = "ink",
+    charset: Charset = "classic",
+    edges: bool = False,
 ) -> SymbolArt:
     """Convert `pixels` into `cols` x `rows` cells of colored symbols.
 
@@ -116,9 +166,11 @@ def image_to_art(
     cell_color = _linear_to_srgb(_cell_mean(linear, rows, cell_h, cols, cell_w))
     glow = _linear_to_srgb(_bright_mean(linear, rows, cell_h, cols, cell_w))
     density = _stretch(_luma(cell_color)) ** DENSITY_GAMMA
-    chars = _RAMP_CHARS[_ramp_index(_dither(density))]
-    edge_chars = _edge_chars(_luma(srgb), rows, cell_h, cols, cell_w)
-    chars = np.where(edge_chars != "", edge_chars, chars)
+    ramp_chars, ramp_density = _RAMP_ARRAYS[charset]
+    chars = ramp_chars[_ramp_index(_dither(density), ramp_density)]
+    if edges:
+        edge_chars = _edge_chars(_luma(srgb), rows, cell_h, cols, cell_w)
+        chars = np.where(edge_chars != "", edge_chars, chars)
 
     if style == "fill":
         fg = glow + (1.0 - glow) * FILL_HIGHLIGHT
@@ -201,11 +253,11 @@ def _dither(luma: FloatArray) -> FloatArray:
     return result
 
 
-def _ramp_index(target: FloatArray) -> npt.NDArray[np.intp]:
-    """Index of the ramp symbol whose ink density is closest to each target value."""
-    index: npt.NDArray[np.intp] = np.abs(target[..., None] - _RAMP_DENSITY).argmin(
-        axis=-1
-    )
+def _ramp_index(
+    target: FloatArray, density: npt.NDArray[np.float64]
+) -> npt.NDArray[np.intp]:
+    """Index of the ramp character whose ink density is closest to each target."""
+    index: npt.NDArray[np.intp] = np.abs(target[..., None] - density).argmin(axis=-1)
     return index
 
 
