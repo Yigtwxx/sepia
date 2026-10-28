@@ -35,9 +35,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         return run_viewer(args.viewer)
     if args.download:
-        from sepia.painter import download_local_model
+        from sepia.painter import PainterError, download_local_model
 
-        print(f"downloaded to {download_local_model()}")
+        try:
+            print(f"downloaded to {download_local_model()}")
+        except PainterError as exc:
+            print(exc, file=sys.stderr)
+            return 1
         return 0
     from sepia.repl import run_repl
 

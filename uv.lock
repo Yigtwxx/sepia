@@ -1761,10 +1761,7 @@ name = "sepia-cli"
 version = "0.1.0a1"
 source = { editable = "." }
 dependencies = [
-    { name = "accelerate" },
     { name = "anthropic" },
-    { name = "bitsandbytes", marker = "sys_platform != 'darwin'" },
-    { name = "diffusers" },
     { name = "numpy" },
     { name = "pillow" },
     { name = "platformdirs" },
@@ -1772,6 +1769,13 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "rich" },
+]
+
+[package.optional-dependencies]
+local = [
+    { name = "accelerate" },
+    { name = "bitsandbytes", marker = "sys_platform != 'darwin'" },
+    { name = "diffusers" },
     { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform != 'darwin'" },
     { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
     { name = "transformers" },
@@ -1786,10 +1790,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "accelerate", specifier = ">=1.10" },
+    { name = "accelerate", marker = "extra == 'local'", specifier = ">=1.10" },
     { name = "anthropic", specifier = ">=2.3.0" },
-    { name = "bitsandbytes", marker = "sys_platform != 'darwin'", specifier = ">=0.50.2" },
-    { name = "diffusers", specifier = ">=0.42.1" },
+    { name = "bitsandbytes", marker = "sys_platform != 'darwin' and extra == 'local'", specifier = ">=0.50.2" },
+    { name = "diffusers", marker = "extra == 'local'", specifier = ">=0.42.1" },
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "platformdirs", specifier = ">=4.14.0" },
@@ -1797,10 +1801,11 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.14.1" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "rich", specifier = ">=15.0.0" },
-    { name = "torch", marker = "sys_platform != 'darwin'", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cu130" },
-    { name = "torch", marker = "sys_platform == 'darwin'", specifier = ">=2.14.1" },
-    { name = "transformers", specifier = ">=4.57" },
+    { name = "torch", marker = "sys_platform == 'darwin' and extra == 'local'", specifier = ">=2.14.1" },
+    { name = "torch", marker = "sys_platform != 'darwin' and extra == 'local'", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cu130" },
+    { name = "transformers", marker = "extra == 'local'", specifier = ">=4.57" },
 ]
+provides-extras = ["local"]
 
 [package.metadata.requires-dev]
 dev = [

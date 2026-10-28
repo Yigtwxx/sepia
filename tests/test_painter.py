@@ -148,3 +148,11 @@ def test_select_device_prefers_cuda_then_mps_then_cpu(
     )
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     assert select_device() == expected, f"cuda={cuda} mps={mps}"
+
+
+def test_local_painter_without_extra_raises_install_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(painter, "local_installed", lambda: False)
+    with pytest.raises(PainterError, match=r"sepia-cli\[local\]"):
+        painter.LocalPainter().paint("x", SIZE, 1)

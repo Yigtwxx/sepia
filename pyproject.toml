@@ -28,6 +28,12 @@ dependencies = [
     "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
     "rich>=15.0.0",
+]
+
+[project.optional-dependencies]
+# The local fallback painter: FLUX.2 [klein] 4B on this machine's GPU (about 3 GB of
+# packages plus a 16 GB model). Without it sepia paints through the web API only.
+local = [
     "torch>=2.14.1",
     "diffusers>=0.42.1",
     "transformers>=4.57",
@@ -87,6 +93,11 @@ files = ["src"]
 [[tool.mypy.overrides]]
 module = ["diffusers", "diffusers.*"]
 follow_imports = "skip"
+
+# The local extra may not be installed (CI type-checks without it).
+[[tool.mypy.overrides]]
+module = ["torch", "torch.*", "huggingface_hub", "huggingface_hub.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

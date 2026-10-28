@@ -140,6 +140,16 @@ class ApiPainter:
         return urllib.request.Request(url, headers=headers)
 
 
+LOCAL_MISSING = "local painting needs the extra: install sepia-cli[local]"
+
+
+def local_installed() -> bool:
+    """Whether the optional `local` extra (torch and diffusers) is installed."""
+    import importlib.util
+
+    return all(importlib.util.find_spec(name) for name in ("torch", "diffusers"))
+
+
 def select_device() -> Device:
     """Fastest available device, in the order CUDA, then MPS, then CPU."""
     import torch
@@ -153,6 +163,8 @@ def select_device() -> Device:
 
 def local_model_ready(model_id: str = DEFAULT_IMAGE_MODEL) -> bool:
     """Whether the local model is already downloaded."""
+    if not local_installed():
+        return False
     from huggingface_hub import snapshot_download
     from huggingface_hub.errors import LocalEntryNotFoundError
 
@@ -165,6 +177,8 @@ def local_model_ready(model_id: str = DEFAULT_IMAGE_MODEL) -> bool:
 
 def download_local_model(model_id: str = DEFAULT_IMAGE_MODEL) -> str:
     """Download the local model (about 16 GB) and return its folder."""
+    if not local_installed():
+        raise PainterError(LOCAL_MISSING)
     from huggingface_hub import snapshot_download
 
     return str(snapshot_download(model_id, allow_patterns=MODEL_FILES))
@@ -184,6 +198,8 @@ class LocalPainter:
         return self._pipe is not None
 
     def load(self) -> None:
+        if not local_installed():
+            raise PainterError(LOCAL_MISSING)
         with self._lock:
             if self._pipe is None:
                 self._build()
