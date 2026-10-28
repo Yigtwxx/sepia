@@ -12,7 +12,8 @@ from sepia.repl import Command, new_session_dir, parse_command, toggle
     [
         ("/style ink", Command("style", "ink")),
         ("/NEW", Command("new", "")),
-        ("/charset   Symbols ", Command("charset", "symbols")),
+        ("/charset   Symbols ", Command("charset", "Symbols")),
+        ("/add Snowy Peaks", Command("add", "Snowy Peaks")),
         ("şelale", None),
         ("a /slash inside", None),
     ],

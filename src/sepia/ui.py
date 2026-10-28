@@ -61,12 +61,12 @@ STRINGS: dict[str, str] = {
     "tagline": "draw with words",
     "window": "pictures open in a second window",
     "help_hint": "/help for commands",
-    "tip": 'Tip: describe a scene, then add to it: "waterfall", then "mountains"',
-    "placeholder": "describe a picture · / lists the commands",
+    "tip": 'Tip: describe a scene, then build on it: "waterfall", "/add mountains"',
+    "placeholder": "describe a picture · /add to build on it",
     "directing": "Working on it… (writing the prompt)",
     "painting": "Working on it… (painting · {source})",
     "opening": "Opening the picture window…",
-    "new_scene": "New scene. The next request starts a fresh picture.",
+    "add_usage": "Say what to add: /add snowy mountains",
     "style_set": "Style: {style} · charset: {charset}",
     "no_window": "Could not open the picture window: {error}",
     "unknown": "No such command {command}",
@@ -87,7 +87,7 @@ STRINGS: dict[str, str] = {
 }
 
 COMMANDS: Sequence[tuple[str, str]] = (
-    ("/new", "start a fresh picture"),
+    ("/add <text>", "add to the current picture instead of starting a new one"),
     ("/clear", "clear the screen and start a fresh picture"),
     ("/style [ink|fill]", "switch how the picture is drawn"),
     ("/charset [classic|symbols]", "switch the character set"),

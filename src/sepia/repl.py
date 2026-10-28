@@ -52,11 +52,15 @@ class Command:
 
 
 def parse_command(line: str) -> Command | None:
-    """`/style ink` -> Command("style", "ink"); None for an ordinary request."""
+    """`/add Snowy Peaks` -> Command("add", "Snowy Peaks"); None for a request.
+
+    The name is lowercased; the argument keeps its case, since for /add it is part
+    of the picture's description.
+    """
     if not line.startswith("/"):
         return None
     name, _, argument = line[1:].partition(" ")
-    return Command(name.strip().lower(), argument.strip().lower())
+    return Command(name.strip().lower(), argument.strip())
 
 
 def toggle(current: str, options: tuple[str, ...], requested: str) -> str:
@@ -140,7 +144,7 @@ class Repl:
         """Act on one line; False means exit."""
         command = parse_command(line)
         if command is None:
-            self._draw(line)
+            self._draw(line, add=False)
             return True
         if command.name in ("exit", "quit", "q"):
             return False
@@ -150,20 +154,21 @@ class Repl:
             self.scene.reset()
             self.host.send({"type": "clear"})
             self._open_screen()
-        elif command.name == "new":
-            self.scene.reset()
-            self.host.send({"type": "clear"})
-            self.console.print(ui.reply(self.words("new_scene")))
+        elif command.name == "add":
+            if command.argument:
+                self._draw(command.argument, add=True)
+            else:
+                self.console.print(ui.reply(self.words("add_usage"), failed=True))
         elif command.name in ("style", "charset"):
             if command.name == "style":
                 styles = cast(tuple[str, ...], get_args(ArtStyle))
                 self.style = cast(
-                    ArtStyle, toggle(self.style, styles, command.argument)
+                    ArtStyle, toggle(self.style, styles, command.argument.lower())
                 )
             else:
                 sets = cast(tuple[str, ...], get_args(Charset))
                 self.charset = cast(
-                    Charset, toggle(self.charset, sets, command.argument)
+                    Charset, toggle(self.charset, sets, command.argument.lower())
                 )
             self.host.send(
                 {"type": "style", "style": self.style, "charset": self.charset}
@@ -175,7 +180,14 @@ class Repl:
             self.console.print(ui.reply(unknown, failed=True))
         return True
 
-    def _draw(self, request: str) -> None:
+    def _draw(self, request: str, add: bool) -> None:
+        """Paint `request`: a new picture, or with `add` an addition to this one.
+
+        /add on an empty scene simply paints a new picture.
+        """
+        add = add and not self.scene.is_empty
+        if not add:
+            self.scene.reset()
         self._ensure_viewer()
         try:
             direction = self._wait(
@@ -188,7 +200,7 @@ class Repl:
             )
             return
         self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
-        reference = self.scene.image if direction.edit else None
+        reference = self.scene.image if add else None
         size = paint_size(self.canvas.aspect)
         try:
             painting: Painting = self._wait(
