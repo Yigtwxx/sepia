@@ -1,0 +1,118 @@
+name: release
+
+# Publishes sepia-cli to PyPI through Trusted Publishing (OIDC), then creates
+# the GitHub Release for the tag with its CHANGELOG section as the notes and
+# the wheel and sdist attached. No API token is stored in this repository or
+# its secrets. The `pypi` environment is what lists the upload under
+# Deployments.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          # No cache: what this job builds goes to PyPI, so it starts from
+          # nothing rather than from a cache another run could have written.
+          enable-cache: false
+
+      - name: The CHANGELOG has this version's section
+        # Before PyPI: an upload cannot be taken back, so its notes must
+        # exist first.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python3 scripts/release_notes.py "${GITHUB_REF_NAME#v}" > /dev/null
+
+      - name: Build BOTH artifacts
+        # Bare `uv build`, for the reason docs/releasing.md gives: the wheel
+        # is built from the sdist, the path a release takes.
+        run: uv build
+
+      - name: The artifacts are fit to upload
+        run: uvx twine check dist/*
+
+      - name: The tag names the version that was built
+        # Checked on the artifact, not on `__init__.py`: a tag pushed without
+        # the version bump would otherwise upload nothing new and still pass.
+        # The wheel carries the normalized distribution name (`sepia_cli`,
+        # not `sepia-cli`) and the PEP 440 version, so a pre-release is tagged
+        # `v0.1.0a1`, never `v0.1.0-alpha.1`.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          wheel="$(ls dist/*.whl)"
+          case "$wheel" in
+            "dist/sepia_cli-${GITHUB_REF_NAME#v}-"*) ;;
+            *)
+              echo "::error::tag $GITHUB_REF_NAME does not match $wheel"
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/sepia-cli
+    permissions:
+      id-token: write   # required for Trusted Publishing
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # A manual run rebuilds a version that is usually on PyPI already;
+          # PyPI never replaces a file, so that run skips it instead of failing.
+          # A tag push never skips, so a version already up fails loudly.
+          skip-existing: ${{ github.event_name == 'workflow_dispatch' }}
+
+  github-release:
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to create the release
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Release notes from CHANGELOG.md
+        run: python3 scripts/release_notes.py "${GITHUB_REF_NAME#v}" > notes.md
+
+      - name: Create the release
+        # Idempotent: a re-run for a tag that is already released leaves the
+        # existing release alone. A PEP 440 pre-release (a, b, rc, dev) is
+        # marked as one, so an alpha never shows up as the latest release.
+        run: |
+          prerelease=()
+          case "${GITHUB_REF_NAME#v}" in
+            *[0-9]a[0-9]* | *[0-9]b[0-9]* | *[0-9]rc[0-9]* | *.dev[0-9]*)
+              prerelease=(--prerelease)
+              ;;
+          esac
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --verify-tag "${prerelease[@]}" \
+              --title "$GITHUB_REF_NAME" --notes-file notes.md dist/*
+        env:
+          GH_TOKEN: ${{ github.token }}
