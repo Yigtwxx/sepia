@@ -10,19 +10,38 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29
+
 ### Added
 
 - `/add <text>` adds to the current picture; a plain request now always
   starts a new one.
 - `/clear` clears the screen and starts a fresh picture.
+- `/usage` shows what the session used, laid out like Claude Code's: Claude's
+  tokens, web searches and estimated cost, and the pictures painted per
+  source, each with a bar of what the total is made of.
+- `/style` and `/charset` without a name open a menu of their options: move
+  with the arrow keys, pick with Enter or the option's number, Esc to cancel.
+- Enter on a partial command runs the command it suggests: `/us` opens
+  `/usage`.
 - Moving the mouse over the picture glitches it around the pointer: torn rows,
   corrupted glyphs and split colors that fade out when the pointer stops.
+- Named characters, creatures, products and landmarks are painted from a
+  reference picture: Claude links the subject's wiki page, sepia takes the
+  page's preview picture and the image model copies the look from it, so
+  "yunara lol" paints Yunara instead of a stranger. /add keeps the reference.
+  It works with a Pollinations key and with the local model; the keyless API
+  ignores reference pictures.
 
 ### Changed
 
-- The chat bar is one framed block (border, input, border, status) that
-  starts under the welcome box and moves down with the conversation, as in
-  Claude Code; once it reaches the bottom the welcome box scrolls away.
+- The chat bar is one block (rule, input, rule, status) that starts under the
+  welcome box and moves down with the conversation, as in Claude Code; once it
+  reaches the bottom the welcome box scrolls away. The rules have open ends,
+  with no corners or side borders, and the bar stays on screen while a request
+  is being worked on.
+- The picture window has its tab row again, so it can be moved; the tab reads
+  "sepia" on the theme's pinkish purple.
 - Starting sepia clears the screen and the scrollback.
 - The wordmark uses the ANSI Shadow font, like spiyweb's.
 - With the local model downloaded, a keyed request that runs out of
@@ -86,5 +105,6 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Yigtwxx/sepia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Yigtwxx/sepia/releases/tag/v0.1.0
