@@ -275,8 +275,8 @@ class Repl:
 
 def run_repl() -> int:
     console = Console(highlight=False)
-    load_environment()  # first: SEPIA_LANG and the rest may come from a .env file
-    words = ui.Words(ui.detect_language())
+    load_environment()  # first: settings may come from a .env file
+    words = ui.Words()
     try:
         settings = load_settings()
     except ConfigError as exc:

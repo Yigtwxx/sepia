@@ -30,7 +30,7 @@ REPLY_SCHEMA: dict[str, Any] = {
     "properties": {
         "message": {
             "type": "string",
-            "description": "One short sentence in the language of the latest request.",
+            "description": "One short sentence in English.",
         },
         "prompt": {"type": "string", "description": "The English image prompt."},
         "edit": {

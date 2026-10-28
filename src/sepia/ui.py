@@ -1,9 +1,6 @@
 """Look and words of the prompt window: wordmark, palette, replies, strings."""
 
-import locale
-import os
 from collections.abc import Sequence
-from typing import Literal
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
@@ -59,111 +56,55 @@ def wordmark() -> Text:
     return text
 
 
-Language = Literal["en", "tr"]
-
-STRINGS: dict[Language, dict[str, str]] = {
-    "en": {
-        "welcome": "Welcome to sepia",
-        "tagline": "draw with words",
-        "window": "pictures open in a second window",
-        "help_hint": "/help for commands",
-        "tip": 'Tip: describe a scene, then add to it: "waterfall", then "mountains"',
-        "placeholder": "describe a picture · / lists the commands",
-        "directing": "Working on it… (writing the prompt)",
-        "painting": "Working on it… (painting · {source})",
-        "opening": "Opening the picture window…",
-        "new_scene": "New scene. The next request starts a fresh picture.",
-        "style_set": "Style: {style} · charset: {charset}",
-        "no_window": "Could not open the picture window: {error}",
-        "unknown": "No such command {command}",
-        "help_title": "commands",
-        "key_prompt": "Anthropic API key (stored in {path}): ",
-        "key_missing": "sepia needs an Anthropic API key to write prompts.",
-        "failure.auth": "Your Anthropic API key was rejected.",
-        "failure.rate_limit": "Claude is busy right now; try again in a moment.",
-        "failure.server": "Claude had a problem; try again.",
-        "failure.connection": "Could not reach Claude; check your connection.",
-        "failure.rejected": "Claude rejected that request.",
-        "failure.refused": "Claude declined that request; try other words.",
-        "failure.truncated": "The reply was cut off; try again.",
-        "failure.invalid": "Claude's reply was malformed; try again.",
-        "failure.paint": "Could not paint the picture: {error}",
-        "source.api": "pollinations",
-        "source.local": "local GPU",
-    },
-    "tr": {
-        "welcome": "sepia'ya hoş geldin",
-        "tagline": "kelimelerle çiz",
-        "window": "resimler ikinci bir pencerede açılır",
-        "help_hint": "komutlar için /help",
-        "tip": 'İpucu: bir sahne yaz, sonra üstüne ekle: önce "şelale", sonra "dağlar"',
-        "placeholder": "bir resim tarif et · / komutları listeler",
-        "directing": "Üzerinde çalışıyorum… (prompt yazılıyor)",
-        "painting": "Üzerinde çalışıyorum… (resim boyanıyor · {source})",
-        "opening": "Resim penceresi açılıyor…",
-        "new_scene": "Yeni sahne. Sıradaki istek yeni bir resimle başlar.",
-        "style_set": "Stil: {style} · karakterler: {charset}",
-        "no_window": "Resim penceresi açılamadı: {error}",
-        "unknown": "Böyle bir komut yok: {command}",
-        "help_title": "komutlar",
-        "key_prompt": "Anthropic API key ({path} içine kaydedilir): ",
-        "key_missing": "sepia prompt yazmak için bir Anthropic API key ister.",
-        "failure.auth": "Anthropic API key reddedildi.",
-        "failure.rate_limit": "Claude şu an yoğun; birazdan tekrar dene.",
-        "failure.server": "Claude'da bir sorun oldu; tekrar dene.",
-        "failure.connection": "Claude'a ulaşılamadı; bağlantını kontrol et.",
-        "failure.rejected": "Claude bu isteği reddetti.",
-        "failure.refused": "Claude bu isteği geri çevirdi; farklı anlatmayı dene.",
-        "failure.truncated": "Cevap yarıda kesildi; tekrar dene.",
-        "failure.invalid": "Claude'un cevabı bozuk geldi; tekrar dene.",
-        "failure.paint": "Resim boyanamadı: {error}",
-        "source.api": "pollinations",
-        "source.local": "yerel GPU",
-    },
+STRINGS: dict[str, str] = {
+    "welcome": "Welcome to sepia",
+    "tagline": "draw with words",
+    "window": "pictures open in a second window",
+    "help_hint": "/help for commands",
+    "tip": 'Tip: describe a scene, then add to it: "waterfall", then "mountains"',
+    "placeholder": "describe a picture · / lists the commands",
+    "directing": "Working on it… (writing the prompt)",
+    "painting": "Working on it… (painting · {source})",
+    "opening": "Opening the picture window…",
+    "new_scene": "New scene. The next request starts a fresh picture.",
+    "style_set": "Style: {style} · charset: {charset}",
+    "no_window": "Could not open the picture window: {error}",
+    "unknown": "No such command {command}",
+    "help_title": "commands",
+    "key_prompt": "Anthropic API key (stored in {path}): ",
+    "key_missing": "sepia needs an Anthropic API key to write prompts.",
+    "failure.auth": "Your Anthropic API key was rejected.",
+    "failure.rate_limit": "Claude is busy right now; try again in a moment.",
+    "failure.server": "Claude had a problem; try again.",
+    "failure.connection": "Could not reach Claude; check your connection.",
+    "failure.rejected": "Claude rejected that request.",
+    "failure.refused": "Claude declined that request; try other words.",
+    "failure.truncated": "The reply was cut off; try again.",
+    "failure.invalid": "Claude's reply was malformed; try again.",
+    "failure.paint": "Could not paint the picture: {error}",
+    "source.api": "pollinations",
+    "source.local": "local GPU",
 }
 
-COMMANDS: dict[Language, Sequence[tuple[str, str]]] = {
-    "en": (
-        ("/new", "start a fresh picture"),
-        ("/clear", "clear the screen and start a fresh picture"),
-        ("/style [ink|fill]", "switch how the picture is drawn"),
-        ("/charset [classic|symbols]", "switch the character set"),
-        ("/help", "show this list"),
-        ("/exit", "close sepia and its window (also Ctrl+D)"),
-    ),
-    "tr": (
-        ("/new", "yeni bir resme başla"),
-        ("/clear", "ekranı temizle ve yeni bir resme başla"),
-        ("/style [ink|fill]", "resmin çizim stilini değiştir"),
-        ("/charset [classic|symbols]", "karakter setini değiştir"),
-        ("/help", "bu listeyi göster"),
-        ("/exit", "sepia'yı ve penceresini kapat (Ctrl+D de olur)"),
-    ),
-}
-
-
-def detect_language() -> Language:
-    """`SEPIA_LANG` if set, else Turkish on a Turkish system, else English."""
-    forced = os.environ.get("SEPIA_LANG", "").strip().lower()
-    if forced in ("en", "tr"):
-        return "tr" if forced == "tr" else "en"
-    name = (locale.getlocale()[0] or os.environ.get("LANG", "")).lower()
-    return "tr" if name.startswith(("tr", "turkish")) else "en"
+COMMANDS: Sequence[tuple[str, str]] = (
+    ("/new", "start a fresh picture"),
+    ("/clear", "clear the screen and start a fresh picture"),
+    ("/style [ink|fill]", "switch how the picture is drawn"),
+    ("/charset [classic|symbols]", "switch the character set"),
+    ("/help", "show this list"),
+    ("/exit", "close sepia and its window (also Ctrl+D)"),
+)
 
 
 class Words:
-    """UI strings in one language."""
-
-    def __init__(self, language: Language) -> None:
-        self.language = language
-        self._strings = STRINGS[language]
+    """The interface's strings, with values filled in."""
 
     def __call__(self, key: str, **values: object) -> str:
-        return self._strings[key].format(**values)
+        return STRINGS[key].format(**values)
 
     @property
     def commands(self) -> Sequence[tuple[str, str]]:
-        return COMMANDS[self.language]
+        return COMMANDS
 
 
 def welcome(words: Words, width: int) -> RenderableType:
