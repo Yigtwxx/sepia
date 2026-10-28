@@ -12,6 +12,8 @@ tag all carry.
 
 ### Added
 
+- `/add <text>` adds to the current picture; a plain request now always
+  starts a new one.
 - `/clear` clears the screen and starts a fresh picture.
 - Moving the mouse over the picture glitches it around the pointer: torn rows,
   corrupted glyphs and split colors that fade out when the pointer stops.
@@ -29,6 +31,7 @@ tag all carry.
 
 ### Removed
 
+- `/new`: a plain request starts a new picture now.
 - `SEPIA_LANG` and the Turkish interface strings.
 
 ## [0.1.0] - 2026-10-29

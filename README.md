@@ -13,7 +13,7 @@ Type a short request in your terminal and get a photograph painted in colored te
    pollinations · 5.8s
 ```
 
-Follow-up requests build on the same picture: "mountains" after "waterfall" gives the same waterfall with mountains behind it. `/new` starts over. sepia only makes pictures; it is not a chat assistant.
+Every request starts a new picture. To build on the current one, use `/add`: "waterfall", then `/add mountains`, gives the same waterfall with mountains behind it. sepia only makes pictures; it is not a chat assistant.
 
 ## How it works
 
@@ -75,7 +75,7 @@ On the first run sepia asks for your Anthropic API key (hidden input) and saves 
 
 | Command | What it does |
 | --- | --- |
-| `/new` | Start a fresh picture. The next request does not build on the old one. |
+| `/add <text>` | Add to the current picture instead of starting a new one. |
 | `/clear` | Clear the screen and start a fresh picture. |
 
 Move the mouse over the picture window to glitch the picture around the pointer. It heals when the pointer stops. Windows Terminal and iTerm2 report pointer movement; macOS Terminal.app may not.

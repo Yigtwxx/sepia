@@ -130,7 +130,7 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
 - A panel with the wordmark in the figlet font ANSI Shadow, like spiyweb's (letters banded pink to purple, shadow in deep purple), a tip line, then
   a `›` prompt with file history, slash-command completion and a bottom bar (model, style/charset, window status).
 - While working, a `✻✽✶✳✢·` spinner with "Working on it…"; then a `⏺` reply with the source and time.
-- Commands: `/new`, `/clear`, `/style [ink|fill]`, `/charset [classic|symbols]`, `/help`, `/exit` (also `/quit`, `/q`, Ctrl+D).
+- Commands: `/add <text>` (build on the current picture; plain requests start a new one), `/clear`, `/style [ink|fill]`, `/charset [classic|symbols]`, `/help`, `/exit` (also `/quit`, `/q`, Ctrl+D).
 - The interface and Claude's replies are English only.
 
 ## Configuration and secrets
