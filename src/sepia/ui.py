@@ -92,9 +92,7 @@ STRINGS: dict[str, str] = {
     "painter_api": "Painting with Cloudflare, on this machine when it fails, from "
     "the next picture on",
     "painter_local": "Painting on this machine only, from the next picture on",
-    "api_missing": "Cloudflare is not set up: put CLOUDFLARE_ACCOUNT_ID and "
-    "CLOUDFLARE_API_TOKEN in .env (Workers AI → Use REST API: "
-    "https://dash.cloudflare.com/?to=/:account/ai/workers-ai)",
+    "api_missing": "Cloudflare is not set up: /keys cloudflare adds it",
     "local_missing": "Painting on this machine needs the local extra: install "
     "sepia-cli[local], then type /local again",
     "pick_download": "Painting on this machine needs the local model {model}, "
@@ -107,8 +105,22 @@ STRINGS: dict[str, str] = {
     "no_window": "Could not open the picture window: {error}",
     "unknown": "No such command {command}",
     "help_title": "commands",
-    "key_prompt": "Anthropic API key (stored in {path}): ",
-    "key_missing": "sepia needs an Anthropic API key to write prompts.",
+    "setup": "Welcome to sepia. It needs an Anthropic API key; Cloudflare is "
+    "optional, and Enter skips it.",
+    "setup_where": "kept in {path} · /keys changes them later",
+    "keys.ask": "   {variable} › ",
+    "keys.anthropic": "Anthropic API key: Claude writes the prompts (needed)",
+    "keys.anthropic.where": "https://console.anthropic.com/settings/keys · about "
+    "$0.001 a picture with Haiku",
+    "keys.cloudflare": "Cloudflare account ID and API token: paint about 100 "
+    "pictures a day for free",
+    "keys.cloudflare.where": "https://dash.cloudflare.com/?to=/:account/ai/workers-ai"
+    " → Use REST API · Enter skips",
+    "pick_keys": "Which key should be set?",
+    "keys_set": "set",
+    "keys_not_set": "not set",
+    "keys_saved": "Saved the {name} key; in use from the next request on",
+    "keys_unchanged": "No key changed",
     "failure.auth": "Your Anthropic API key was rejected.",
     "failure.rate_limit": "Claude is busy right now; try again in a moment.",
     "failure.server": "Claude had a problem; try again.",
@@ -169,6 +181,7 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/mature [on|off]", "allow sexy and dark pictures, never explicit"),
     ("/api", "paint with Cloudflare, on this machine when it fails"),
     ("/local", "paint only on this machine's GPU"),
+    ("/keys [anthropic|cloudflare]", "set the keys sepia uses"),
     ("/usage", "show what Claude used and cost, now and in all"),
     ("/help", "show this list"),
     ("/exit", "close sepia and its window (also Ctrl+D, or Ctrl+C twice)"),

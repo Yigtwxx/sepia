@@ -28,7 +28,8 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/launcher.py`: opens the viewer (Windows Terminal window with a purple "sepia" tab and a fragment profile, conhost fallback, Terminal.app via osascript).
 - `src/sepia/viewer.py`: full-screen picture window; redraws on resize and on messages.
 - `src/sepia/mouse.py`: pointer reports from the terminal (SGR mouse mode); `src/sepia/ripple.py`: the rings that spread from the pointer, drawn as ANSI over the changed cells only.
-- `src/sepia/config.py`: settings from env and `.env` files, slash-command choices kept in `choices.json` (they win over `SEPIA_*`), key storage, config dir.
+- `src/sepia/config.py`: settings from env and `.env` files, slash-command choices kept in `choices.json` (they win over `SEPIA_*`), key storage (`save_keys`), config dir.
+- `src/sepia/keys.py`: the Anthropic and Cloudflare keys asked for on the first run and by `/keys`; hidden prompts, a key's state is only set or not set.
 - `tests/`: one `test_<module>.py` per module, shared fixtures in `conftest.py`.
 - `scripts/spike.py`: quality spike; `scripts/release_notes.py`: CHANGELOG section for a release; `scripts/site_art.py`: draws the landing page's plates and demo pictures with `ascii_art` (writes `site/src/data/art.generated.ts` and `site/public/art/`).
 - `site/`: the landing page (Astro 7, static, deployed on Vercel with `site` as the project root, https://sepia-cli.vercel.app). Design: `docs/superpowers/specs/2026-10-29-landing-page-design.md`. Sources of its pictures: `site/images.manifest.json`, `site/scripts/sources/`.
@@ -69,6 +70,6 @@ All four checks must pass. CI runs them on Windows and macOS without the local e
 - The local extra is optional: import torch, diffusers and huggingface_hub inside functions, never at module level.
 - Device order for the local model is CUDA, then MPS, then CPU (`painter.select_device`). Keep it.
 - Windows and macOS are both first-class; Linux only needs to import and pass tests. Line endings are LF (`.gitattributes`).
-- Tests: names `test_<unit>_<scenario>_<expected>`, every assert has a message, shared fixtures in `tests/conftest.py`, mock only external dependencies (Anthropic client, HTTP, subprocess, torch). No real API calls, windows or downloads in tests.
+- Tests: names `test_<unit>_<scenario>_<expected>`, every assert has a message, shared fixtures in `tests/conftest.py`, mock only external dependencies (Anthropic client, HTTP, subprocess, torch). No real API calls, windows or downloads in tests. An autouse fixture gives every test its own config folder, so nothing reaches the real one.
 - Commits: Conventional Commits (`feat`, `fix`, `refactor`, `test`, `docs`, `chore`; `ci` for workflows), imperative summary of at most 72 characters, body explains why. Commit, push or tag only when asked.
 - The version lives in `pyproject.toml` and `src/sepia/__init__.py`; bump both. User-visible changes go under `[Unreleased]` in `CHANGELOG.md`.

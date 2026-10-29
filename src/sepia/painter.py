@@ -460,7 +460,9 @@ class FallbackPainter:
 
 
 def build_painter(
-    cloudflare: tuple[str, str] | None, model_id: str = DEFAULT_IMAGE_MODEL
+    cloudflare: tuple[str, str] | None,
+    model_id: str = DEFAULT_IMAGE_MODEL,
+    local: LocalPainter | None = None,
 ) -> tuple[FallbackPainter | None, LocalPainter]:
     """The API chain and the local painter.
 
@@ -468,9 +470,9 @@ def build_painter(
     FLUX.2 [klein] 4B, so a picture looks alike whichever paints it. Without
     Cloudflare's account ID and API token there is no chain (None) and only the
     local model paints; without the local model, its painter explains how to
-    install it.
+    install it. A `local` painter given, perhaps with its model loaded, is kept.
     """
-    local = LocalPainter(model_id)
+    local = local or LocalPainter(model_id)
     if cloudflare is None:
         return None, local
     account_id, token = cloudflare

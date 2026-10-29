@@ -1,6 +1,7 @@
 import io
 import json
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -12,9 +13,33 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.input.base import PipeInput
 from prompt_toolkit.output.vt100 import Vt100_Output
 
+from sepia import config
 from sepia.ascii_art import CELL_HEIGHT, CELL_WIDTH
 
 Canvas = Callable[..., np.ndarray]
+KEY_VARIABLES = (
+    "ANTHROPIC_API_KEY",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_API_TOKEN",
+    "BRAVE_SEARCH_API_KEY",
+)
+
+
+@pytest.fixture(autouse=True)
+def private_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Every test gets its own config folder: keys, choices and history written by
+    the code under test never reach the real one."""
+    folder = tmp_path / "config"
+    monkeypatch.setattr(config, "config_dir", lambda: folder)
+    return folder
+
+
+@pytest.fixture
+def env_file(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The user config `.env`, in the test's own folder, with no key set."""
+    for variable in KEY_VARIABLES:
+        monkeypatch.delenv(variable, raising=False)
+    return config.user_env_file()
 
 
 @pytest.fixture

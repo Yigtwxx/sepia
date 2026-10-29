@@ -251,6 +251,13 @@ def test_build_painter_with_cloudflare_falls_back_to_the_local_model() -> None:
     assert api._fallback is local, "The local model must back Cloudflare up"
 
 
+def test_build_painter_given_local_painter_keeps_it() -> None:
+    loaded = painter.LocalPainter()
+    api, local = build_painter((ACCOUNT, TOKEN), local=loaded)
+    assert local is loaded, "A loaded local model must not be built again"
+    assert api is not None and api._fallback is loaded, "It must back Cloudflare up"
+
+
 @pytest.mark.parametrize(
     ("cuda", "mps", "expected"),
     [(True, True, "cuda"), (False, True, "mps"), (False, False, "cpu")],

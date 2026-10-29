@@ -50,7 +50,7 @@ uv tool install sepia-cli
 sepia
 ```
 
-On the first run sepia asks for your Anthropic API key (hidden input) and saves it to the user config folder. Put `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in the environment or in the `.env` file in that folder (see [Cloudflare Workers AI](#cloudflare-workers-ai)). Type `waterfall` and press Enter: the viewer window opens with the picture. Keep it next to the prompt window, then try `/add mountains`.
+On the first run sepia asks for its keys one by one, with hidden input and a link to where each comes from: the Anthropic API key, which it needs, then the Cloudflare account ID and API token, which Enter skips. They are saved to the `.env` file in the user config folder, and `/keys` changes any of them later (see [Cloudflare Workers AI](#cloudflare-workers-ai)). Type `waterfall` and press Enter: the viewer window opens with the picture. Keep it next to the prompt window, then try `/add mountains`.
 
 ## Install
 
@@ -89,6 +89,7 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/mature [on\|off]` | Mature pictures; see [Mature mode](#mature-mode). Off by default. |
 | `/api` | Paint with Cloudflare Workers AI, and with the local model when it fails. Also makes sepia try Cloudflare again after a rate-limit pause or a used-up day; see [Painting backends](#painting-backends). |
 | `/local` | Paint only on this machine's GPU. The first time, it names the model and its size and downloads it once you say yes. Needs `sepia-cli[local]`. |
+| `/keys [anthropic\|cloudflare]` | Set a key, hidden as you type: without a name it opens a menu that shows which keys are set. The key is saved to the user config `.env` and used from the next request on, no restart needed. Keys are never shown. |
 | `/usage` | What Claude used in this session and in all sessions: tokens, web searches and estimated cost. Esc closes it. |
 | `/help` | List the commands. |
 | `/exit` | Close sepia and the viewer window. `/quit`, `/q`, Ctrl+D and Ctrl+C twice do the same. |
@@ -129,7 +130,7 @@ sepia reads settings from the environment, then from `.env` in the current direc
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | none | Required. Asked for on the first run if missing and saved to the user config `.env`. |
+| `ANTHROPIC_API_KEY` | none | Required. Asked for on the first run if missing and saved to the user config `.env`; `/keys anthropic` changes it. |
 | `BRAVE_SEARCH_API_KEY` | none | Optional key from [brave.com/search/api](https://brave.com/search/api) (monthly free credits, about 1,000 searches). Named subjects come from the top pictures of an image search instead of wiki pages. |
 | `CLOUDFLARE_ACCOUNT_ID` | none | Your Cloudflare account ID, for painting on [Cloudflare Workers AI](#cloudflare-workers-ai). Goes together with `CLOUDFLARE_API_TOKEN`. |
 | `CLOUDFLARE_API_TOKEN` | none | A Workers AI API token. Without the two Cloudflare settings, sepia paints only with the local model. |

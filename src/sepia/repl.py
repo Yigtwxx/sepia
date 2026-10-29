@@ -1,5 +1,6 @@
 """The prompt window: read requests, direct them, paint them, show them."""
 
+import os
 import shutil
 import time
 import urllib.parse
@@ -33,11 +34,13 @@ from sepia.config import (
     load_environment,
     load_settings,
     remember,
-    save_api_key,
+    save_keys,
     search_key,
+    user_env_file,
 )
 from sepia.director import Direction, Director, DirectorError, create_client
 from sepia.ipc import Host, Message
+from sepia.keys import KEYS, Key, ask_secret, ask_values, is_set, key_named
 from sepia.launcher import VIEWER_COLS, VIEWER_ROWS, LaunchError, open_viewer
 from sepia.painter import (
     FallbackPainter,
@@ -309,6 +312,8 @@ class Repl:
                 self.transcript.say(ui.reply(self.words(f"mature_{picked}")))
         elif command.name in ("api", "local"):
             self._switch_painter(cast(Source, command.name))
+        elif command.name == "keys":
+            self._set_keys(command.argument)
         elif command.name in ("style", "charset"):
             if command.name == "style":
                 styles = cast(tuple[str, ...], get_args(ArtStyle))
@@ -376,6 +381,54 @@ class Repl:
             return False
         self.local.load_in_background()
         return True
+
+    def _set_keys(self, argument: str) -> None:
+        """Set the key named after the command (/keys cloudflare), else one picked
+        from a menu, and use it from the next request on."""
+        names = tuple(key.name for key in KEYS)
+        picked = named_option(names, argument) or choose(
+            self.words("pick_keys"),
+            [(key.name, self._key_state(key)) for key in KEYS],
+            names[0],
+            self.words("pick_hint"),
+        )
+        if picked is None:
+            return
+        try:
+            values = _ask_key(self.transcript.say, self.words, key_named(picked))
+        except (EOFError, KeyboardInterrupt):
+            values = {}
+        if not values:
+            self.transcript.say(ui.reply(self.words("keys_unchanged")))
+            return
+        save_keys(values)
+        os.environ.update(values)
+        self._use_keys()
+        if picked == "cloudflare":
+            # A Cloudflare key just set is meant to paint.
+            self.paint_with = "api"
+            remember(painter="api")
+        self.transcript.say(ui.reply(self.words("keys_saved", name=picked)))
+
+    def _key_state(self, key: Key) -> str:
+        state = self.words("keys_set" if is_set(key) else "keys_not_set")
+        return f"{state} · {self.words(f'keys.{key.name}')}"
+
+    def _use_keys(self) -> None:
+        """Write prompts, paint and search with the keys now in the environment."""
+        key = api_key()
+        if key is not None:
+            director = self.director
+            self.director = Director(
+                create_client(key), director.model, director.effort, director.mature
+            )
+        try:
+            cloudflare = cloudflare_key()
+        except ConfigError:
+            cloudflare = None
+        # The local painter stays, with its model if it is loaded.
+        self.api, _ = build_painter(cloudflare, self.settings.image_model, self.local)
+        self.search_key = search_key()
 
     @property
     def painter(self) -> Painter:
@@ -633,6 +686,8 @@ def run_repl() -> int:
     console = Console(highlight=False)
     load_environment()  # first: settings may come from a .env file
     words = ui.Words()
+    if api_key() is None and not _first_run(console, words):
+        return 1
     try:
         settings = load_settings(chosen=load_choices())
         cloudflare = cloudflare_key()
@@ -641,9 +696,7 @@ def run_repl() -> int:
         return 2
     key = api_key()
     if key is None:
-        key = _ask_for_key(console, words)
-        if key is None:
-            return 1
+        return 1
     director = Director(
         create_client(key), settings.model, settings.effort, settings.mature
     )
@@ -666,19 +719,29 @@ def run_repl() -> int:
     return repl.run()
 
 
-def _ask_for_key(console: Console, words: ui.Words) -> str | None:
-    from prompt_toolkit import prompt
-
-    from sepia.config import user_env_file
-
-    console.print(ui.reply(words("key_missing")))
+def _first_run(console: Console, words: ui.Words) -> bool:
+    """Ask for each key in turn, keeping each as it is typed: the Anthropic key is
+    needed, Cloudflare and Brave can be skipped with Enter. False without the
+    Anthropic key, or on Ctrl+C or Ctrl+D."""
+    console.print(ui.reply(words("setup"), words("setup_where", path=user_env_file())))
     try:
-        key = prompt(
-            words("key_prompt", path=user_env_file()), is_password=True
-        ).strip()
+        for key in KEYS:
+            values = _ask_key(console.print, words, key)
+            if values:
+                save_keys(values)
+                os.environ.update(values)
+            elif key.name == "anthropic":
+                return False
     except (EOFError, KeyboardInterrupt):
-        return None
-    if not key:
-        return None
-    save_api_key(key)
-    return key
+        return False
+    return True
+
+
+def _ask_key(
+    say: Callable[[RenderableType], None], words: ui.Words, key: Key
+) -> dict[str, str]:
+    """Say what `key` is for and where to get it, then ask for it, hidden."""
+    say(ui.reply(words(f"keys.{key.name}"), words(f"keys.{key.name}.where")))
+    return ask_values(
+        key, lambda variable: ask_secret(words("keys.ask", variable=variable))
+    )

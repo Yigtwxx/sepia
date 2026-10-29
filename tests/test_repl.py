@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from sepia import repl, ui
 from sepia.repl import (
     Command,
     Interrupts,
@@ -127,3 +128,21 @@ def test_transcript_clear_forgets_what_was_said() -> None:
     out.truncate()
     transcript.replay()
     assert out.getvalue() == "", f"Got {out.getvalue()!r}"
+
+
+def test_first_run_keeps_typed_keys_and_skips_empty_ones(terminal, env_file) -> None:
+    keys, _ = terminal
+    keys.send_text("sk-test\r\r")  # Enter alone skips Cloudflare
+    done = repl._first_run(Console(file=io.StringIO()), ui.Words())
+    lines = env_file.read_text().splitlines()
+    assert done, "The Anthropic key was given, so sepia must start"
+    assert lines == ["ANTHROPIC_API_KEY=sk-test"], f"Got {lines}"
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-test", "Keys must hold at once"
+
+
+def test_first_run_without_the_anthropic_key_stops(terminal, env_file) -> None:
+    keys, _ = terminal
+    keys.send_text("\r")
+    done = repl._first_run(Console(file=io.StringIO()), ui.Words())
+    assert not done, "sepia cannot start without the Anthropic key"
+    assert not env_file.exists(), "Nothing typed, nothing saved"

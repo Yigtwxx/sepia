@@ -13,7 +13,7 @@ from sepia.config import (
     load_choices,
     load_settings,
     remember,
-    save_api_key,
+    save_keys,
     search_key,
 )
 
@@ -71,13 +71,22 @@ def test_api_key_blank_values_count_as_missing(
     assert api_key(environ) == expected, f"Expected {expected!r}"
 
 
-def test_save_api_key_replaces_old_key_and_keeps_other_lines(tmp_path: Path) -> None:
+def test_save_keys_replaces_the_given_keys_and_keeps_other_lines(
+    tmp_path: Path,
+) -> None:
     target = tmp_path / "sepia" / ".env"
-    save_api_key("sk-old", target)
-    target.write_text(target.read_text() + "SEPIA_STYLE=fill\n")
-    save_api_key("sk-new", target)
+    target.parent.mkdir()
+    target.write_text("ANTHROPIC_API_KEY=sk-a\nBRAVE_SEARCH_API_KEY=old\n")
+    save_keys(
+        {"BRAVE_SEARCH_API_KEY": " new ", "CLOUDFLARE_ACCOUNT_ID": "acct"}, target
+    )
     lines = target.read_text().splitlines()
-    assert lines == ["SEPIA_STYLE=fill", "ANTHROPIC_API_KEY=sk-new"], f"Got {lines}"
+    expected = [
+        "ANTHROPIC_API_KEY=sk-a",
+        "BRAVE_SEARCH_API_KEY=new",
+        "CLOUDFLARE_ACCOUNT_ID=acct",
+    ]
+    assert lines == expected, f"Got {lines}"
 
 
 def test_load_environment_never_overrides_existing_variables(

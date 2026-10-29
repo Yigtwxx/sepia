@@ -163,8 +163,9 @@ def cloudflare_key(environ: Mapping[str, str] = os.environ) -> tuple[str, str] |
     return (account, token) if account else None
 
 
-def save_api_key(key: str, path: Path | None = None) -> Path:
-    """Store `key` in the user config `.env`, readable only by its owner."""
+def save_keys(keys: Mapping[str, str], path: Path | None = None) -> Path:
+    """Store `keys` (variable name to key) in the user config `.env`, readable only
+    by its owner. A key given replaces its old line; every other line stays."""
     target = path or user_env_file()
     target.parent.mkdir(parents=True, exist_ok=True)
     kept: list[str] = []
@@ -172,9 +173,10 @@ def save_api_key(key: str, path: Path | None = None) -> Path:
         kept = [
             line
             for line in target.read_text(encoding="utf-8").splitlines()
-            if not line.startswith(f"{API_KEY_VAR}=")
+            if line.partition("=")[0].strip() not in keys
         ]
-    target.write_text("\n".join([*kept, f"{API_KEY_VAR}={key.strip()}"]) + "\n")
+    added = [f"{name}={key.strip()}" for name, key in keys.items()]
+    target.write_text("\n".join([*kept, *added]) + "\n", encoding="utf-8")
     with contextlib.suppress(OSError):  # Windows ignores POSIX modes
         target.chmod(stat.S_IRUSR | stat.S_IWUSR)
     return target
