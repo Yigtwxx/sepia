@@ -16,6 +16,14 @@ tag all carry.
   folder of the Pictures folder: its colored characters as the window shows
   them, without the tab bar or frame, named after the time.
 
+### Fixed
+
+- Famous people ("keanu reeves", a YouTuber, an athlete) are painted from
+  their Wikipedia photo instead of as a stranger: Claude used to leave real
+  people without a reference picture, and the image model knows no names.
+  They are shown with respect: no sexual, humiliating or gory pictures and
+  no made-up news photos.
+
 ## [0.3.3] - 2026-10-29
 
 ### Added

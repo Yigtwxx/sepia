@@ -16,6 +16,7 @@ from sepia.director import (
     DirectorError,
     Failure,
     build_request,
+    system_prompt,
 )
 from sepia.scene import Scene
 
@@ -99,6 +100,12 @@ def test_director_mature_adds_its_rules_to_the_system_prompt(
     assert "Mature mode is on" not in plain, "Mature rules sent while off"
     assert mature.startswith(plain), "Mature mode dropped the base instructions"
     assert "Mature mode is on" in mature, "Mature rules missing while on"
+
+
+def test_system_prompt_named_subjects_include_public_figures() -> None:
+    prompt = system_prompt()
+    assert "well-known real person" in prompt, "Famous people get no reference"
+    assert "for real people" not in prompt, "Real people are still left out"
 
 
 def test_director_direct_valid_reply_returns_direction(

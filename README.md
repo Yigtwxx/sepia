@@ -36,7 +36,7 @@ Every request starts a new picture; `/add` builds on the current one. sepia only
 
 - **An art director, not a prompt box.** Claude paints what you asked for, as a search would show it, and finds its own twist only when you ask for one. It writes a detailed English photo prompt tuned for text rendering, and decides whether a request edits the current picture or starts a new one.
 - **Free to paint, local when you need it.** [FLUX.2 [klein] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) paints every picture: on [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) with a free account (about 100 pictures a day), or, with the optional `local` extra, on your own GPU (CUDA or Apple Silicon) whenever the API fails or rate limits. `/local` keeps it on your GPU.
-- **Real subjects stay recognizable.** Name a character, creature, product or landmark, or paste a link to a picture, and sepia paints from a reference picture instead of inventing a stranger.
+- **Real subjects stay recognizable.** Name a character, a famous person, a creature, product or landmark, or paste a link to a picture, and sepia paints from a reference picture instead of inventing a stranger.
 - **Made for the terminal.** 24-bit color, two styles and two character sets, a redraw on every resize without new API calls, and ripples that spread from the mouse pointer over the picture.
 - **Costs you can see.** `/usage` shows Claude's tokens, searches and estimated cost, for the session and for all time.
 - **Nothing hidden.** The two windows talk over an authenticated loopback socket, and sepia has no telemetry.
@@ -105,7 +105,7 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 
 ### Named subjects and reference pictures
 
-The image models know no names, so when a request names a specific character, creature, product or landmark ("yunara lol"), Claude names the subject and sepia finds its picture: the top result of an image search when a Brave Search key is set, otherwise the preview picture of the wiki page Claude links.
+The image models know no names, so when a request names a specific character, famous person, creature, product or landmark ("yunara lol", "keanu reeves"), Claude names the subject and sepia finds its picture: the top result of an image search when a Brave Search key is set, otherwise the preview picture of the wiki page Claude links (for a person, their Wikipedia photo). Famous people are shown with respect: no sexual, humiliating or gory pictures of them and no made-up news photos; such a request gets the nearest respectful picture. A name that is not a public figure's gets an ordinary person.
 
 - **A bare name** ("yunara lol") shows that picture as it is, whole and on black.
 - **A name in a scene** ("yunara on a beach") lets Claude see the picture and describe the subject from it, and the image model paints from it, so the subject keeps its real look.
