@@ -10,6 +10,8 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-29
+
 ### Added
 
 - `/effort [low|medium|high|xhigh|max]` sets how long Claude thinks about each
@@ -161,6 +163,7 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Yigtwxx/sepia/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Yigtwxx/sepia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Yigtwxx/sepia/releases/tag/v0.1.0
