@@ -79,7 +79,8 @@ STRINGS: dict[str, str] = {
     "no_reference": "Found no usable picture of {subject}; painting from the "
     "description.",
     "the_subject": "the subject",
-    "link_unusable": "That link gave no usable picture (https, 256 px or larger).",
+    "link_unusable": "That link gave no usable picture (needs https and a picture "
+    "at least 256 px on each side).",
     "opening": "Opening the picture window…",
     "add_usage": "Say what to add: /add snowy mountains",
     "style_set": "Style: {style} · charset: {charset}",

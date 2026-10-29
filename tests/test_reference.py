@@ -105,6 +105,26 @@ def test_find_reference_skips_logos_and_icons_and_takes_the_next_link(web) -> No
     assert found is not None and found.url == PICTURE, f"Got {found}"
 
 
+@pytest.mark.parametrize("host", ["www.google.com", "www.google.com.tr"])
+def test_find_reference_google_image_result_follows_its_imgurl(web, host: str) -> None:
+    # What a share.google link from Google Images lands on: a page with no preview
+    # picture, the picture's own address in its query.
+    query = urllib.parse.urlencode({"imgurl": PICTURE, "imgrefurl": PAGE, "tbnid": "x"})
+    result = f"https://{host}/imgres?{query}"
+    web[result] = (_page(""), "text/html")
+    web[PICTURE] = (_png(), "image/png")
+    found = find_reference([result])
+    assert found is not None and found.url == PICTURE, f"Got {found}"
+
+
+def test_find_reference_imgurl_on_another_site_is_not_followed(web) -> None:
+    query = urllib.parse.urlencode({"imgurl": PICTURE})
+    elsewhere = f"https://example.org/imgres?{query}"
+    web[elsewhere] = (_page(""), "text/html")
+    web[PICTURE] = (_png(), "image/png")
+    assert find_reference([elsewhere]) is None, "Only Google's result page is read"
+
+
 def test_find_reference_nothing_usable_returns_none(web) -> None:
     web[PAGE] = (_page(""), "text/html")
     assert find_reference([]) is None, "No links means no reference"

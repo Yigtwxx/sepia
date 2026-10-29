@@ -46,6 +46,8 @@ PREVIEW_KEYS = (
     "twitter:image",
     "twitter:image:src",
 )
+GOOGLE = re.compile(r"(?:www\.)?google\.(?:com?\.)?[a-z]{2,3}")
+"""Google's hosts: google.com, google.de, google.co.uk, google.com.tr."""
 
 
 @dataclass(frozen=True)
@@ -170,11 +172,24 @@ def _picture(url: str, follow_page: bool) -> Reference:
         image, cutout = _decode(data)
         return Reference(final, image, cutout)
     if kind == "text/html" and follow_page:
-        found = preview_image(data.decode("utf-8", errors="replace"), final)
+        found = _result_image(final) or preview_image(
+            data.decode("utf-8", errors="replace"), final
+        )
         # A preview drawn from an SVG file is a logo, map or diagram, not the subject.
         if found and ".svg" not in urllib.parse.urlsplit(found).path.lower():
             return _picture(found, follow_page=False)
     raise UnusableLink(url)
+
+
+def _result_image(url: str) -> str | None:
+    """The picture a Google Images result page shows, where a share.google link
+    leads: the page has no preview picture, but the picture's address is in its
+    query (`imgurl`)."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.path != "/imgres" or not GOOGLE.fullmatch(parts.hostname or ""):
+        return None
+    found = urllib.parse.parse_qs(parts.query).get("imgurl")
+    return found[0] if found else None
 
 
 def _download(url: str) -> tuple[bytes, str, str]:

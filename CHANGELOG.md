@@ -26,6 +26,13 @@ tag all carry.
   Fable thinking at high effort or above are not cut off. Only what is
   written is billed.
 
+### Fixed
+
+- A share.google link copied from Google Images now gives its picture: the
+  Google page it opens has no preview picture, so the picture's own address is
+  taken from the page's link. The message for an unusable link says that 256 px
+  is the smallest size taken, not the largest.
+
 ## [0.3.0] - 2026-10-29
 
 ### Added
