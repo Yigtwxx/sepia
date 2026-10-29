@@ -20,17 +20,18 @@ import SketchBox from './sketch/SketchBox.astro';
             ))}
         </dl>
         <p class="cli__fine">
-            <code>/style</code>, <code>/charset</code>, <code>/model</code>, <code>/effort</code>{' '}
-            and <code>/mature</code> without an argument open a menu: the arrow keys and Enter pick,
-            Esc cancels. Up and down walk the request history. Typing <code>/</code> opens a menu of
-            the matching commands above the chat bar: Tab completes, Enter runs.
+            <code>/style</code>, <code>/charset</code>, <code>/model</code>, <code>/effort</code>,{' '}
+            <code>/mature</code> and <code>/keys</code> without an argument open a menu: the arrow
+            keys and Enter pick, Esc cancels. Up and down walk the request history. Typing{' '}
+            <code>/</code> opens a menu of the matching commands above the chat bar: Tab completes,
+            Enter runs.
         </p>
     </div>
     <div class="cli__side">
         <h3 class="cli__h">Install</h3>
         <InstallBox id="cli-install" />
         <p class="marginalia cli__note">
-            The first run asks for your Anthropic key, typed hidden, and keeps it in your config
+            The first run asks for your keys one by one, typed hidden, and keeps them in your config
             folder.
         </p>
         <SketchBox padding="md" class="cli__local" draw>

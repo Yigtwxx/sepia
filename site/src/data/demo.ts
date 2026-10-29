@@ -57,7 +57,7 @@ export const welcome = {
     tip: ['Tip:', ' describe a scene, then build on it: "waterfall", "/add mountains"'] as const,
 };
 
-export const statusBar = `/help · haiku-5-5 (high) · ink/classic · ● window`;
+export const statusBar = `/help · haiku-5-5 (high) · local GPU · ink/classic · ● window`;
 
 const SPINNER = '✻✽✶✳✢·';
 const TICK_MS = 100; // repl.py turns the spinner at about ten frames a second

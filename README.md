@@ -95,7 +95,7 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/help` | List the commands. |
 | `/exit` | Close sepia and the viewer window. `/quit`, `/q`, Ctrl+D and Ctrl+C twice do the same. |
 
-`/style`, `/charset`, `/model`, `/effort` and `/mature` without an argument open a menu: the arrow keys and Enter (or the option's number) pick, Esc cancels. `/usage` opens a panel that Esc (or Enter) closes without leaving it in the transcript. Its session bar is drawn against the all-time total, so its gray rest is earlier use; use from before tracking began is estimated once from the prompt history and the saved sessions.
+`/style`, `/charset`, `/model`, `/effort`, `/mature` and `/keys` without an argument open a menu: the arrow keys and Enter (or the option's number) pick, Esc cancels. `/usage` opens a panel that Esc (or Enter) closes without leaving it in the transcript. Its session bar is drawn against the all-time total, so its gray rest is earlier use; use from before tracking began is estimated once from the prompt history and the saved sessions.
 
 ### Keys and the viewer
 
@@ -234,7 +234,7 @@ What leaves your machine:
 - **To Cloudflare:** the generated English prompt, the picture size, the seed and, as input pictures of at most 512 px a side, the reference picture and, for `/add`, the previous picture. Your original request is not sent. Nothing goes to Cloudflare when the picture is painted locally.
 - **To Hugging Face:** only the model download, after you say yes to it under `/local` or run `sepia --download`.
 
-Pictures, the request history and the API key file stay in the user config folder on your machine. sepia has no telemetry of its own.
+Pictures, the request history and the API key file stay in the user config folder on your machine; a picture you keep with `/save` goes to the `sepia` folder of your Pictures folder. sepia has no telemetry of its own.
 
 ## Development
 

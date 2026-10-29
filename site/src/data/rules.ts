@@ -21,14 +21,14 @@ export const rules: readonly Rule[] = [
         id: 'home',
         icon: 'noglobe',
         title: 'Phone home.',
-        body: 'There is *no telemetry*. Pictures, the request history and the key file stay in your user config folder, and the newest ten sessions are all it keeps.',
+        body: 'There is *no telemetry*. Pictures, the request history and the key file stay in your user config folder, and the newest ten sessions are all it keeps. A picture you `/save` goes to your Pictures folder.',
         margin: 'What it knows about you fits in one folder you can open.',
     },
     {
         id: 'key',
         icon: 'key',
         title: 'Write your key anywhere you did not put it.',
-        body: 'Keys come from the environment or a `.env` file and are *never written to code, logs or error messages*. Asked on the first run, the key is typed hidden and saved to the config folder; on macOS that file is mode 600.',
+        body: 'Keys come from the environment or a `.env` file and are *never written to code, logs or error messages*. Asked on the first run or with `/keys`, each key is typed hidden and saved to the config folder; on macOS that file is mode 600.',
         margin: 'Hidden as you type it, and after.',
     },
     {

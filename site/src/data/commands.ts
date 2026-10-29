@@ -16,14 +16,16 @@ export const slashCommands: readonly Command[] = [
     { cmd: '/clear', comment: 'clear the screen and start a fresh picture' },
     { cmd: '/style [ink|fill]', comment: 'choose how the picture is drawn' },
     { cmd: '/charset [classic|symbols]', comment: 'choose the characters that draw it' },
+    { cmd: '/save', comment: 'save the picture in the window to Pictures/sepia' },
     { cmd: '/model [haiku|sonnet|opus|fable]', comment: 'choose which Claude writes the prompts' },
     { cmd: '/effort [low|medium|high|xhigh|max]', comment: 'choose how long Claude thinks' },
     { cmd: '/mature [on|off]', comment: 'allow sexy and dark pictures, never explicit' },
     { cmd: '/api', comment: 'paint with Cloudflare, on this machine when it fails' },
     { cmd: '/local', comment: 'paint only on this machine’s GPU' },
+    { cmd: '/keys [anthropic|cloudflare]', comment: 'set the keys sepia uses' },
     { cmd: '/usage', comment: 'show what Claude used and cost, now and in all' },
     { cmd: '/help', comment: 'show this list' },
-    { cmd: '/exit', comment: 'close sepia and its window (also Ctrl+D)' },
+    { cmd: '/exit', comment: 'close sepia and its window (also Ctrl+D, or Ctrl+C twice)' },
 ];
 
 /* The local painter: FLUX.2 [klein] 4B on your own GPU, from the README. */
@@ -49,7 +51,7 @@ export const settings: readonly { name: string; value: string; what: string }[] 
     {
         name: 'ANTHROPIC_API_KEY',
         value: 'asked on first run',
-        what: 'the art director; the one key sepia asks for',
+        what: 'the art director; the one key sepia needs',
     },
     {
         name: 'CLOUDFLARE_ACCOUNT_ID',
@@ -66,9 +68,10 @@ export const settings: readonly { name: string; value: string; what: string }[] 
     { name: 'SEPIA_EFFORT', value: 'high', what: 'how long Claude thinks per picture' },
     { name: 'SEPIA_STYLE', value: 'ink', what: 'ink or fill' },
     { name: 'SEPIA_CHARSET', value: 'classic', what: 'classic or symbols' },
+    { name: 'SEPIA_MATURE', value: 'off', what: 'start with mature pictures on or off' },
 ];
 
-export const version = '0.2.1';
+export const version = '0.3.4';
 export const repo = 'https://github.com/Yigtwxx/sepia';
 export const pypi = 'https://pypi.org/project/sepia-cli/';
 

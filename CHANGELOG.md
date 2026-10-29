@@ -10,6 +10,11 @@ tag all carry.
 
 ## [Unreleased]
 
+### Changed
+
+- The landing page lists `/save` and `/keys`, `SEPIA_MATURE` and the current
+  version, and its demo status line shows the painter as sepia's does.
+
 ### Fixed
 
 - The status line names the painter that actually paints: after `/keys`
