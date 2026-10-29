@@ -1,9 +1,11 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 from PIL import Image
 
-from sepia.viewer import ViewerState, render_frame
+from sepia.ascii_art import SymbolArt
+from sepia.viewer import Hover, ViewerState, render_frame
 
 
 @pytest.fixture
@@ -60,3 +62,26 @@ def test_render_frame_fills_the_window(picture: str) -> None:
     lines = render_frame(ViewerState(path=picture), 30, 10).plain.split("\n")
     assert len(lines) == 10, f"Expected 10 rows, got {len(lines)}"
     assert {len(line) for line in lines} == {30}, "Every row must span the window"
+
+
+def _gray_art() -> SymbolArt:
+    return SymbolArt(
+        np.full((12, 40), "a"), np.full((12, 40, 3), 100, dtype=np.uint8), None
+    )
+
+
+def test_hover_pointer_report_drops_a_ripple_under_the_pointer() -> None:
+    written: list[str] = []
+    hover = Hover(written.append)
+    hover.step(_gray_art(), "[<35;10;5M")
+    assert any("[5;" in chunk for chunk in written), f"Got {written!r}"
+
+
+def test_hover_after_a_full_redraw_draws_nothing() -> None:
+    written: list[str] = []
+    hover = Hover(written.append)
+    hover.step(_gray_art(), "[<35;10;5M")
+    hover.forget()
+    written.clear()
+    hover.step(_gray_art(), "")
+    assert written == [], f"A redraw wiped the ripples, but got {written!r}"

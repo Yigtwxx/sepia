@@ -1,7 +1,6 @@
 """The picture window: full screen, nothing but the drawing."""
 
 import contextlib
-import random
 import sys
 import time
 from collections.abc import Callable, Iterator
@@ -24,10 +23,18 @@ from sepia.ascii_art import (
     to_text,
 )
 from sepia.config import DEFAULT_CHARSET, DEFAULT_STYLE
-from sepia.glitch import DURATION, FRAME_SECONDS, glitch_ansi, restore_ansi
 from sepia.ipc import Channel, Message, Session, connect
 from sepia.mouse import MOUSE_OFF, MOUSE_ON, MouseParser, read_input
 from sepia.raster import enhance, fit_image
+from sepia.ripple import (
+    DURATION,
+    FRAME_SECONDS,
+    MAX_RIPPLES,
+    Mask,
+    Ripple,
+    ripple_ansi,
+    spaced,
+)
 
 POLL_SECONDS = 0.01
 """How long to wait for a message before checking the window size again."""
@@ -92,15 +99,14 @@ def _picture(path: str) -> Image.Image:
 
 
 class Hover:
-    """Glitches the picture around the mouse pointer and heals it afterwards."""
+    """Drops ripples along the mouse pointer's path over the picture."""
 
     def __init__(self, write: Callable[[str], object]) -> None:
         self._write = write
         self._parser = MouseParser()
-        self._rng = random.Random()
-        self._point: tuple[int, int] | None = None
-        self._moved_at = 0.0
-        self._drawn: tuple[int, int] | None = None
+        self._ripples: list[Ripple] = []
+        self._dropped: tuple[int, int] | None = None
+        self._drawn: Mask | None = None
         self._frame_at = 0.0
 
     def start(self) -> None:
@@ -110,35 +116,30 @@ class Hover:
         self._write(MOUSE_OFF)
 
     def forget(self) -> None:
-        """The screen was redrawn; nothing is glitched any more."""
-        self._drawn = None
+        """The screen was redrawn; no ripple shows any more."""
+        self._ripples.clear()
+        self._dropped, self._drawn = None, None
 
     def step(self, art: SymbolArt | None, typed: str) -> None:
-        """Take new pointer reports and draw the next glitch frame if one is due."""
+        """Take new pointer reports and draw the next ripple frame if one is due."""
         point = self._parser.feed(typed) if typed else None
         now = time.monotonic()
         if art is None:
             return
-        if point is not None:
+        if point is not None and spaced(self._dropped, point):
             col, row = point
             if 0 <= col < art.cols and 0 <= row < art.rows:
-                self._heal(art)
-                self._point, self._moved_at = point, now
-        if self._point is None:
+                kept = self._ripples[-(MAX_RIPPLES - 1) :]
+                self._ripples = [*kept, Ripple(col, row, now)]
+                self._dropped = point
+        self._ripples = [r for r in self._ripples if now - r.born < DURATION]
+        if not self._ripples and self._drawn is None:
             return
-        age = now - self._moved_at
-        if age >= DURATION:
-            self._heal(art)
-            self._point = None
-        elif now - self._frame_at >= FRAME_SECONDS:
-            strength = 1.0 - age / DURATION
-            self._write(glitch_ansi(art, *self._point, strength, self._rng))
-            self._drawn, self._frame_at = self._point, now
-
-    def _heal(self, art: SymbolArt) -> None:
-        if self._drawn is not None:
-            self._write(restore_ansi(art, *self._drawn))
-            self._drawn = None
+        if now - self._frame_at >= FRAME_SECONDS:
+            ansi, drawn = ripple_ansi(art, self._ripples, now, self._drawn)
+            self._write(ansi)
+            self._drawn = drawn if drawn.any() else None
+            self._frame_at = now
 
 
 def run_viewer(session_file: Path) -> int:
@@ -188,7 +189,7 @@ def _loop(channel: Channel, console: Console) -> None:
                         art = render_art(state, size.width, size.height)
                         frame = Text("") if art is None else _art_text(art)
                     screen.update(frame)
-                    hover.forget()  # the full redraw wiped any glitch
+                    hover.forget()  # the full redraw wiped any ripple
                     dirty = False
                 hover.step(art, read_input())
                 console.file.flush()

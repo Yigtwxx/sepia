@@ -37,6 +37,10 @@ tag all carry.
 
 ### Changed
 
+- Moving the mouse over the picture sends ripples out from the pointer
+  instead of glitching it: rings that bend the picture a cell or two, light
+  up at their crest with a darker trough either side, and fade as they
+  spread. Moving the pointer leaves a trail of them.
 - The art director looks for an idea before writing the prompt: a striking,
   concrete scene instead of the first cliché ("multiverse" no longer means a
   row of glowing spheres). Prompts are 60 to 100 words.

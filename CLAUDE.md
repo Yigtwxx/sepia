@@ -26,6 +26,7 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/ipc.py`: HMAC-authenticated loopback channel, JSON messages only, session file.
 - `src/sepia/launcher.py`: opens the viewer (Windows Terminal window with a purple "sepia" tab and a fragment profile, conhost fallback, Terminal.app via osascript).
 - `src/sepia/viewer.py`: full-screen picture window; redraws on resize and on messages.
+- `src/sepia/mouse.py`: pointer reports from the terminal (SGR mouse mode); `src/sepia/ripple.py`: the rings that spread from the pointer, drawn as ANSI over the changed cells only.
 - `src/sepia/config.py`: settings from env and `.env` files, key storage, config dir.
 - `tests/`: one `test_<module>.py` per module, shared fixtures in `conftest.py`.
 - `scripts/spike.py`: quality spike; `scripts/release_notes.py`: CHANGELOG section for a release.
