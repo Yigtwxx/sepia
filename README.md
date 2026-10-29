@@ -24,10 +24,10 @@ sepia is a command-line tool that turns short requests into pictures made of tex
 ```text
 › waterfall
  ⏺ Painting a tall waterfall in a mossy gorge.
-   pollinations · 6.2s
+   cloudflare · 6.2s
 › /add mountains
  ⏺ Adding snowy mountains behind the waterfall.
-   pollinations · 5.8s
+   cloudflare · 5.8s
 ```
 
 Every request starts a new picture; `/add` builds on the current one. sepia only makes pictures; it is not a chat assistant.
@@ -35,7 +35,7 @@ Every request starts a new picture; `/add` builds on the current one. sepia only
 ## Features
 
 - **An art director, not a prompt box.** Claude looks for a striking scene instead of the first cliché, writes a detailed English photo prompt tuned for text rendering, and decides whether a request edits the current picture or starts a new one.
-- **Free to paint, local when you need it.** Pictures come from [Pollinations](https://pollinations.ai). With the optional `local` extra, [FLUX.2 [klein] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) paints on your own GPU (CUDA or Apple Silicon) whenever the API fails or rate limits.
+- **Free to paint, local when you need it.** [FLUX.2 [klein] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) paints every picture: on [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) with a free account (about 100 pictures a day), or, with the optional `local` extra, on your own GPU (CUDA or Apple Silicon) whenever the API fails or rate limits. `/local` keeps it on your GPU.
 - **Real subjects stay recognizable.** Name a character, creature, product or landmark, or paste a link to a picture, and sepia paints from a reference picture instead of inventing a stranger.
 - **Made for the terminal.** 24-bit color, two styles and two character sets, a redraw on every resize without new API calls, and ripples that spread from the mouse pointer over the picture.
 - **Costs you can see.** `/usage` shows Claude's tokens, searches and estimated cost, for the session and for all time.
@@ -43,18 +43,18 @@ Every request starts a new picture; `/add` builds on the current one. sepia only
 
 ## Quick start
 
-You need Windows 10/11 or macOS, [uv](https://docs.astral.sh/uv/), and an [Anthropic API key](https://console.anthropic.com/). uv provides Python 3.12 if you do not have it.
+You need Windows 10/11 or macOS, [uv](https://docs.astral.sh/uv/), an [Anthropic API key](https://console.anthropic.com/), and somewhere to paint: a free [Cloudflare account](#cloudflare-workers-ai) or the [local model](#install) on your GPU. uv provides Python 3.12 if you do not have it.
 
 ```bash
 uv tool install sepia-cli
 sepia
 ```
 
-On the first run sepia asks for your Anthropic API key (hidden input) and saves it to the user config folder. Type `waterfall` and press Enter: the viewer window opens with the picture. Keep it next to the prompt window, then try `/add mountains`.
+On the first run sepia asks for your Anthropic API key (hidden input) and saves it to the user config folder. Put `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in the environment or in the `.env` file in that folder (see [Cloudflare Workers AI](#cloudflare-workers-ai)). Type `waterfall` and press Enter: the viewer window opens with the picture. Keep it next to the prompt window, then try `/add mountains`.
 
 ## Install
 
-**API painting only.** A small install that needs no GPU:
+**Cloudflare painting only.** A small install that needs no GPU:
 
 ```bash
 uv tool install sepia-cli
@@ -91,6 +91,8 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/model [haiku\|sonnet\|opus\|fable]` | Which Claude writes the prompts, from the next request on: Haiku 5.5 (the default), Sonnet 5.5, Opus 5.5 or Fable 5.1. |
 | `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. |
 | `/mature [on\|off]` | Mature pictures; see [Mature mode](#mature-mode). Off by default. |
+| `/api` | Paint with Cloudflare Workers AI, and with the local model when it fails. Also makes sepia try Cloudflare again after a rate-limit pause or a used-up day; see [Painting backends](#painting-backends). |
+| `/local` | Paint only on this machine's GPU. Refused, with a hint, while the local model is not ready. |
 | `/usage` | What Claude used in this session and in all sessions: tokens, web searches and estimated cost. Esc closes it. |
 | `/help` | List the commands. |
 | `/exit` | Close sepia and the viewer window. `/quit`, `/q` and Ctrl+D do the same. |
@@ -99,8 +101,8 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 
 ### Keys and the viewer
 
-- Up and down arrows walk the request history. Typing `/` completes commands, and Enter on a partial command runs the suggested one (`/us` opens `/usage`).
-- The bottom bar shows the model and its effort (and `mature` when it is on), the current style and charset, and whether the viewer window is connected (`●`) or not (`○`).
+- Up and down arrows walk the request history. Typing `/` opens a menu of the matching commands, with their descriptions, above the chat bar: the up and down arrows move through it, Tab completes the highlighted command, and Enter runs it.
+- The status line under the chat bar shows the painter, the model and its effort (and `mature` when it is on), the current style and charset, and whether the viewer window is connected (`●`) or not (`○`).
 - Moving the mouse over the viewer window sends ripples out from the pointer: rings that bend the picture, light up at their crest and fade. Windows Terminal and iTerm2 report pointer movement; macOS Terminal.app may not.
 
 ### Named subjects and reference pictures
@@ -111,7 +113,7 @@ The image models know no names, so when a request names a specific character, cr
 - **A name in a scene** ("yunara on a beach") lets Claude see the picture and describe the subject from it, and the image model paints from it, so the subject keeps its real look.
 - **A pasted link** to a picture, or to a page with a preview picture ("yunara https://…"), becomes the reference directly: Claude sees it and no search is made.
 
-Reference pictures work with a Pollinations key and with the local model; the keyless API ignores them.
+Reference pictures work with both painters: Cloudflare receives the picture as an input image, downscaled to at most 512 px a side, and the local model paints from it the same way.
 
 ### Mature mode
 
@@ -133,7 +135,8 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | none | Required. Asked for on the first run if missing and saved to the user config `.env`. |
 | `BRAVE_SEARCH_API_KEY` | none | Optional key from [brave.com/search/api](https://brave.com/search/api) (monthly free credits, about 1,000 searches). Named subjects come from the top pictures of an image search instead of wiki pages. |
-| `POLLINATIONS_KEY` | none | Optional key from [enter.pollinations.ai](https://enter.pollinations.ai). Uses the keyed endpoint with `flux.2-klein-4b` and no logo. Pictures are paid from the account's pollen (1 pollen = $1, about $0.005 a picture); new accounts get a one-time bonus and there is no free refill. Out of pollen, sepia moves on to the next painter. |
+| `CLOUDFLARE_ACCOUNT_ID` | none | Your Cloudflare account ID, for painting on [Cloudflare Workers AI](#cloudflare-workers-ai). Goes together with `CLOUDFLARE_API_TOKEN`. |
+| `CLOUDFLARE_API_TOKEN` | none | A Workers AI API token. Without the two Cloudflare settings, sepia paints only with the local model. |
 | `SEPIA_MODEL` | `claude-haiku-5-5` | The starting art director model. `/model` switches between `claude-haiku-5-5`, `claude-sonnet-5-5` (about 20 times the price), `claude-opus-5-5` (about 40 times) and `claude-fable-5-1` (about 100 times) while sepia runs. |
 | `SEPIA_EFFORT` | `high` | Starting Claude effort: `low`, `medium`, `high`, `xhigh` or `max`. `/effort` changes it while sepia runs. |
 | `SEPIA_STYLE` | `ink` | Starting style: `ink` or `fill`. |
@@ -141,9 +144,23 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | `SEPIA_MATURE` | `off` | Start with mature pictures `on` or `off`. `/mature` changes it while sepia runs. |
 | `SEPIA_IMAGE_MODEL` | `black-forest-labs/FLUX.2-klein-4B` | Hugging Face id of the local model. |
 
-An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE`, `SEPIA_CHARSET` or `SEPIA_MATURE` stops sepia at startup.
+An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE`, `SEPIA_CHARSET` or `SEPIA_MATURE` stops sepia at startup. So does setting only one of `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
 
-The user config folder is `%LOCALAPPDATA%\sepia` on Windows and `~/Library/Application Support/sepia` on macOS. It holds the key file, the request history, the all-time usage totals (`usage.json`), and one folder per session with that session's pictures (`01.png`, `02.png`, ...). The newest 10 session folders are kept.
+What you pick with `/model`, `/effort`, `/style`, `/charset`, `/mature`, `/api` or `/local` is kept in `choices.json` in the user config folder, and the next sepia starts with it. A kept choice wins over its `SEPIA_*` variable, which only sets what you have never picked; delete the file to start from the variables again. sepia starts with Cloudflare until you pick `/local`.
+
+The user config folder is `%LOCALAPPDATA%\sepia` on Windows and `~/Library/Application Support/sepia` on macOS. It holds the key file, the request history, the all-time usage totals (`usage.json`), the choices kept between sessions (`choices.json`), and one folder per session with that session's pictures (`01.png`, `02.png`, ...). The newest 10 session folders are kept.
+
+### Cloudflare Workers AI
+
+A free Cloudflare account is enough, with no credit card:
+
+1. In the Cloudflare dashboard, open [Workers AI](https://dash.cloudflare.com/?to=/:account/ai/workers-ai) and choose **Use REST API**.
+2. Choose **Create a Workers AI API Token**, review the prefilled permissions, choose **Create**, and copy the token into `CLOUDFLARE_API_TOKEN`.
+3. Copy the **Account ID** shown on the same page into `CLOUDFLARE_ACCOUNT_ID`.
+
+Your tokens are listed at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens).
+
+The free tier gives 10,000 neurons a day, reset at 00:00 UTC. At sepia's picture size (about 1024x640) one picture costs roughly 80 to 105 neurons, so the free tier paints about 100 pictures a day. That is an estimate from Cloudflare's per-tile price; see [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 
 ## How it works
 
@@ -156,7 +173,7 @@ prompt window                                                  viewer window
 Claude (art director) -> English photo prompt, edit or new, one-line reply
         |
         v
-Pollinations web API ---- fails or rate limited ----> FLUX.2 [klein] 4B on your GPU
+Cloudflare Workers AI --- fails or rate limited ----> FLUX.2 [klein] 4B on your GPU
         |                                                      |
         +------------------------> PNG <-----------------------+
                                     |
@@ -164,7 +181,7 @@ Pollinations web API ---- fails or rate limited ----> FLUX.2 [klein] 4B on your 
 ```
 
 1. **Direct.** Claude (`claude-haiku-5-5` at high effort by default) looks for an idea, then turns the request and the scene so far into a detailed English photo prompt written for symbol rendering: one dominant shape, strong light, saturated color, no text. It also decides whether the request edits the current picture or starts a new one, and writes a one-sentence reply. The reply is structured output: JSON with a fixed schema.
-2. **Paint.** The prompt goes to Pollinations first. If the API fails or rate limits, sepia paints the picture locally with FLUX.2 [klein] 4B (Apache 2.0), if you installed the local extra. The picture is painted at the viewer window's aspect ratio.
+2. **Paint.** The prompt goes to Cloudflare Workers AI first, which runs FLUX.2 [klein] 4B (Apache 2.0). If the API fails or rate limits, sepia paints the picture locally with the same model, if you installed the local extra. `/local` paints only locally; `/api` goes back to Cloudflare first. The picture is painted at the viewer window's aspect ratio.
 3. **Show.** The picture is saved as a PNG and the viewer window is told where it is. The viewer stretches contrast, boosts saturation, crops the picture to the window, and draws every cell as one character whose density matches the brightness, in 24-bit color where the terminal supports it (256 colors otherwise).
 
 The two windows are two processes that talk over an authenticated loopback socket; see [SECURITY.md](https://github.com/Yigtwxx/sepia/blob/main/SECURITY.md).
@@ -173,11 +190,10 @@ The two windows are two processes that talk over an authenticated loopback socke
 
 | Backend | When it runs | Notes |
 | --- | --- | --- |
-| Pollinations, keyed (`gen.pollinations.ai`) | First, when `POLLINATIONS_KEY` is set | `flux.2-klein-4b`, no logo, paid from the account's pollen. |
-| FLUX.2 [klein] 4B, local | Once downloaded, before the keyless API; without it, last | Needs `sepia-cli[local]` and `sepia --download`. The same model as the keyed API. |
-| Pollinations, keyless (`image.pollinations.ai`) | Last once the local model is downloaded; otherwise right after the keyed API (first without a key) | Free, about one picture per 15 seconds, a weaker model and a small logo. Requests are sent with `private=true`. |
+| Cloudflare Workers AI (`@cf/black-forest-labs/flux-2-klein-4b`) | First, when `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are set; never under `/local` | FLUX.2 [klein] 4B. Free up to 10,000 neurons a day, about 100 pictures. Takes the previous picture and reference pictures as input images, at most 512 px a side. |
+| FLUX.2 [klein] 4B, local | When Cloudflare fails or rate limits; the only painter without the Cloudflare settings or under `/local` | Needs `sepia-cli[local]` and `sepia --download`. The same model as on Cloudflare. |
 
-After a rate-limit answer (HTTP 429), sepia skips that endpoint for 120 seconds instead of retrying it on every picture. After an out-of-credit answer (HTTP 402) it skips the endpoint until sepia restarts, since waiting does not bring pollen back.
+After a rate-limit answer (HTTP 429), sepia skips Cloudflare for 120 seconds and paints locally instead of retrying it on every picture. Once the day's free allocation is used up (Cloudflare error 4006), it skips Cloudflare for the rest of the session, since a short wait does not bring it back. `/api` or a restart makes sepia try Cloudflare again after either. A rejected token (HTTP 401 or 403) gets a message that says so. Cloudflare's safety filter sometimes flags a harmless picture, and not every time for the same prompt; that picture is painted locally and the next one goes to Cloudflare again. Whenever the local model paints because Cloudflare failed, the reply's detail line says why.
 
 The local model runs on CUDA, then Apple Silicon (MPS), then CPU, whichever is found first:
 
@@ -185,7 +201,7 @@ The local model runs on CUDA, then Apple Silicon (MPS), then CPU, whichever is f
 - **MPS:** bf16 weights without quantization, so it needs more memory than the CUDA path.
 - **CPU:** float32. It works, but slowly.
 
-Once the model is downloaded, it starts loading in the background as soon as sepia opens, so the first local picture rarely waits for it; it holds about 5 GB of VRAM from then on, until sepia closes. Edits differ by backend: the local model repaints using the previous picture as a reference, while the API cannot see the previous picture and repaints from the full prompt with the scene's fixed seed, which keeps the composition close.
+Once the model is downloaded, it starts loading in the background as soon as sepia opens, so the first local picture rarely waits for it; it holds about 5 GB of VRAM from then on, until sepia closes. Edits work the same on both backends: `/add` hands the previous picture to the model, which edits it with the scene's fixed seed, so the composition stays close.
 
 ## Cost
 
@@ -193,7 +209,7 @@ Once the model is downloaded, it starts loading in the background as soon as sep
 | --- | --- |
 | Claude Haiku as art director | About $0.001 per request with the default model and effort, plus $0.01 per web search |
 | Brave image search | About $0.005 per named subject, covered by Brave's monthly free credits |
-| Pollinations | Keyless: free. With a key: about $0.005 a picture from your pollen, after a one-time bonus for new accounts |
+| Cloudflare Workers AI | Free up to 10,000 neurons a day (about 100 pictures), reset at 00:00 UTC; after that the local model paints |
 | Local model | Free, runs on your hardware |
 
 A larger model (`/model`, `SEPIA_MODEL`) or a higher effort costs more per request: about $0.03 on Sonnet 5.5, $0.05 on Opus 5.5 and $0.12 on Fable 5.1.
@@ -217,7 +233,7 @@ What leaves your machine:
 - **To Anthropic:** your request, the earlier requests of the current scene, the last generated prompt, and a reference picture when one is used.
 - **To Brave Search:** a short image search query for a named subject, written by Claude, only when `BRAVE_SEARCH_API_KEY` is set.
 - **To the site of a reference picture:** a plain download of the linked page or picture, when a request names a subject or contains a link.
-- **To Pollinations:** the generated English prompt, the picture size, the seed and, with a key, the reference picture's link. Your original request is not sent. Nothing goes to Pollinations when the picture is painted locally.
+- **To Cloudflare:** the generated English prompt, the picture size, the seed and, as input pictures of at most 512 px a side, the reference picture and, for `/add`, the previous picture. Your original request is not sent. Nothing goes to Cloudflare when the picture is painted locally.
 - **To Hugging Face:** only the model download when you run `sepia --download`.
 
 Pictures, the request history and the API key file stay in the user config folder on your machine. sepia has no telemetry of its own.

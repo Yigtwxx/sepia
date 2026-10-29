@@ -16,9 +16,9 @@ The maintainer, [@Yigtwxx](https://github.com/Yigtwxx), handles reports on a bes
 
 **API keys.**
 
-- `ANTHROPIC_API_KEY` and `POLLINATIONS_KEY` are read from the environment or from `.env` files. They are never written to code, logs or error messages.
+- `ANTHROPIC_API_KEY` and `CLOUDFLARE_API_TOKEN` (with `CLOUDFLARE_ACCOUNT_ID`) are read from the environment or from `.env` files. The key and the token are never written to code, logs or error messages.
 - When sepia asks for the Anthropic key on the first run, the input is hidden. The key is saved to `.env` in the user config folder (`%LOCALAPPDATA%\sepia` on Windows, `~/Library/Application Support/sepia` on macOS). On macOS the file is set to mode 600. On Windows, POSIX modes do not apply; the file relies on the per-user profile folder's default permissions.
-- The Pollinations key travels only in the `Authorization` header of HTTPS requests to `gen.pollinations.ai`.
+- The Cloudflare token travels only in the `Authorization: Bearer` header of HTTPS requests to `api.cloudflare.com`.
 
 **The channel between the two windows.**
 
@@ -31,7 +31,7 @@ The maintainer, [@Yigtwxx](https://github.com/Yigtwxx), handles reports on a bes
 
 ## Out of scope
 
-- What the image models paint. Pictures come from third-party models (Pollinations, FLUX.2 [klein]).
-- Issues in Anthropic, Pollinations or Hugging Face services themselves; report those to the provider.
-- Data those services receive by design: the request text goes to Anthropic, and the generated prompt goes to Pollinations unless the picture is painted locally. See the privacy section of the [README](README.md#privacy).
+- What the image model paints. Pictures come from a third-party model, FLUX.2 [klein] 4B, on Cloudflare Workers AI or on your own GPU.
+- Issues in Anthropic, Cloudflare or Hugging Face services themselves; report those to the provider.
+- Data those services receive by design: the request text goes to Anthropic, and the generated prompt, with any input pictures, goes to Cloudflare unless the picture is painted locally. See the privacy section of the [README](README.md#privacy).
 - Attacks that need control of the user's account or files already, such as reading the key file as the same user.

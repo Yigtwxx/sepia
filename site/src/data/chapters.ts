@@ -83,11 +83,11 @@ export const chapters: readonly Chapter[] = [
         plateNumber: 'Pl. IV',
         plateCaption: 'Werner Th. Meyer, *Sepia officinalis*, 1913. The fin runs the whole mantle.',
         body: [
-            'The prompt goes to *Pollinations* first. When the API fails or rate limits, sepia paints on your own GPU with *FLUX.2 [klein] 4B*, the same model the keyed API runs: CUDA first, then Apple Silicon, then the CPU.',
-            'After a 429 it leaves that endpoint alone for 120 seconds instead of asking again on every picture; after a 402 it stops asking until sepia restarts, since waiting does not bring credit back.',
+            'The prompt goes to *Cloudflare Workers AI* first, which runs *FLUX.2 [klein] 4B* on a free account. When the API fails or rate limits, sepia paints on your own GPU with the same model: CUDA first, then Apple Silicon, then the CPU. `/local` keeps it there.',
+            'After a 429 it leaves Cloudflare alone for 120 seconds instead of asking again on every picture. Once the day’s free allocation is used up, it stops asking until `/api` or a restart, since a short wait does not bring it back.',
         ],
         tagsLabel: 'painters',
-        tags: ['pollinations', 'local GPU', 'pollinations (free)'],
+        tags: ['cloudflare', 'local GPU'],
         ledger: [
             { key: 'BLACK HOLE', text: 'local GPU · 4.0 s', note: '800 × 496' },
             { key: 'COMET', text: 'local GPU · 5.9 s', note: 'repainted from the first' },

@@ -1,7 +1,7 @@
 # sepia design
 
 Date: 2026-10-28
-Revised: 2026-10-29 (photographs instead of SVG, see below)
+Revised: 2026-10-29 (photographs instead of SVG; then Cloudflare Workers AI as the painter, see below)
 Status: approved
 
 ## Goal
@@ -28,12 +28,27 @@ Image generation APIs cost money per picture, so the pipeline was rebuilt around
 
 - **Claude becomes the art director, not the artist.** Claude Haiku (low effort) writes a detailed photo prompt from the
   request and the scene history. That costs about $0.0003 per request instead of about $0.10 per SVG picture on Opus.
-- **Pollinations paints first.** Its web API is free, keyless at a low rate or with a free key.
+- **A free web API paints first.** Cloudflare Workers AI since the revision below.
 - **FLUX.2 [klein] 4B paints locally when the API fails or rate limits.** It is Apache 2.0, distilled to four steps, and
   edits from a reference image. It is an optional extra so the base install stays small.
 
 The modules `artist` (SVG from Claude) and the resvg rasterizer were removed. `director`, `painter` and the new `raster`
 replace them.
+
+## Revision 2026-10-29: Cloudflare Workers AI instead of Pollinations
+
+The first web painter was Pollinations. Its keyless endpoint painted about one picture per 15 s with a weaker model and
+a small logo, its keyed endpoint was paid from pollen with no free refill, and neither could take an input picture, so
+edits through the API repainted from the prompt and references were ignored. Pollinations is removed entirely, with
+`POLLINATIONS_KEY`.
+
+- **Cloudflare Workers AI paints first.** It runs `@cf/black-forest-labs/flux-2-klein-4b`, the same FLUX.2 [klein] 4B
+  as the local fallback. A free account gives 10,000 neurons a day (reset at 00:00 UTC); at about 1024x640 a picture
+  costs roughly 80 to 105 neurons, so about 100 pictures a day.
+- **It takes input pictures.** `/add` sends the previous picture and the API edits it; a reference picture of a named
+  subject is sent too. Edits and references now work the same with both painters.
+- **The user picks the painter.** `/api` paints with Cloudflare and falls back to the local model; `/local` paints only
+  locally.
 
 ## Name
 
@@ -49,7 +64,7 @@ Two processes, one per terminal window, joined by an authenticated loopback sock
 terminal 1: sepia (prompt)                              terminal 2: sepia --viewer <session file> (spawned)
   prompt_toolkit input, rich output                       alternate screen, hidden cursor, echo off
   Director -> Claude -> {message, prompt, edit}
-  Painter  -> Pollinations | local FLUX.2 -> PNG
+  Painter  -> Cloudflare | local FLUX.2 -> PNG
   saves the PNG in the session folder   -- {"type":"image","path",...} -->  PNG -> enhance -> crop -> symbols -> rich
   prints Claude's one-line reply        -- {"type":"style"|"clear"|"bye"} -->
   paints at the viewer's aspect ratio   <-- {"type":"size","cols","rows"} --  re-renders on resize, no API call
@@ -63,14 +78,15 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
 | `config` | Settings and API key lookup, key storage, config folder | `platformdirs`, `python-dotenv` |
 | `scene` | Requests, prompts, latest picture and fixed seed; viewer size (`Canvas`) | `pillow` |
 | `director` | One Claude call: request + scene in, `Direction(message, prompt, edit)` out | `anthropic`, `pydantic` |
-| `painter` | Pollinations and local FLUX.2 painters, fallback chain, device choice | `urllib`, optional `torch`, `diffusers` |
+| `painter` | Cloudflare Workers AI and local FLUX.2 painters, fallback chain, device choice | `urllib`, optional `torch`, `diffusers` |
 | `raster` | Contrast and color boost; cover-crop to the grid | `pillow`, `numpy` |
 | `ascii_art` | RGB array to a grid of colored symbols | `numpy`, `rich` |
 | `ipc` | Authenticated JSON messages over `127.0.0.1` | `multiprocessing.connection` |
 | `launcher` | Opens the viewer in a new window on each OS | `subprocess` |
 | `viewer` | Full-screen picture display, redraw on resize | `ipc`, `raster`, `ascii_art`, `rich` |
 | `ui` | Wordmark, palette, replies, interface strings (English) | `rich` |
-| `repl` | The prompt loop, commands, spinner, session folders | `director`, `painter`, `ipc`, `launcher`, `ui` |
+| `chatbar` | The chat bar pinned to the bottom rows, with the slash-command menu above it | `prompt_toolkit` |
+| `repl` | The prompt loop, commands, spinner, session folders | `director`, `painter`, `ipc`, `launcher`, `ui`, `chatbar` |
 
 ## Request pipeline
 
@@ -82,15 +98,18 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
    `edit` is forced to false on an empty scene. Model `claude-haiku-5-5` at effort `low` (`SEPIA_MODEL`,
    `SEPIA_EFFORT`); models that support it get Anthropic's server-side fallback.
 2. **Paint.** The picture size follows the viewer's aspect ratio, about 1024x640 pixels in area, in multiples of 16.
-   The chain is: Pollinations with the user's key (`gen.pollinations.ai`, `flux.2-klein-4b`), then keyless Pollinations
-   (`image.pollinations.ai`, `private=true`, about one picture per 15 s, small logo), then the local model. A 429 or 402
-   answer skips that endpoint for 120 s. Every request in a scene uses the scene's fixed seed.
+   The chain is: Cloudflare Workers AI (`@cf/black-forest-labs/flux-2-klein-4b`, multipart upload) when
+   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are set, then the local model. A 429 skips Cloudflare for 120 s; a
+   used-up daily allocation (Cloudflare error 4006) skips it for the rest of the session. `/api` clears either and tries
+   Cloudflare again; `/local` paints with the local model only. A rejected token (401/403) gets its own message. Every
+   request in a scene uses the scene's fixed seed.
 3. **Local model.** FLUX.2 [klein] 4B through diffusers, 4 steps, guidance 1.0, at most 768x512 (640x416 for edits).
    Device order CUDA, then MPS, then CPU. On CUDA the transformer and text encoder load in 4-bit nf4 (bitsandbytes),
    about 5 GB of VRAM and about 3 s per 768x512 picture on an RTX 4070 laptop GPU; MPS uses bf16, CPU float32. The model is
    downloaded once with `sepia --download` (about 16 GB) and loads on first use.
-4. **Edit.** The local model receives the previous picture as a reference image. The API cannot see it, so it repaints
-   from the full prompt with the same seed, which keeps the composition close.
+4. **Edit.** Both painters receive the previous picture as an input image and edit it with the same seed. A reference
+   picture of a named subject is passed the same way. Cloudflare gets input pictures downscaled to at most 512 px a
+   side.
 5. **Show.** The prompt saves the PNG in the session folder and sends its path to the viewer.
 
 ## Rendering
@@ -128,9 +147,11 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
 ## Prompt UX
 
 - A panel with the wordmark in the figlet font ANSI Shadow, like spiyweb's (letters banded pink to purple, shadow in deep purple), a tip line, then
-  a `›` prompt with file history, slash-command completion and a bottom bar (model, style/charset, window status).
+  a `›` chat bar pinned to the bottom rows with file history and a status line under it (painter, model, style/charset,
+  window status). Typing `/` opens a menu of the matching commands with their descriptions above the chat bar: ↑↓ move,
+  Tab completes, Enter runs the highlighted one.
 - While working, a `✻✽✶✳✢·` spinner with "Working on it…", the step and the seconds since the request began; then a `⏺` reply with the source and time.
-- Commands: `/add <text>` (build on the current picture; plain requests start a new one), `/clear`, `/style [ink|fill]`, `/charset [classic|symbols]`, `/model [haiku|sonnet|opus|fable]`, `/usage` (a panel Esc closes), `/help`, `/exit` (also `/quit`, `/q`, Ctrl+D).
+- Commands: `/add <text>` (build on the current picture; plain requests start a new one), `/clear`, `/style [ink|fill]`, `/charset [classic|symbols]`, `/model [haiku|sonnet|opus|fable]`, `/effort [low|medium|high|xhigh|max]`, `/mature [on|off]`, `/api` (Cloudflare, then the local model), `/local` (the local model only), `/usage` (a panel Esc closes), `/help`, `/exit` (also `/quit`, `/q`, Ctrl+D).
 - The interface and Claude's replies are English only.
 
 ## Configuration and secrets
@@ -138,7 +159,8 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
 - `ANTHROPIC_API_KEY` is read from the environment, then a `.env` in the working directory, then a `.env` in the user
   config folder. If none is found, sepia asks once with hidden input and stores it in the user config `.env` with
   user-only permissions. Keys are never printed or logged.
-- Optional: `POLLINATIONS_KEY`, `SEPIA_MODEL`, `SEPIA_EFFORT`, `SEPIA_STYLE` (default `ink`), `SEPIA_CHARSET` (default
+- Optional: `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (both or neither; one alone stops sepia at startup;
+  the token goes only in the `Authorization: Bearer` header to `api.cloudflare.com`), `SEPIA_MODEL`, `SEPIA_EFFORT`, `SEPIA_STYLE` (default `ink`), `SEPIA_CHARSET` (default
   `classic`), `SEPIA_IMAGE_MODEL`.
 - Pictures are saved per session under the user config folder; the newest 10 sessions are kept.
 - The IPC session file (port and one-time 32-byte key) is written with user-only permissions. Messages are JSON and are
@@ -148,8 +170,8 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
 
 - Claude errors map to short messages in the user's language: rejected key, rate limit, server error, connection lost,
   bad request, refusal, truncated or malformed output. The scene is unchanged, so the user can retry.
-- A painter failure falls through to the next painter. If all fail, the message names the last error, and the previous
-  picture stays on screen.
+- A painter failure falls through to the next painter, and the reply's detail line says why Cloudflare was skipped. If
+  all fail, the message names the last error, and the previous picture stays on screen.
 - If the viewer window is gone, the prompt reopens it and waits up to 15 s for it to connect.
 
 ## Testing
@@ -163,4 +185,5 @@ terminal 1: sepia (prompt)                              terminal 2: sepia --view
 
 ## Cost
 
-About $0.0003 per request on Claude Haiku at low effort. Pollinations and the local model are free.
+About $0.0003 per request on Claude Haiku at low effort. Cloudflare Workers AI is free up to 10,000 neurons a day
+(about 100 pictures), and the local model is free.

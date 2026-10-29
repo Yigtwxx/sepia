@@ -1,10 +1,13 @@
 import re
 
 import pytest
+from prompt_toolkit.formatted_text import fragment_list_to_text
 from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.styles import default_ui_style, merge_styles
 
-from sepia.chatbar import ChatBar
-from sepia.ui import PROMPT
+from sepia import ui
+from sepia.chatbar import STYLE, BottomBar, ChatBar, CommandMenu
+from sepia.ui import POINTER, PROMPT
 
 COMMANDS = (("/new", "start a fresh picture"), ("/help", "show this list"))
 
@@ -61,22 +64,119 @@ def test_chatbar_still_is_the_empty_bar_row_by_row(terminal) -> None:
     assert plain == expected, f"Expected {expected}, got {plain}"
 
 
+MENU = (
+    ("/clear", "start over"),
+    ("/charset [classic|symbols]", "choose the characters"),
+    ("/help", "show this list"),
+)
+
+
 @pytest.mark.parametrize(
     ("typed", "expected"),
-    [("/c", "lear"), ("/he", "lp"), ("/help", None), ("hello", None), ("/new x", None)],
+    [
+        ("/c", ["/clear", "/charset"]),
+        ("/", ["/clear", "/charset", "/help"]),
+        ("/help", ["/help"]),
+        ("hello", []),
+        ("/charset x", []),
+    ],
 )
-def test_command_suggest_completes_slash_commands_inline(
-    typed: str, expected: str | None
+def test_command_menu_matches_commands_starting_with_the_text(
+    typed: str, expected: list[str]
 ) -> None:
-    from prompt_toolkit.buffer import Buffer
-    from prompt_toolkit.document import Document
+    names = [name for name, _ in CommandMenu(MENU).matches(typed)]
+    assert names == expected, f"{typed!r}: expected {expected}, got {names}"
 
-    from sepia.chatbar import CommandSuggest
 
-    suggest = CommandSuggest(["/new", "/clear", "/help"])
-    suggestion = suggest.get_suggestion(Buffer(), Document(typed))
-    got = suggestion.text if suggestion else None
-    assert got == expected, f"{typed!r}: expected {expected!r}, got {got!r}"
+def test_command_menu_move_wraps_around_the_matches() -> None:
+    menu = CommandMenu(MENU)
+    menu.move("/c", -1)
+    assert menu.choice("/c") == "/charset", f"Up from the first: {menu.choice('/c')}"
+    menu.move("/c", 1)
+    assert menu.choice("/c") == "/clear", f"Down from the last: {menu.choice('/c')}"
+
+
+def test_command_menu_lines_sit_on_the_bottom_rows_with_the_pointer() -> None:
+    menu = CommandMenu(MENU)
+    menu.chosen = 1
+    text = fragment_list_to_text(menu.lines("/c", 3))
+    rows = text.split("\n")
+    assert rows[0] == "", f"Fewer matches than rows leave the top blank: {rows}"
+    assert rows[2].startswith(f" {POINTER} /charset"), f"Pointer misplaced: {rows}"
+    assert "start over" in rows[1] and POINTER not in rows[1], f"Got {rows}"
+
+
+def test_command_menu_lines_have_no_background_and_a_purple_choice() -> None:
+    # The app's style sits on prompt_toolkit's own, where "menu" is grey.
+    style = merge_styles([default_ui_style(), STYLE])
+    backgrounds = {
+        text.strip(): style.get_attrs_for_style_str(fragment_style).bgcolor
+        for fragment_style, text, *_ in CommandMenu(MENU).lines("/", 3)
+        if text.strip()
+    }
+    painted = {text: color for text, color in backgrounds.items() if color}
+    assert not painted, f"Menu text drawn on a background: {painted}"
+    chosen = style.get_attrs_for_style_str("class:commands.chosen").color
+    assert chosen == ui.ACCENT.lstrip("#"), f"Highlight is {chosen}, not the accent"
+
+
+def test_command_menu_lines_scroll_to_keep_the_choice_in_view() -> None:
+    menu = CommandMenu(MENU)
+    menu.chosen = 2
+    rows = fragment_list_to_text(menu.lines("/", 2)).split("\n")
+    assert "/charset" in rows[0], f"Expected the row before the choice: {rows}"
+    assert rows[1].startswith(f" {POINTER} /help"), f"/help must be in view: {rows}"
+
+
+def test_bottom_bar_make_room_lifts_the_transcript_and_moves_the_bar_up() -> None:
+    written: list[str] = []
+    bar = BottomBar(written.append, lambda: 24)
+    granted = bar.make_room(3)
+    expected = [
+        "\x1b8\n\n\n\x1b[3A\x1b7",  # transcript end: feed three lines, save it again
+        "\x1b[1;17r\x1b[18;1H\x1b[J\x1b[18;1H",  # smaller region, bar from row 18
+    ]
+    assert granted == 3, f"Expected 3 rows, got {granted}"
+    assert written == expected, f"Got {written}"
+
+
+def test_bottom_bar_make_room_zero_gives_the_rows_back() -> None:
+    written: list[str] = []
+    bar = BottomBar(written.append, lambda: 24)
+    bar.make_room(3)
+    written.clear()
+    bar.make_room(0)
+    assert written == ["\x1b[1;20r\x1b[18;1H\x1b[J\x1b[21;1H"], f"Got {written}"
+
+
+def test_bottom_bar_make_room_leaves_the_transcript_one_row() -> None:
+    bar = BottomBar(lambda _: None, lambda: 10)
+    granted = bar.make_room(50)
+    assert granted == 5, f"10 rows - 4 for the bar - 1 kept: expected 5, got {granted}"
+
+
+def test_chatbar_menu_asks_for_rows_as_matches_change_and_gives_them_back(
+    terminal,
+) -> None:
+    keys, _ = terminal
+    keys.send_text("/c\r")
+    asked: list[int] = []
+
+    def make_room(rows: int) -> int:
+        asked.append(rows)
+        return rows
+
+    bar = ChatBar(InMemoryHistory(), MENU, "describe", lambda: "status", make_room)
+    line = bar.read()
+    assert line == "/clear", f"Enter runs the highlighted match, got {line!r}"
+    assert asked == [3, 2, 0], f"Expected rows for '/', then '/c', then none: {asked}"
+
+
+def test_chatbar_down_then_enter_runs_the_next_match(terminal) -> None:
+    keys, _ = terminal
+    keys.send_text("/c\x1b[B\r")
+    line = ChatBar(InMemoryHistory(), MENU, "describe", lambda: "status").read()
+    assert line == "/charset", f"Expected the second match, got {line!r}"
 
 
 def test_chatbar_tab_accepts_the_command_suggestion(terminal) -> None:

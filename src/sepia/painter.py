@@ -1,13 +1,16 @@
-"""Paint pictures: a free web API first, the local GPU model when the API fails."""
+"""Paint pictures: Cloudflare's free tier first, the local GPU model when it fails."""
 
+import base64
 import contextlib
 import io
+import json
 import math
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
@@ -38,17 +41,24 @@ memory and a 3 second picture takes a minute."""
 LOCAL_EDIT_PIXELS = 640 * 416
 """Editing also holds the reference picture, so it gets a smaller budget."""
 
-KEYLESS_URL = "https://image.pollinations.ai/prompt/"
-"""Pollinations' anonymous endpoint: about one image per 15 seconds, with a logo."""
-KEYED_URL = "https://gen.pollinations.ai/image/"
-"""Pollinations' current endpoint; needs a key from enter.pollinations.ai."""
-DEFAULT_API_MODEL = "black-forest-labs/flux.2-klein-4b"
+CLOUDFLARE_URL = (
+    "https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"
+)
+CLOUDFLARE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b"
+"""The local model's FLUX.2 [klein] 4B on Workers AI: about 100 pictures a day fit in
+the free 10,000 neurons."""
+API_SIDES = (256, 1920)
+"""The smallest and largest width or height Workers AI paints."""
+INPUT_SIDE = 512
+"""Workers AI takes input pictures up to 512x512."""
+USED_UP = 4006
+"""Cloudflare's error code for a day's free neurons spent; they return at 00:00 UTC."""
 API_TIMEOUT_SECONDS = 90
 COOLDOWN_SECONDS = 120
 """After the API says "too many requests", go straight to the local model this long."""
 
 Device = Literal["cuda", "mps", "cpu"]
-Source = Literal["api", "keyless", "local"]
+Source = Literal["api", "local"]
 
 
 class PainterError(RuntimeError):
@@ -60,7 +70,7 @@ class PainterError(RuntimeError):
         super().__init__(message)
         self.rate_limited = rate_limited
         self.out_of_credit = out_of_credit
-        """The account has no credit left, which waiting does not change."""
+        """The free allocation is spent, which a short wait does not change."""
 
 
 @dataclass(frozen=True)
@@ -94,17 +104,19 @@ def image_size(aspect: float, pixels: int = PIXELS) -> tuple[int, int]:
     return max(16, round(width / 16) * 16), max(16, round(height / 16) * 16)
 
 
-class ApiPainter:
-    """Paints through Pollinations.
+class CloudflarePainter:
+    """Paints with FLUX.2 [klein] 4B on Cloudflare Workers AI.
 
-    The API cannot see the previous picture, so an edit is repainted from the full
-    prompt with the scene's fixed seed, which keeps the composition close. A
-    likeness is on the web already: the keyed endpoint fetches it by its link,
-    while the keyless one ignores reference pictures.
+    The picture to edit and the subject's picture go along as input pictures, so an
+    edit works on the picture itself, as on the local model. Workers AI takes the
+    request as multipart form data, even when there is only a prompt.
     """
 
-    def __init__(self, key: str | None = None, model: str = DEFAULT_API_MODEL) -> None:
-        self._key = key
+    def __init__(
+        self, account_id: str, token: str, model: str = CLOUDFLARE_MODEL
+    ) -> None:
+        self._account_id = account_id
+        self._token = token
         self._model = model
 
     def paint(
@@ -116,51 +128,115 @@ class ApiPainter:
         likeness: Reference | None = None,
     ) -> Painting:
         started = time.perf_counter()
-        request = self.request(prompt, size, seed, likeness)
+        request = self.request(prompt, size, seed, reference, likeness)
         try:
             with urllib.request.urlopen(request, timeout=API_TIMEOUT_SECONDS) as reply:
-                kind = reply.headers.get_content_type()
                 data = reply.read()
         except urllib.error.HTTPError as exc:
-            message = f"image API: HTTP {exc.code}"
-            raise PainterError(
-                message, rate_limited=exc.code == 429, out_of_credit=exc.code == 402
-            ) from exc
+            raise _api_error(exc) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            raise PainterError(f"image API unreachable: {exc}") from exc
-        if not kind.startswith("image/"):
-            raise PainterError(f"image API returned {kind}, not an image")
+            raise PainterError(f"Cloudflare unreachable: {exc}") from exc
         try:
-            image = Image.open(io.BytesIO(data))
+            encoded = json.loads(data)["result"]["image"]
+            image = Image.open(io.BytesIO(base64.b64decode(encoded)))
             image.load()
-        except (UnidentifiedImageError, OSError) as exc:
-            raise PainterError("image API returned an unreadable image") from exc
-        source: Source = "keyless" if self._key is None else "api"
-        return Painting(image, source, time.perf_counter() - started)
+        except (
+            ValueError,
+            KeyError,
+            TypeError,
+            UnidentifiedImageError,
+            OSError,
+        ) as exc:
+            raise PainterError("Cloudflare returned no readable picture") from exc
+        return Painting(image, "api", time.perf_counter() - started)
 
     def request(
         self,
         prompt: str,
         size: tuple[int, int],
         seed: int,
+        reference: Image.Image | None = None,
         likeness: Reference | None = None,
     ) -> urllib.request.Request:
-        width, height = size
-        query: dict[str, str | int] = {"width": width, "height": height, "seed": seed}
-        headers = {"User-Agent": "sepia-cli"}
-        if self._key is None:
-            base = KEYLESS_URL
-            # private keeps prompts out of the public feed; enhance would rewrite them.
-            query |= {"nologo": "true", "private": "true", "enhance": "false"}
-        else:
-            base = KEYED_URL
-            query |= {"model": self._model}
-            headers |= {"Authorization": f"Bearer {self._key}"}
-            if likeness is not None:
-                query["image"] = likeness.url
-        path = urllib.parse.quote(prompt, safe="")
-        url = f"{base}{path}?{urllib.parse.urlencode(query)}"
-        return urllib.request.Request(url, headers=headers)
+        low, high = API_SIDES
+        width, height = (min(max(side, low), high) for side in size)
+        fields = {
+            "prompt": prompt,
+            "width": str(width),
+            "height": str(height),
+            "seed": str(seed),
+        }
+        pictures = [reference] if reference is not None else []
+        if likeness is not None:
+            pictures.append(likeness.image)
+        files = {
+            f"input_image_{index}": _input_png(picture)
+            for index, picture in enumerate(pictures)
+        }
+        body, kind = _multipart(fields, files)
+        account = urllib.parse.quote(self._account_id, safe="")
+        url = CLOUDFLARE_URL.format(account=account, model=self._model)
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type": kind,
+            "User-Agent": "sepia-cli",
+        }
+        return urllib.request.Request(url, data=body, headers=headers, method="POST")
+
+
+def _api_error(exc: urllib.error.HTTPError) -> PainterError:
+    """What a failed Workers AI call means for the painting chain. The reply's own
+    text stays out of the message."""
+    errors = _errors(exc)
+    if any(code == USED_UP or "daily free allocation" in text for code, text in errors):
+        message = "Cloudflare: today's free neurons are used up (back at 00:00 UTC)"
+        return PainterError(message, out_of_credit=True)
+    # Its safety filter flags some harmless pictures too, and not every time.
+    if any("flagged" in text or "NSFW" in text for _, text in errors):
+        return PainterError("Cloudflare's safety filter flagged the picture")
+    if exc.code in (401, 403):
+        return PainterError(f"Cloudflare rejected the API token (HTTP {exc.code})")
+    return PainterError(f"Cloudflare: HTTP {exc.code}", rate_limited=exc.code == 429)
+
+
+def _errors(exc: urllib.error.HTTPError) -> list[tuple[object, str]]:
+    """Code and message of each error in a Workers AI error reply."""
+    try:
+        errors = json.loads(exc.read(65536))["errors"]
+        return [
+            (error.get("code"), str(error.get("message", "")))
+            for error in errors
+            if isinstance(error, dict)
+        ]
+    except (ValueError, KeyError, TypeError, AttributeError, OSError):
+        return []
+
+
+def _input_png(picture: Image.Image) -> bytes:
+    """`picture` as PNG, shrunk to fit the input size Workers AI takes."""
+    small = picture.convert("RGB")
+    small.thumbnail((INPUT_SIDE, INPUT_SIDE))
+    buffer = io.BytesIO()
+    small.save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+def _multipart(fields: dict[str, str], files: dict[str, bytes]) -> tuple[bytes, str]:
+    """Form fields and PNG files as a multipart/form-data body, and its content type."""
+    boundary = uuid.uuid4().hex
+    parts: list[bytes] = []
+    for name, value in fields.items():
+        head = f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n'
+        parts.append(f"{head}{value}\r\n".encode())
+    for name, data in files.items():
+        head = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{name}"; filename="{name}.png"\r\n'
+            "Content-Type: image/png\r\n\r\n"
+        )
+        parts.append(head.encode() + data + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
 LOCAL_MISSING = "local painting needs the extra: install sepia-cli[local]"
@@ -338,8 +414,8 @@ class FallbackPainter:
 
     After a rate-limit answer the primary is skipped for `cooldown` seconds, so a
     busy API does not add a failed round trip to every picture. After an
-    out-of-credit answer it is skipped for the rest of the session, since waiting
-    does not bring credit back.
+    out-of-credit answer it is skipped for the rest of the session, since a short
+    wait does not bring the free allocation back; `retry_primary` ends either.
     """
 
     def __init__(
@@ -373,30 +449,25 @@ class FallbackPainter:
                 return painting
         return self._fallback.paint(prompt, size, seed, reference, likeness)
 
+    def retry_primary(self) -> None:
+        """Try the primary again from the next picture on, ending a cooldown or an
+        out-of-credit stop."""
+        self._skip_until = 0.0
+
 
 def build_painter(
-    pollinations_key: str | None,
-    model_id: str = DEFAULT_IMAGE_MODEL,
-    prefer_local: bool | None = None,
-) -> tuple[FallbackPainter, LocalPainter]:
-    """The painting chain, best quality first.
+    cloudflare: tuple[str, str] | None, model_id: str = DEFAULT_IMAGE_MODEL
+) -> tuple[FallbackPainter | None, LocalPainter]:
+    """The API chain and the local painter.
 
-    With the local model downloaded: keyed API, then the local GPU, then the keyless
-    API. The keyed API and the local model run the same FLUX.2 [klein] 4B, while the
-    keyless endpoint uses a weaker model and adds a logo, so it comes last. Without
-    the local model: keyed API, then keyless API, then the local painter, which only
-    explains how to install it. `prefer_local` defaults to whether the model is
-    downloaded. The local painter is returned too, so callers can report on it.
+    The chain is Cloudflare, then the local model when Cloudflare fails. Both run
+    FLUX.2 [klein] 4B, so a picture looks alike whichever paints it. Without
+    Cloudflare's account ID and API token there is no chain (None) and only the
+    local model paints; without the local model, its painter explains how to
+    install it.
     """
     local = LocalPainter(model_id)
-    keyless = ApiPainter()
-    if prefer_local is None:
-        prefer_local = local_model_ready(model_id)
-    rest = (
-        FallbackPainter(local, keyless)
-        if prefer_local
-        else FallbackPainter(keyless, local)
-    )
-    if pollinations_key:
-        return FallbackPainter(ApiPainter(pollinations_key), rest), local
-    return rest, local
+    if cloudflare is None:
+        return None, local
+    account_id, token = cloudflare
+    return FallbackPainter(CloudflarePainter(account_id, token), local), local

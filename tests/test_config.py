@@ -5,11 +5,14 @@ import pytest
 
 from sepia import config
 from sepia.config import (
+    Choices,
     ConfigError,
     Settings,
     api_key,
+    cloudflare_key,
+    load_choices,
     load_settings,
-    pollinations_key,
+    remember,
     save_api_key,
     search_key,
 )
@@ -91,10 +94,62 @@ def test_load_environment_never_overrides_existing_variables(
 
 @pytest.mark.parametrize(
     ("environ", "expected"),
-    [({}, None), ({"POLLINATIONS_KEY": " "}, None), ({"POLLINATIONS_KEY": "pk"}, "pk")],
+    [
+        ({}, None),
+        ({"CLOUDFLARE_ACCOUNT_ID": " ", "CLOUDFLARE_API_TOKEN": " "}, None),
+        (
+            {"CLOUDFLARE_ACCOUNT_ID": " acc ", "CLOUDFLARE_API_TOKEN": " tok "},
+            ("acc", "tok"),
+        ),
+    ],
 )
-def test_pollinations_key_is_optional(environ: dict[str, str], expected) -> None:
-    assert pollinations_key(environ) == expected, f"Expected {expected!r}"
+def test_cloudflare_key_is_optional_and_trimmed(
+    environ: dict[str, str], expected: tuple[str, str] | None
+) -> None:
+    assert cloudflare_key(environ) == expected, f"Expected {expected!r}"
+
+
+@pytest.mark.parametrize(
+    ("given", "missing"),
+    [
+        ("CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"),
+        ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"),
+    ],
+)
+def test_cloudflare_key_only_one_of_the_two_raises_config_error(
+    given: str, missing: str
+) -> None:
+    with pytest.raises(ConfigError, match=f"^{missing} is not set"):
+        cloudflare_key({given: "x"})
+
+
+@pytest.mark.parametrize("content", [None, "not json", '{"effort": "loud"}'])
+def test_load_choices_missing_or_unreadable_file_gives_no_choices(
+    tmp_path: Path, content: str | None
+) -> None:
+    path = tmp_path / "choices.json"
+    if content is not None:
+        path.write_text(content)
+    assert load_choices(path) == Choices(), f"{content!r} must give no choices"
+
+
+def test_remember_keeps_earlier_choices_and_adds_the_new_one(tmp_path: Path) -> None:
+    path = tmp_path / "sepia" / "choices.json"
+    remember(path, mature=True)
+    remember(path, painter="local")
+    expected = Choices(mature=True, painter="local")
+    assert load_choices(path) == expected, f"Got {load_choices(path)}"
+
+
+def test_load_settings_choices_win_over_environment_and_defaults() -> None:
+    chosen = Choices(effort="low", mature=True, painter="local")
+    settings = load_settings({"SEPIA_EFFORT": "max", "SEPIA_STYLE": "fill"}, chosen)
+    expected = Settings(effort="low", style="fill", mature=True, painter="local")
+    assert settings == expected, f"Expected {expected}, got {settings}"
+
+
+def test_load_settings_without_choices_paints_with_the_api() -> None:
+    assert load_settings({}).painter == "api", "The API is the starting painter"
 
 
 @pytest.mark.parametrize(

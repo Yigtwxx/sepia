@@ -16,15 +16,39 @@ tag all carry.
   Haiku 5.5, Sonnet 5.5, Opus 5.5 and Fable 5.1, from the next request on;
   without a name it opens a menu. The bottom bar and `/usage` show the model
   in use. `SEPIA_MODEL` still sets the one sepia starts with.
+- Pictures are painted by Cloudflare Workers AI with FLUX.2 [klein] 4B, the
+  same model the local fallback runs. A free Cloudflare account paints about
+  100 pictures a day (10,000 neurons, reset at 00:00 UTC). Set
+  `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; without them sepia
+  paints only on the local GPU. `/add` sends the previous picture, so the API
+  edits it instead of repainting from the prompt.
+- `/api` paints with Cloudflare and falls back to the local model when it
+  fails; it also tries Cloudflare again after a rate limit or a used-up day.
+  `/local` paints only on this machine. The bottom bar shows which is in use.
+  A picture Cloudflare's safety filter flags is painted locally, and the
+  reply says the filter flagged it.
+- What you pick with `/model`, `/effort`, `/style`, `/charset`, `/mature`,
+  `/api` or `/local` is kept in `choices.json` in the config folder, so the
+  next sepia starts with it instead of asking again. A kept choice wins over
+  its `SEPIA_*` variable.
 
 ### Changed
 
+- Typing `/` opens a menu of the matching commands above the chat bar, with
+  their descriptions: ↑↓ move, Tab completes, Enter runs the highlighted one.
+  It replaces the grey completion inside the input line.
 - `/usage` opens as a panel, as in Claude Code: Esc, Enter or q closes it, and
   it leaves nothing in the transcript. It shows Claude's tokens, searches and
   cost only; the pictures bar with its painters is gone.
 - Claude may write up to 32,000 tokens a request (was 8,000), so Opus and
   Fable thinking at high effort or above are not cut off. Only what is
   written is billed.
+
+### Removed
+
+- Pollinations, keyed and keyless, and `POLLINATIONS_KEY`. Its free endpoint
+  was slow, added a logo and ignored reference pictures; the keyed one cost
+  pollen.
 
 ### Fixed
 

@@ -1,6 +1,6 @@
 # sepia: project guide
 
-sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each request is turned into a photo prompt by Claude, painted by Pollinations (or FLUX.2 [klein] 4B locally as a fallback), and shown as colored text characters in a second terminal window. PyPI distribution `sepia-cli`, command `sepia`, MIT. Design: `docs/superpowers/specs/2026-10-28-sepia-design.md` (the SVG pipeline in older history is obsolete).
+sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each request is turned into a photo prompt by Claude, painted by FLUX.2 [klein] 4B on Cloudflare Workers AI (or locally as a fallback), and shown as colored text characters in a second terminal window. PyPI distribution `sepia-cli`, command `sepia`, MIT. Design: `docs/superpowers/specs/2026-10-28-sepia-design.md` (the SVG pipeline in older history is obsolete).
 
 ## Stack
 
@@ -13,11 +13,12 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 
 - `src/sepia/cli.py`: argparse entry point; `--download`, `--version`, hidden `--viewer <session file>`.
 - `src/sepia/repl.py`: the prompt window loop, slash commands, spinner, session folders, viewer relaunch.
+- `src/sepia/chatbar.py`: the chat bar pinned to the bottom rows, with the slash-command menu above it.
 - `src/sepia/ui.py`: wordmark, palette, spinner frames, replies, interface strings (English only).
 - `src/sepia/director.py`: one Claude call per request; structured JSON reply (`message`, `prompt`, `edit`, `references`); maps API errors to `Failure`.
 - `src/sepia/prompts/`: `director.md` (system prompt), `mature.md` (appended to it while `/mature` is on) and `request.md` (per-request template).
 - `src/sepia/reference.py`: finds a reference picture for a named subject (Brave image search with `BRAVE_SEARCH_API_KEY`, else a link or page `og:image`), pasted links in requests, https and public hosts only.
-- `src/sepia/painter.py`: `ApiPainter` (Pollinations), `LocalPainter` (FLUX.2 [klein]), `FallbackPainter` (120 s cooldown after HTTP 429, off for the session after 402), `select_device`, model download.
+- `src/sepia/painter.py`: `CloudflarePainter` (Workers AI, FLUX.2 [klein] 4B, multipart upload), `LocalPainter`, `FallbackPainter` (120 s cooldown after HTTP 429, off for the session when the day's free allocation is used up; `retry_primary` for `/api`), `build_painter`, `select_device`, model download.
 - `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`, `/effort`, `/mature`).
 - `src/sepia/usage.py`: totals for `/usage` (tokens, searches, estimated cost from list prices, pictures per source); `Ledger` keeps all-time totals in `usage.json` in the config dir, with a one-time estimate of earlier use from the prompt history and session folders.
 - `src/sepia/scene.py`: `Scene` (requests, prompts, latest image, fixed seed) and `Canvas` (viewer size in cells).
@@ -27,7 +28,7 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/launcher.py`: opens the viewer (Windows Terminal window with a purple "sepia" tab and a fragment profile, conhost fallback, Terminal.app via osascript).
 - `src/sepia/viewer.py`: full-screen picture window; redraws on resize and on messages.
 - `src/sepia/mouse.py`: pointer reports from the terminal (SGR mouse mode); `src/sepia/ripple.py`: the rings that spread from the pointer, drawn as ANSI over the changed cells only.
-- `src/sepia/config.py`: settings from env and `.env` files, key storage, config dir.
+- `src/sepia/config.py`: settings from env and `.env` files, slash-command choices kept in `choices.json` (they win over `SEPIA_*`), key storage, config dir.
 - `tests/`: one `test_<module>.py` per module, shared fixtures in `conftest.py`.
 - `scripts/spike.py`: quality spike; `scripts/release_notes.py`: CHANGELOG section for a release; `scripts/site_art.py`: draws the landing page's plates and demo pictures with `ascii_art` (writes `site/src/data/art.generated.ts` and `site/public/art/`).
 - `site/`: the landing page (Astro 7, static, deployed on Vercel with `site` as the project root, https://sepia-cli.vercel.app). Design: `docs/superpowers/specs/2026-10-29-landing-page-design.md`. Sources of its pictures: `site/images.manifest.json`, `site/scripts/sources/`.

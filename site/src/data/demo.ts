@@ -93,8 +93,7 @@ if (!blackhole || !comet) throw new Error('demo: run npm run images for the two 
 
 const PAINTER: Record<string, string> = {
     local: 'local GPU',
-    api: 'pollinations',
-    keyless: 'pollinations (free)',
+    api: 'cloudflare',
 };
 
 const WRITE_MS = 1700;

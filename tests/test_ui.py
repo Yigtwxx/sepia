@@ -7,6 +7,7 @@ from rich.text import Text
 
 from sepia import ui
 from sepia.config import MODELS, Effort, Switch
+from sepia.painter import Source
 from sepia.usage import AllTime, Earlier, Usage
 
 
@@ -47,7 +48,7 @@ def test_words_working_labels_show_the_elapsed_time_and_no_painter() -> None:
     for key in ("directing", "painting", "looking"):
         label = words(key, elapsed="12s")
         assert label.endswith("· 12s)"), f"{key}: no elapsed time in {label!r}"
-        assert "pollinations" not in label, f"{key}: names a painter in {label!r}"
+        assert "cloudflare" not in label, f"{key}: names a painter in {label!r}"
 
 
 def test_bar_rule_is_an_open_line_across_the_width() -> None:
@@ -103,7 +104,7 @@ def test_usage_view_leaves_the_pictures_and_their_painters_out() -> None:
         for word in (
             "Pictures",
             "pictures",
-            "pollinations",
+            "cloudflare",
             "local GPU",
             "image searches",
         )
@@ -191,3 +192,18 @@ def test_words_describe_every_mature_switch() -> None:
         if not (words(f"mature.{switch}") and words(f"mature_{switch}"))
     ]
     assert not missing, f"No description or reply for {missing}"
+
+
+def test_words_commands_include_api_and_local() -> None:
+    names = [usage.split()[0] for usage, _ in ui.Words().commands]
+    assert {"/api", "/local"} <= set(names), f"Got {names}"
+
+
+def test_words_name_and_switch_to_every_painter() -> None:
+    words = ui.Words()
+    missing = [
+        source
+        for source in get_args(Source)
+        if not (words(f"source.{source}") and words(f"painter_{source}"))
+    ]
+    assert not missing, f"No name or switch reply for {missing}"

@@ -21,9 +21,9 @@ from sepia.ascii_art import CELL_HEIGHT, CELL_WIDTH, ArtStyle, SymbolArt, image_
 from sepia.ascii_art import to_text as art_text
 from sepia.config import (
     api_key,
+    cloudflare_key,
     load_environment,
     load_settings,
-    pollinations_key,
     search_key,
 )
 from sepia.director import Director, DirectorError, create_client
@@ -68,7 +68,8 @@ def main() -> int:
     director = Director(
         create_client(key), settings.model, settings.effort, settings.mature
     )
-    painter, _ = build_painter(pollinations_key(), settings.image_model)
+    api, local = build_painter(cloudflare_key(), settings.image_model)
+    painter = api or local
     brave = search_key()
     args.out.mkdir(exist_ok=True)
     scene = Scene()

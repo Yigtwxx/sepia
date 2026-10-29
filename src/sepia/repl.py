@@ -27,10 +27,12 @@ from sepia.config import (
     Settings,
     Switch,
     api_key,
+    cloudflare_key,
     config_dir,
+    load_choices,
     load_environment,
     load_settings,
-    pollinations_key,
+    remember,
     save_api_key,
     search_key,
 )
@@ -39,8 +41,11 @@ from sepia.ipc import Host, Message
 from sepia.launcher import VIEWER_COLS, VIEWER_ROWS, LaunchError, open_viewer
 from sepia.painter import (
     FallbackPainter,
+    LocalPainter,
+    Painter,
     PainterError,
     Painting,
+    Source,
     build_painter,
     local_model_ready,
 )
@@ -108,7 +113,8 @@ class Repl:
         words: ui.Words,
         settings: Settings,
         director: Director,
-        painter: FallbackPainter,
+        api: FallbackPainter | None,
+        local: LocalPainter,
         folder: Path,
         ledger: Ledger,
         search_key: str | None = None,
@@ -117,7 +123,12 @@ class Repl:
         self.words = words
         self.settings = settings
         self.director = director
-        self.painter = painter
+        self.api = api
+        """Cloudflare with the local model behind it; None without a Cloudflare key."""
+        self.local = local
+        # The painter picked last time; the local model while Cloudflare has no key.
+        self.paint_with: Source = settings.painter if api is not None else "local"
+        """What /api and /local switch between."""
         self.folder = folder
         self.scene = Scene()
         self.usage = Usage()
@@ -144,6 +155,7 @@ class Repl:
             commands=self.words.commands,
             placeholder=self.words("placeholder"),
             status=self._status,
+            make_room=self.bar.make_room,
         )
         try:
             while True:
@@ -201,6 +213,7 @@ class Repl:
             picked = self._pick("model", tuple(MODELS), current, command.argument)
             if picked is not None:
                 self.director.model = MODELS[cast(ModelName, picked)]
+                remember(model=self.director.model)
                 model = self.director.model.removeprefix("claude-")
                 self.console.print(ui.reply(self.words("model_set", model=model)))
         elif command.name == "clear":
@@ -218,6 +231,7 @@ class Repl:
             picked = self._pick("effort", levels, effort, command.argument)
             if picked is not None:
                 self.director.effort = cast(Effort, picked)
+                remember(effort=picked)
                 self.console.print(ui.reply(self.words("effort_set", effort=picked)))
         elif command.name == "mature":
             switches = cast(tuple[str, ...], get_args(Switch))
@@ -225,7 +239,10 @@ class Repl:
             picked = self._pick("mature", switches, current, command.argument)
             if picked is not None:
                 self.director.mature = picked == "on"
+                remember(mature=self.director.mature)
                 self.console.print(ui.reply(self.words(f"mature_{picked}")))
+        elif command.name in ("api", "local"):
+            self._switch_painter(cast(Source, command.name))
         elif command.name in ("style", "charset"):
             if command.name == "style":
                 styles = cast(tuple[str, ...], get_args(ArtStyle))
@@ -233,12 +250,14 @@ class Repl:
                 if picked is None:
                     return True
                 self.style = cast(ArtStyle, picked)
+                remember(style=self.style)
             else:
                 sets = cast(tuple[str, ...], get_args(Charset))
                 picked = self._pick("charset", sets, self.charset, command.argument)
                 if picked is None:
                     return True
                 self.charset = cast(Charset, picked)
+                remember(charset=self.charset)
             self.host.send(
                 {"type": "style", "style": self.style, "charset": self.charset}
             )
@@ -248,6 +267,37 @@ class Repl:
             unknown = self.words("unknown", command=f"/{command.name}")
             self.console.print(ui.reply(unknown, failed=True))
         return True
+
+    def _switch_painter(self, source: Source) -> None:
+        """Paint with Cloudflare (the local model when it fails) or only on this
+        machine, from the next picture on. /api also tries Cloudflare again after
+        a cooldown or a used-up day."""
+        if source == "api":
+            if self.api is None:
+                self.console.print(ui.reply(self.words("api_missing"), failed=True))
+                return
+            self.api.retry_primary()
+        elif local_model_ready(self.settings.image_model):
+            self.local.load_in_background()
+        else:
+            self.console.print(ui.reply(self.words("local_missing"), failed=True))
+            return
+        self.paint_with = source
+        remember(painter=source)
+        self.console.print(ui.reply(self.words(f"painter_{source}")))
+
+    @property
+    def painter(self) -> Painter:
+        """What paints the next picture."""
+        if self.paint_with == "api" and self.api is not None:
+            return self.api
+        return self.local
+
+    def _api_failure(self) -> PainterError | None:
+        """Why Cloudflare did not paint the last picture, while /api is on."""
+        if self.paint_with == "api" and self.api is not None:
+            return self.api.last_error
+        return None
 
     def _pick(
         self, kind: str, options: tuple[str, ...], current: str, argument: str
@@ -310,19 +360,24 @@ class Repl:
                 "painting",
             )
         except PainterError as exc:
-            message = self.words("failure.paint", error=str(exc))
-            self.console.print(ui.reply(message, failed=True))
+            failure = self._api_failure()
+            error = str(exc) if failure in (None, exc) else f"{failure}; {exc}"
+            message = self.words("failure.paint", error=error)
+            # Without Cloudflare only the local model paints; say how to add it.
+            hint = self.words("api_missing") if self.api is None else ""
+            self.console.print(ui.reply(message, hint, failed=True))
             return
         self.scene.record(words or request, direction.prompt, painting.image, likeness)
-        # The keyless API ignores reference pictures, so such a picture had none.
-        used = likeness if painting.source != "keyless" else None
         self._tally(
-            lambda usage: usage.add_painting(painting, referenced=used is not None)
+            lambda usage: usage.add_painting(painting, referenced=likeness is not None)
         )
         self._keep(painting.image)
         detail = f"{self.words(f'source.{painting.source}')} · {painting.seconds:.1f}s"
-        if used is not None:
-            detail += f" · {self.words('reference', host=_host(used.url))}"
+        failure = self._api_failure()
+        if painting.source == "local" and failure is not None:
+            detail += f" · {failure}"
+        if likeness is not None:
+            detail += f" · {self.words('reference', host=_host(likeness.url))}"
         self.console.print(ui.reply(direction.message, detail))
 
     def _direct(self, words: str, found: Reference | None) -> Direction | None:
@@ -458,7 +513,9 @@ class Repl:
         )
         if self.director.mature:
             model += " · mature"
-        return f"  /help · {model} · {self.style}/{self.charset} · {window} window"
+        painter = self.words(f"source.{self.paint_with}")
+        art = f"{self.style}/{self.charset}"
+        return f"  /help · {model} · {painter} · {art} · {window} window"
 
 
 def run_repl() -> int:
@@ -466,7 +523,8 @@ def run_repl() -> int:
     load_environment()  # first: settings may come from a .env file
     words = ui.Words()
     try:
-        settings = load_settings()
+        settings = load_settings(chosen=load_choices())
+        cloudflare = cloudflare_key()
     except ConfigError as exc:
         console.print(ui.reply(str(exc), failed=True))
         return 2
@@ -478,7 +536,7 @@ def run_repl() -> int:
     director = Director(
         create_client(key), settings.model, settings.effort, settings.mature
     )
-    painter, local = build_painter(pollinations_key(), settings.image_model)
+    api, local = build_painter(cloudflare, settings.image_model)
     if local_model_ready(settings.image_model):
         # About 5 GB of VRAM from now on, but no wait on the first local picture.
         local.load_in_background()
@@ -492,7 +550,7 @@ def run_repl() -> int:
     ledger.read()
     folder = new_session_dir(config_dir() / "sessions")
     repl = Repl(
-        console, words, settings, director, painter, folder, ledger, search_key()
+        console, words, settings, director, api, local, folder, ledger, search_key()
     )
     return repl.run()
 

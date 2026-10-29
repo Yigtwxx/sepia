@@ -9,12 +9,8 @@ export const limits: readonly { title: string; body: string }[] = [
         body: 'Ripples need the terminal to report the mouse. *Windows Terminal and iTerm2* do; macOS Terminal.app may not.',
     },
     {
-        title: 'The free painter is weaker.',
-        body: 'Without a key, Pollinations paints about *one picture per 15 seconds*, with a weaker model and a small logo, and ignores reference pictures.',
-    },
-    {
-        title: 'The API cannot see the last picture.',
-        body: 'An edit through the API repaints from the full prompt with the scene’s fixed seed, which keeps the shape close. Only the local model repaints *from the previous picture*.',
+        title: 'The free tier runs out.',
+        body: 'Cloudflare’s free tier is *10,000 neurons a day*, about 100 pictures, reset at 00:00 UTC. Once it is used up, sepia paints on your own GPU for the rest of the session; without the local model, it cannot paint until the reset.',
     },
     {
         title: 'The local model is large.',

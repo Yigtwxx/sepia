@@ -27,7 +27,7 @@ cp .env.example .env
 Copy-Item .env.example .env
 ```
 
-Then set `ANTHROPIC_API_KEY` (and optionally `POLLINATIONS_KEY`) in `.env`. The file is ignored by Git; never commit it, and never paste a key into code, tests, logs or issues.
+Then set `ANTHROPIC_API_KEY` (and optionally `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, both or neither) in `.env`. The file is ignored by Git; never commit it, and never paste a key into code, tests, logs or issues.
 
 Run sepia from the checkout:
 
@@ -61,7 +61,7 @@ uv run python scripts/spike.py "night city"                      # one picture
 uv run python scripts/spike.py --show spike-output               # re-render saved pictures, no API calls
 ```
 
-`--cols` and `--rows` set the grid size (default 160x50). The spike needs `ANTHROPIC_API_KEY` in the environment or `.env`.
+`--cols` and `--rows` set the grid size (default 160x50). The spike needs `ANTHROPIC_API_KEY` in the environment or `.env`, and the Cloudflare settings or the local model to paint.
 
 ## Code
 

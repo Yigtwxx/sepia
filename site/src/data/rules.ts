@@ -14,7 +14,7 @@ export const rules: readonly Rule[] = [
         id: 'words',
         icon: 'nopost',
         title: 'Send your words to the painter.',
-        body: 'Pollinations gets the English prompt Claude wrote, the picture size and the seed. *Your own request is not sent*, and nothing goes there at all when the picture is painted locally.',
+        body: 'Cloudflare gets the English prompt Claude wrote, the picture size, the seed and, at most 512 px a side, the reference picture or the one you are adding to. *Your own request is not sent*, and nothing goes there at all when the picture is painted locally.',
         margin: 'The painter reads a prompt, never you.',
     },
     {

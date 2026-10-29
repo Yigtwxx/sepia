@@ -1,18 +1,19 @@
-"""Settings and API key lookup."""
+"""Settings, the choices kept between sessions, and API key lookup."""
 
 import contextlib
 import os
 import stat
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, cast, get_args
 
 from dotenv import load_dotenv
 from platformdirs import user_config_path
+from pydantic import BaseModel
 
 from sepia.ascii_art import ArtStyle, Charset
-from sepia.painter import DEFAULT_IMAGE_MODEL
+from sepia.painter import DEFAULT_IMAGE_MODEL, Source
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
 Switch = Literal["off", "on"]
@@ -34,6 +35,8 @@ DEFAULT_STYLE: ArtStyle = "ink"
 DEFAULT_CHARSET: Charset = "classic"
 API_KEY_VAR = "ANTHROPIC_API_KEY"
 SEARCH_KEY_VAR = "BRAVE_SEARCH_API_KEY"
+ACCOUNT_VAR = "CLOUDFLARE_ACCOUNT_ID"
+TOKEN_VAR = "CLOUDFLARE_API_TOKEN"
 
 
 class ConfigError(ValueError):
@@ -49,6 +52,22 @@ class Settings:
     image_model: str = DEFAULT_IMAGE_MODEL
     mature: bool = False
     """Let Claude paint sexy, dark and violent pictures of adults, never explicit."""
+    painter: Source = "api"
+    """Cloudflare (when its key is set) or this machine only: /api and /local."""
+
+
+class Choices(BaseModel):
+    """What was last picked with a slash command; the next sepia starts with it.
+
+    Only what was picked is kept, so a `SEPIA_*` variable still sets the rest.
+    """
+
+    model: str | None = None
+    effort: Effort | None = None
+    style: ArtStyle | None = None
+    charset: Charset | None = None
+    mature: bool | None = None
+    painter: Source | None = None
 
 
 def config_dir() -> Path:
@@ -70,14 +89,46 @@ def load_environment(cwd: Path | None = None) -> None:
     load_dotenv(user_env_file(), override=False)
 
 
-def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
+def choices_file() -> Path:
+    return config_dir() / "choices.json"
+
+
+def load_choices(path: Path | None = None) -> Choices:
+    """The choices kept from earlier sessions; none when the file is missing or
+    cannot be read."""
+    try:
+        return Choices.model_validate_json((path or choices_file()).read_bytes())
+    except (OSError, ValueError):
+        return Choices()
+
+
+def remember(path: Path | None = None, **picked: object) -> None:
+    """Keep `picked` for the next session along with the earlier choices. The file
+    is read just before it is written, so several sepia windows keep each other's
+    choices."""
+    target = path or choices_file()
+    choices = load_choices(target).model_copy(update=picked)
+    temporary = target.with_suffix(".tmp")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(choices.model_dump_json(indent=2), encoding="utf-8")
+        os.replace(temporary, target)
+    except OSError:
+        pass  # Only a convenience: the choice still holds for this session.
+
+
+def load_settings(
+    environ: Mapping[str, str] = os.environ, chosen: Choices | None = None
+) -> Settings:
+    """Settings from `SEPIA_*` variables, overridden by what was `chosen` with a
+    slash command in an earlier session."""
     model = environ.get("SEPIA_MODEL", "").strip() or DEFAULT_MODEL
     image_model = environ.get("SEPIA_IMAGE_MODEL", "").strip() or DEFAULT_IMAGE_MODEL
     effort = _choice(environ, "SEPIA_EFFORT", get_args(Effort), DEFAULT_EFFORT)
     style = _choice(environ, "SEPIA_STYLE", get_args(ArtStyle), DEFAULT_STYLE)
     charset = _choice(environ, "SEPIA_CHARSET", get_args(Charset), DEFAULT_CHARSET)
     mature = _choice(environ, "SEPIA_MATURE", get_args(Switch), "off")
-    return Settings(
+    settings = Settings(
         model=model,
         effort=cast(Effort, effort),
         style=cast(ArtStyle, style),
@@ -85,6 +136,9 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         image_model=image_model,
         mature=mature == "on",
     )
+    if chosen is None:
+        return settings
+    return replace(settings, **chosen.model_dump(exclude_none=True))
 
 
 def api_key(environ: Mapping[str, str] = os.environ) -> str | None:
@@ -96,10 +150,17 @@ def search_key(environ: Mapping[str, str] = os.environ) -> str | None:
     return environ.get(SEARCH_KEY_VAR, "").strip() or None
 
 
-def pollinations_key(environ: Mapping[str, str] = os.environ) -> str | None:
-    """Optional key from enter.pollinations.ai: no logo and better models, paid
-    from the account's pollen."""
-    return environ.get("POLLINATIONS_KEY", "").strip() or None
+def cloudflare_key(environ: Mapping[str, str] = os.environ) -> tuple[str, str] | None:
+    """Optional Cloudflare account ID and API token for Workers AI, which paints
+    for free up to a daily allowance. Only one of the two is a mistake."""
+    account = environ.get(ACCOUNT_VAR, "").strip()
+    token = environ.get(TOKEN_VAR, "").strip()
+    if bool(account) != bool(token):
+        missing = TOKEN_VAR if account else ACCOUNT_VAR
+        raise ConfigError(
+            f"{missing} is not set; Cloudflare needs both {ACCOUNT_VAR} and {TOKEN_VAR}"
+        )
+    return (account, token) if account else None
 
 
 def save_api_key(key: str, path: Path | None = None) -> Path:

@@ -57,7 +57,8 @@ class Usage:
     """Requests served by a model without a known price; their tokens are left out
     of `cost`."""
     pictures: dict[str, int] = field(default_factory=dict)
-    """Pictures painted per source: "api", "keyless" or "local"."""
+    """Pictures painted per source: "api" or "local" (older totals may also hold
+    "keyless", from a painter sepia no longer has)."""
     paint_seconds: float = 0.0
     referenced: int = 0
     """Pictures painted after a reference picture."""

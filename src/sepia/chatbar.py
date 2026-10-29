@@ -7,6 +7,7 @@ which split the block in two.)
 `BottomBar` keeps that block on the window's last rows. A terminal scroll region
 covers every row above it, so the transcript starts under the welcome box and, once
 it reaches the bar, scrolls the welcome box out of view while the bar never moves.
+Typing "/" opens a menu of the matching commands on rows the bar borrows above it.
 """
 
 import io
@@ -15,7 +16,6 @@ from collections.abc import Callable, Sequence
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app_session
-from prompt_toolkit.auto_suggest import AutoSuggest, Suggestion
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.data_structures import Size
 from prompt_toolkit.document import Document
@@ -27,11 +27,16 @@ from prompt_toolkit.formatted_text import (
 )
 from prompt_toolkit.history import History
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
-from prompt_toolkit.layout import FormattedTextControl, HSplit, Layout, Window
+from prompt_toolkit.layout import (
+    ConditionalContainer,
+    FormattedTextControl,
+    HSplit,
+    Layout,
+    Window,
+)
 from prompt_toolkit.layout.controls import BufferControl
 from prompt_toolkit.layout.processors import (
     AfterInput,
-    AppendAutoSuggestion,
     BeforeInput,
     ConditionalProcessor,
 )
@@ -49,8 +54,10 @@ STYLE = Style.from_dict(
         "frame": ui.FRAME,
         "prompt": f"bold {ui.ACCENT}",
         "placeholder": ui.MUTED,
-        "auto-suggestion": ui.MUTED,
         "status": ui.MUTED,
+        # Not "menu": prompt_toolkit's own style gives that class a grey background.
+        "commands.chosen": f"bold {ui.ACCENT}",
+        "commands.chosen-summary": ui.ACCENT,
     }
 )
 
@@ -63,6 +70,8 @@ class BottomBar:
     def __init__(self, write: Callable[[str], None], rows: Callable[[], int]) -> None:
         self._write = write
         self._rows = rows
+        self._extra = 0
+        """Rows above the bar lent to the command menu."""
 
     def start(self) -> None:
         """Set the region; this also homes the cursor, where the transcript begins."""
@@ -88,31 +97,80 @@ class BottomBar:
         """Give the whole screen back and clear the bar, leaving the cursor there."""
         self._write(f"{self.RESET}\x1b[{self._top()};1H\x1b[J")
 
+    def make_room(self, rows: int) -> int:
+        """Lend `rows` rows above the bar to the command menu, or take them back
+        with 0, and leave the cursor on the bar's new first row, cleared to the
+        bottom. Returns the rows lent; the transcript always keeps one.
+
+        The transcript scrolls only as far as it reaches into the lent rows: line
+        feeds from its end move down through empty rows and scroll once they meet
+        the region's bottom. Its end is then saved again where it now is.
+        """
+        rows = max(0, min(rows, self._rows() - BAR_ROWS - 1))
+        before = self._top()
+        if rows > self._extra:
+            more = rows - self._extra
+            self._write(self.RESTORE + "\n" * more + f"\x1b[{more}A" + self.SAVE)
+        self._extra = rows
+        # Setting the region homes the cursor; clear from whichever top is higher.
+        top = self._top()
+        self._write(f"{self._region()}\x1b[{min(before, top)};1H\x1b[J\x1b[{top};1H")
+        return rows
+
     def _top(self) -> int:
-        return max(self._rows() - BAR_ROWS + 1, 1)
+        return max(self._rows() - BAR_ROWS - self._extra + 1, 1)
 
     def _region(self) -> str:
-        return f"\x1b[1;{max(self._rows() - BAR_ROWS, 1)}r"
+        return f"\x1b[1;{max(self._rows() - BAR_ROWS - self._extra, 1)}r"
 
 
-class CommandSuggest(AutoSuggest):
-    """Completes a slash command in grey as it is typed; Tab or → accepts it.
+class CommandMenu:
+    """The slash commands that start with what is typed, listed above the bar.
 
-    An inline hint instead of a menu, because the bar sits on the last rows and a
-    menu below it would fall off the screen.
+    It opens on "/" and closes at the first space: ↑↓ move the highlight, Tab
+    completes the highlighted command and Enter runs it.
     """
 
-    def __init__(self, names: Sequence[str]) -> None:
-        self._names = names
+    def __init__(self, commands: Sequence[tuple[str, str]]) -> None:
+        self._commands = [(usage.split()[0], summary) for usage, summary in commands]
+        self.chosen = 0
+        """Index of the highlighted match."""
 
-    def get_suggestion(self, buffer: Buffer, document: Document) -> Suggestion | None:
-        text = document.text
+    def matches(self, text: str) -> list[tuple[str, str]]:
+        """Name and summary of each command `text` is the start of."""
         if not text.startswith("/") or " " in text:
-            return None
-        for name in self._names:
-            if name.startswith(text) and name != text:
-                return Suggestion(name[len(text) :])
-        return None
+            return []
+        return [command for command in self._commands if command[0].startswith(text)]
+
+    def choice(self, text: str) -> str | None:
+        """The highlighted command's name; None when nothing matches."""
+        found = self.matches(text)
+        return found[min(self.chosen, len(found) - 1)][0] if found else None
+
+    def move(self, text: str, step: int) -> None:
+        count = len(self.matches(text))
+        if count:
+            self.chosen = (self.chosen + step) % count
+
+    def lines(self, text: str, rows: int) -> StyleAndTextTuples:
+        """The menu on `rows` rows: the matches nearest the bar, scrolled to keep
+        the highlight in view, under blank rows when fewer match."""
+        found = self.matches(text)
+        start = max(0, min(self.chosen - rows + 1, len(found) - rows))
+        shown = found[start : start + rows]
+        column = max((len(name) for name, _ in found), default=0)
+        fragments: StyleAndTextTuples = [("", "\n" * (rows - len(shown)))]
+        for index, (name, summary) in enumerate(shown, start):
+            # The highlighted command in the accent color, the rest in plain text.
+            chosen = index == self.chosen
+            pointer = ui.POINTER if chosen else " "
+            name_style = "class:commands.chosen" if chosen else ""
+            summary_style = "class:commands.chosen-summary" if chosen else ""
+            fragments.append((name_style, f" {pointer} {name:<{column}}"))
+            fragments.append((summary_style, f"  {summary}"))
+            if index < start + len(shown) - 1:
+                fragments.append(("", "\n"))
+        return fragments
 
 
 class ChatBar:
@@ -124,16 +182,24 @@ class ChatBar:
         commands: Sequence[tuple[str, str]],
         placeholder: str,
         status: Callable[[], str],
+        make_room: Callable[[int], int] = lambda rows: rows,
     ) -> None:
         self._history = history
-        self._suggest = CommandSuggest([usage.split()[0] for usage, _ in commands])
+        self._menu = CommandMenu(commands)
         self._placeholder = placeholder
         self._status = status
+        self._make_room = make_room
+        """Asks for rows above the bar for the menu: `BottomBar.make_room`."""
+        self._menu_rows = 0
 
     def read(self) -> str:
         """The submitted line. Raises KeyboardInterrupt on Ctrl+C and EOFError on
         Ctrl+D in an empty bar, like `input()`."""
-        result: str = self._application().run()
+        try:
+            result: str = self._application().run()
+        finally:
+            if self._menu_rows:
+                self._menu_rows = self._make_room(0)
         return result
 
     def still(self, width: int) -> list[str]:
@@ -157,7 +223,6 @@ class ChatBar:
     def _application(self) -> Application[str]:
         buffer = Buffer(
             history=self._history,
-            auto_suggest=self._suggest,
             multiline=False,
             accept_handler=lambda buf: _accept(buf),
         )
@@ -167,7 +232,6 @@ class ChatBar:
                 buffer,
                 input_processors=[
                     BeforeInput(ui.PROMPT, style="class:prompt"),
-                    AppendAutoSuggestion(),
                     ConditionalProcessor(
                         AfterInput(self._placeholder, style="class:placeholder"),
                         empty,
@@ -177,24 +241,60 @@ class ChatBar:
             height=1,
             dont_extend_height=True,
         )
+        menu = ConditionalContainer(
+            Window(
+                FormattedTextControl(
+                    lambda: self._menu.lines(buffer.text, self._menu_rows)
+                ),
+                height=lambda: self._menu_rows,
+                dont_extend_height=True,
+            ),
+            filter=Condition(lambda: self._menu_rows > 0),
+        )
         body = HSplit(
             [
+                menu,
                 _line(ui.bar_rule, "class:frame"),
                 field,
                 _line(ui.bar_rule, "class:frame"),
                 _line(lambda _: self._status(), "class:status"),
             ]
         )
+        submitted = False
+
+        def _fit_menu(buf: Buffer) -> None:
+            # The bar grows upward: it is erased, given rows above it and redrawn
+            # from its new first row.
+            self._menu.chosen = 0
+            wanted = len(self._menu.matches(buf.text))
+            if submitted or wanted == self._menu_rows:
+                return
+            app.renderer.erase()
+            self._menu_rows = self._make_room(wanted)
+            app.invalidate()
+
+        buffer.on_text_changed += _fit_menu
 
         def _accept(buf: Buffer) -> bool:
-            # Enter on a partial command runs the one suggested for it: /us -> /usage.
-            suggestion = self._suggest.get_suggestion(buf, buf.document)
-            if suggestion is not None:
-                buf.text += suggestion.text
+            # Enter on a partial command runs the highlighted one: /us -> /usage.
+            nonlocal submitted
+            submitted = True
+            choice = self._menu.choice(buf.text)
+            if choice is not None:
+                buf.text = choice
             app.exit(result=buf.text)
             return True  # keep the text out of the buffer reset; history still saves
 
         keys = KeyBindings()
+        choosing = Condition(lambda: len(self._menu.matches(buffer.text)) > 1)
+
+        @keys.add("up", filter=choosing)
+        def _up(event: KeyPressEvent) -> None:
+            self._menu.move(buffer.text, -1)
+
+        @keys.add("down", filter=choosing)
+        def _down(event: KeyPressEvent) -> None:
+            self._menu.move(buffer.text, 1)
 
         @keys.add("c-c")
         def _interrupt(event: KeyPressEvent) -> None:
@@ -206,12 +306,9 @@ class ChatBar:
 
         @keys.add("tab")
         def _complete(event: KeyPressEvent) -> None:
-            # Computed here rather than read from buffer.suggestion, which is
-            # filled in the background and can lag behind fast typing.
-            current = event.current_buffer
-            suggestion = self._suggest.get_suggestion(current, current.document)
-            if suggestion is not None:
-                current.insert_text(suggestion.text)
+            choice = self._menu.choice(buffer.text)
+            if choice is not None:
+                buffer.document = Document(choice)
 
         app: Application[str] = Application(
             layout=Layout(body, focused_element=field),

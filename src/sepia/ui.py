@@ -89,6 +89,14 @@ STRINGS: dict[str, str] = {
     "mature_on": "Mature pictures on, from the next picture on: sexy and dark "
     "scenes are painted as asked, never explicit",
     "mature_off": "Mature pictures off, from the next picture on",
+    "painter_api": "Painting with Cloudflare, on this machine when it fails, from "
+    "the next picture on",
+    "painter_local": "Painting on this machine only, from the next picture on",
+    "api_missing": "Cloudflare is not set up: put CLOUDFLARE_ACCOUNT_ID and "
+    "CLOUDFLARE_API_TOKEN in .env (Workers AI → Use REST API: "
+    "https://dash.cloudflare.com/?to=/:account/ai/workers-ai)",
+    "local_missing": "The local model is not ready: install sepia-cli[local], then "
+    "run sepia --download",
     "no_window": "Could not open the picture window: {error}",
     "unknown": "No such command {command}",
     "help_title": "commands",
@@ -103,8 +111,7 @@ STRINGS: dict[str, str] = {
     "failure.truncated": "The reply was cut off; try again.",
     "failure.invalid": "Claude's reply was malformed; try again.",
     "failure.paint": "Could not paint the picture: {error}",
-    "source.api": "pollinations",
-    "source.keyless": "pollinations (free)",
+    "source.api": "cloudflare",
     "source.local": "local GPU",
     "pick_hint": "↑↓ to move · Enter to choose · Esc to cancel",
     "pick_style": "How should the picture be drawn?",
@@ -152,6 +159,8 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/model [haiku|sonnet|opus|fable]", "choose which Claude writes the prompts"),
     ("/effort [low|medium|high|xhigh|max]", "choose how long Claude thinks"),
     ("/mature [on|off]", "allow sexy and dark pictures, never explicit"),
+    ("/api", "paint with Cloudflare, on this machine when it fails"),
+    ("/local", "paint only on this machine's GPU"),
     ("/usage", "show what Claude used and cost, now and in all"),
     ("/help", "show this list"),
     ("/exit", "close sepia and its window (also Ctrl+D)"),
