@@ -17,6 +17,21 @@
         ],
         "createdAt": "2026-10-29T09:41:52.981Z",
         "reason": "False positive: the card sets Fraunces, Kalam and IBM Plex Mono through CSS variables; user confirmed"
+      },
+      {
+        "rule": "overused-font",
+        "value": "fraunces fallback",
+        "createdAt": "2026-10-29T10:16:04.050Z",
+        "reason": "User confirmed: the metric-matched Georgia fallback of the confirmed Fraunces display face"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "site/src/components/Inkprint.astro"
+        ],
+        "createdAt": "2026-10-29T10:16:04.118Z",
+        "reason": "User confirmed: the no-JS fallback of the ASCII plates, coloured across the ramp like sepia's own output"
       }
     ]
   }
