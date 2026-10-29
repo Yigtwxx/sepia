@@ -71,9 +71,9 @@ STRINGS: dict[str, str] = {
     "help_hint": "/help for commands",
     "tip": 'Tip: describe a scene, then build on it: "waterfall", "/add mountains"',
     "placeholder": "describe a picture, or paste a picture link · /add to build on",
-    "directing": "Working on it… (writing the prompt)",
-    "painting": "Working on it… (painting · {source})",
-    "looking": "Working on it… (finding a reference picture)",
+    "directing": "Working on it… (writing the prompt · {elapsed})",
+    "painting": "Working on it… (painting · {elapsed})",
+    "looking": "Working on it… (finding a reference picture · {elapsed})",
     "reference": "after a picture from {host}",
     "shown": "shown as found · {host}",
     "showing_link": "Showing the picture you linked.",
@@ -204,6 +204,12 @@ def bar_rule(width: int) -> str:
 def echo(line: str) -> Text:
     """The submitted request, kept in the transcript."""
     return Text.assemble((PROMPT, f"bold {ACCENT}"), line)
+
+
+def elapsed(seconds: float) -> str:
+    """How long a request has run, for the spinner: 42s, then 2m 05s."""
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes}m {rest:02d}s" if minutes else f"{rest}s"
 
 
 def reply(message: str, detail: str = "", *, failed: bool = False) -> Text:

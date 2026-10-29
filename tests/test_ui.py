@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import get_args
 
+import pytest
 from rich.console import Console
 from rich.text import Text
 
@@ -31,6 +32,22 @@ def test_words_commands_include_clear_and_exit() -> None:
 def test_reply_marks_failures_in_the_warning_color() -> None:
     styles = " ".join(str(s.style) for s in ui.reply("x", failed=True).spans)
     assert ui.WARN in styles, f"Failure not highlighted: {styles}"
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [(0.0, "0s"), (9.99, "9s"), (59.5, "59s"), (60.0, "1m 00s"), (125.4, "2m 05s")],
+)
+def test_elapsed_whole_seconds_then_minutes(seconds: float, expected: str) -> None:
+    assert ui.elapsed(seconds) == expected, f"{seconds}: got {ui.elapsed(seconds)!r}"
+
+
+def test_words_working_labels_show_the_elapsed_time_and_no_painter() -> None:
+    words = ui.Words()
+    for key in ("directing", "painting", "looking"):
+        label = words(key, elapsed="12s")
+        assert label.endswith("· 12s)"), f"{key}: no elapsed time in {label!r}"
+        assert "pollinations" not in label, f"{key}: names a painter in {label!r}"
 
 
 def test_bar_rule_is_an_open_line_across_the_width() -> None:

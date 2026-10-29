@@ -62,17 +62,25 @@ export const statusBar = `/help · haiku-5-5 (high) · ink/classic · ● window
 const SPINNER = '✻✽✶✳✢·';
 const TICK_MS = 100; // repl.py turns the spinner at about ten frames a second
 
-/** The spinner turning on one line for `ms`, as repl.py's `_wait` draws it. */
-function spin(id: string, label: string, ms: number, start = 0): Frame[] {
+/** The spinner turning on one line for `ms`, as repl.py's `_wait` draws it.
+    `label` gets the request's running time (ui.elapsed): the spin begins `since`
+    ms into the replay, and `scale` turns replay time into the run's time. */
+function spin(
+    id: string,
+    label: (elapsed: string) => string,
+    ms: number,
+    { start = 0, since = 0, scale = 1 } = {},
+): Frame[] {
     const frames: Frame[] = [];
     for (let t = 0; t < ms; t += TICK_MS) {
         const glyph = SPINNER[(start + t / TICK_MS) % SPINNER.length] ?? '✻';
+        const seconds = Math.floor(((since + t) * scale) / 1000);
         frames.push({
             wait: frames.length === 0 ? 260 : TICK_MS,
             id,
             spans: [
                 { text: ` ${glyph} `, tone: 'accent' },
-                { text: label, tone: 'muted' },
+                { text: label(`${seconds}s`), tone: 'muted' },
             ],
         });
     }
@@ -89,10 +97,16 @@ const PAINTER: Record<string, string> = {
     keyless: 'pollinations (free)',
 };
 
+const WRITE_MS = 1700;
+const PAINT_MS = 1400;
+
 /** One request: echo, spinner while Claude writes, spinner while it paints, reply. */
 function request(typed: string, anchor: string, pic: PictureArt, replyAnchor: string): Frame[] {
     const painter = PAINTER[pic.painter] ?? pic.painter;
     const spinner = `spin-${anchor}`;
+    // The replay is quicker than the run; its counter keeps the run's pace, so
+    // the painting spin lasts the picture's real seconds on it.
+    const scale = (pic.seconds * 1000) / PAINT_MS;
     return [
         {
             wait: 900,
@@ -103,8 +117,14 @@ function request(typed: string, anchor: string, pic: PictureArt, replyAnchor: st
                 { text: typed, tone: 'plain' },
             ],
         },
-        ...spin(spinner, 'Working on it… (writing the prompt)', 1700),
-        ...spin(spinner, `Working on it… (painting · ${painter})`, 1400, 3),
+        ...spin(spinner, (s) => `Working on it… (writing the prompt · ${s})`, WRITE_MS, {
+            scale,
+        }),
+        ...spin(spinner, (s) => `Working on it… (painting · ${s})`, PAINT_MS, {
+            start: 3,
+            since: WRITE_MS,
+            scale,
+        }),
         {
             wait: 140,
             id: spinner,

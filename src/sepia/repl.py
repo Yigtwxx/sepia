@@ -129,6 +129,8 @@ class Repl:
         self.session_file = folder / "viewer.json"
         self.host.session.save(self.session_file)
         self._launched_at = 0.0
+        self._started = time.monotonic()
+        """When the request being worked on began; the spinner counts from it."""
         self._count = 0
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sepia-work")
         self.bar = BottomBar(self._write, lambda: shutil.get_terminal_size().lines)
@@ -254,6 +256,7 @@ class Repl:
         /add on an empty scene simply paints a new picture. A bare name ("yunara
         lol") or a bare picture link shows the subject's picture as it is.
         """
+        self._started = time.monotonic()
         add = add and not self.scene.is_empty
         if not add:
             self.scene.reset()
@@ -261,7 +264,7 @@ class Repl:
         words, links = split_links(request)
         found: Reference | None = None
         if links:
-            found = self._wait(lambda: find_reference(links), self.words("looking"))
+            found = self._wait(lambda: find_reference(links), "looking")
             if found is None:
                 self.console.print(ui.reply(self.words("link_unusable"), failed=True))
                 if not words:
@@ -290,7 +293,7 @@ class Repl:
                 lambda: self.painter.paint(
                     direction.prompt, size, self.scene.seed, reference, likeness
                 ),
-                self.words("painting", source=self.words("source.api")),
+                "painting",
             )
         except PainterError as exc:
             message = self.words("failure.paint", error=str(exc))
@@ -315,7 +318,7 @@ class Repl:
         try:
             direction = self._wait(
                 lambda: self.director.direct(words, self.scene, picture),
-                self.words("directing"),
+                "directing",
             )
         except DirectorError as exc:
             self.console.print(
@@ -332,7 +335,7 @@ class Repl:
             lambda: find_subject(
                 direction.subject, direction.references, self.search_key
             ),
-            self.words("looking"),
+            "looking",
         )
         if searches:
             self._tally(lambda usage: usage.add_image_searches(searches))
@@ -394,14 +397,17 @@ class Repl:
             return
         self._launched_at = time.monotonic()
 
-    def _wait(self, work: Callable[[], T], label: str) -> T:
-        """Run `work` on the worker thread while a spinner turns."""
+    def _wait(self, work: Callable[[], T], step: str) -> T:
+        """Run `work` on the worker thread while a spinner turns, labelled with
+        `step` and the seconds since the request began."""
         future: Future[T] = self._pool.submit(work)
         frames = ui.SPINNER
         with Live(console=self.console, transient=True, refresh_per_second=12) as live:
             tick = 0
             while not future.done():
                 frame = frames[tick % len(frames)]
+                seconds = ui.elapsed(time.monotonic() - self._started)
+                label = self.words(step, elapsed=seconds)
                 live.update(Text.assemble((f" {frame} ", ui.ACCENT), (label, ui.MUTED)))
                 tick += 1
                 time.sleep(FRAME_SECONDS)
