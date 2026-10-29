@@ -15,6 +15,11 @@ tag all carry.
 - `/effort [low|medium|high|xhigh|max]` sets how long Claude thinks about each
   picture, from the next request on; without a name it opens a menu. The
   bottom bar shows the current effort next to the model.
+- `/mature [on|off]` (and `SEPIA_MATURE`, off by default) lets Claude paint
+  sexy, hot, dark and violent scenes of adults as asked instead of toning
+  them down: glamour, boudoir, lingerie, artistic or implied nudity. Explicit
+  sex, anyone who looks under 18 and real people undressed stay off limits;
+  such a request gets the nearest acceptable picture instead of a refusal.
 - Paste a picture link into a request ("yunara https://…") to paint from
   that picture: sepia downloads it first, Claude sees it and writes the
   subject's look into the prompt without a web search, and the image model

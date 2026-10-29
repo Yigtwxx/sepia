@@ -5,7 +5,7 @@ from rich.console import Console
 from rich.text import Text
 
 from sepia import ui
-from sepia.config import Effort
+from sepia.config import Effort, Switch
 from sepia.usage import AllTime, Earlier, Usage
 
 
@@ -139,6 +139,16 @@ def test_words_describe_every_effort_level() -> None:
     words = ui.Words()
     missing = [level for level in get_args(Effort) if not words(f"effort.{level}")]
     assert not missing, f"No description for {missing}"
+
+
+def test_words_describe_every_mature_switch() -> None:
+    words = ui.Words()
+    missing = [
+        switch
+        for switch in get_args(Switch)
+        if not (words(f"mature.{switch}") and words(f"mature_{switch}"))
+    ]
+    assert not missing, f"No description or reply for {missing}"
 
 
 def test_usage_view_lists_image_searches_once_there_are_some() -> None:

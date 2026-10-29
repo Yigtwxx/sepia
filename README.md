@@ -80,13 +80,14 @@ On the first run sepia asks for your Anthropic API key (hidden input) and saves 
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background (made for dark backgrounds); `fill` also paints each cell's background, which works on any theme. Without an argument it opens a menu: arrow keys and Enter (or the option's number) pick, Esc cancels. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. Without an argument it opens a menu, like `/style`. |
 | `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. Without an argument it opens a menu, like `/style`. |
+| `/mature [on\|off]` | With `on`, Claude paints sexy, hot, dark and violent scenes of adults as asked instead of toning them down: glamour, boudoir, lingerie, artistic or implied nudity. Never explicit (no sex acts, no visible genitals), never anyone who is or looks under 18, never a real person undressed. Off by default; without an argument it opens a menu. |
 | `/usage` | Show what this session and all sessions used: Claude's tokens, web searches and estimated cost, and the pictures painted per source. The session bars are drawn against the all-time totals, so their gray rest is earlier use. Use from before tracking began is estimated once from the prompt history and the saved sessions. |
 | `/help` | List the commands. |
 | `/exit` | Close sepia and the viewer window. `/quit`, `/q` and Ctrl+D do the same. |
 
 Move the mouse over the picture window to glitch the picture around the pointer. It heals when the pointer stops. Windows Terminal and iTerm2 report pointer movement; macOS Terminal.app may not.
 
-Up and down arrows walk the request history, and typing `/` completes commands; Enter on a partial command runs the suggested one (`/us` opens `/usage`). The bottom bar shows the model and its effort, the current style and charset, and whether the viewer window is connected (`●`) or not (`○`). If you close the viewer, the next request opens it again.
+Up and down arrows walk the request history, and typing `/` completes commands; Enter on a partial command runs the suggested one (`/us` opens `/usage`). The bottom bar shows the model and its effort (and `mature` when it is on), the current style and charset, and whether the viewer window is connected (`●`) or not (`○`). If you close the viewer, the next request opens it again.
 
 Command-line flags:
 
@@ -109,9 +110,10 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | `SEPIA_EFFORT` | `high` | Starting Claude effort: `low`, `medium`, `high`, `xhigh` or `max`. `/effort` changes it while sepia runs. |
 | `SEPIA_STYLE` | `ink` | Starting style: `ink` or `fill`. |
 | `SEPIA_CHARSET` | `classic` | Starting character set: `classic` or `symbols`. |
+| `SEPIA_MATURE` | `off` | Start with mature pictures `on` or `off`. `/mature` changes it while sepia runs. |
 | `SEPIA_IMAGE_MODEL` | `black-forest-labs/FLUX.2-klein-4B` | Hugging Face id of the local model. |
 
-An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE` or `SEPIA_CHARSET` stops sepia at startup.
+An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE`, `SEPIA_CHARSET` or `SEPIA_MATURE` stops sepia at startup.
 
 The user config folder is `%LOCALAPPDATA%\sepia` on Windows and `~/Library/Application Support/sepia` on macOS. It holds the key file, the request history, and one folder per session with that session's pictures (`01.png`, `02.png`, ...). The newest 10 session folders are kept.
 

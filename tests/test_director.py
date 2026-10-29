@@ -74,6 +74,21 @@ def test_director_effort_change_applies_to_the_next_request(
     assert config["effort"] == "max", f"Got {config}"
 
 
+def test_director_mature_adds_its_rules_to_the_system_prompt(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message(REPLY))
+    director = Director(fake_client, "claude-haiku-5-5", "low")
+    director.direct("şelale", Scene())
+    plain = fake_client.beta.messages.stream.call_args.kwargs["system"]
+    director.mature = True
+    director.direct("şelale", Scene())
+    mature = fake_client.beta.messages.stream.call_args.kwargs["system"]
+    assert "Mature mode is on" not in plain, "Mature rules sent while off"
+    assert mature.startswith(plain), "Mature mode dropped the base instructions"
+    assert "Mature mode is on" in mature, "Mature rules missing while on"
+
+
 def test_director_direct_valid_reply_returns_direction(
     fake_client: MagicMock, make_message, set_final_message
 ) -> None:

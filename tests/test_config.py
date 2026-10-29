@@ -31,7 +31,15 @@ def test_load_settings_overrides_are_normalized() -> None:
     assert settings == expected, f"Expected {expected}, got {settings}"
 
 
-@pytest.mark.parametrize("name", ["SEPIA_EFFORT", "SEPIA_STYLE", "SEPIA_CHARSET"])
+@pytest.mark.parametrize(("value", "expected"), [("on", True), (" OFF ", False)])
+def test_load_settings_mature_switch_sets_mature(value: str, expected: bool) -> None:
+    settings = load_settings({"SEPIA_MATURE": value})
+    assert settings.mature is expected, f"SEPIA_MATURE={value!r}: got {settings}"
+
+
+@pytest.mark.parametrize(
+    "name", ["SEPIA_EFFORT", "SEPIA_STYLE", "SEPIA_CHARSET", "SEPIA_MATURE"]
+)
 def test_load_settings_unknown_choice_raises_config_error(name: str) -> None:
     with pytest.raises(ConfigError, match=name):
         load_settings({name: "loud"})

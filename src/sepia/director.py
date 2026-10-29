@@ -131,10 +131,17 @@ def create_client(api_key: str) -> anthropic.Anthropic:
 
 
 class Director:
-    def __init__(self, client: anthropic.Anthropic, model: str, effort: Effort) -> None:
+    def __init__(
+        self,
+        client: anthropic.Anthropic,
+        model: str,
+        effort: Effort,
+        mature: bool = False,
+    ) -> None:
         self._client = client
         self._model = model
         self._effort = effort
+        self._mature = mature
 
     @property
     def effort(self) -> Effort:
@@ -144,6 +151,15 @@ class Director:
     def effort(self, effort: Effort) -> None:
         """Takes effect from the next request; /effort sets it while sepia waits."""
         self._effort = effort
+
+    @property
+    def mature(self) -> bool:
+        return self._mature
+
+    @mature.setter
+    def mature(self, mature: bool) -> None:
+        """Takes effect from the next request; /mature sets it while sepia waits."""
+        self._mature = mature
 
     def direct(
         self, request: str, scene: Scene, linked: Image.Image | None = None
@@ -169,7 +185,7 @@ class Director:
                 max_tokens=MAX_TOKENS,
                 betas=[FALLBACK_BETA] if fallback else anthropic.omit,
                 fallbacks="default" if fallback else anthropic.omit,
-                system=system_prompt(),
+                system=system_prompt(self._mature),
                 tools=[WEB_SEARCH],
                 output_config=output_config,
                 messages=[{"role": "user", "content": content}],
@@ -238,8 +254,11 @@ def _links(raw: list[str]) -> tuple[str, ...]:
 
 
 @cache
-def system_prompt() -> str:
-    return _prompt("director.md")
+def system_prompt(mature: bool = False) -> str:
+    """The art director's instructions; `mature` adds the rules for grown-up
+    pictures."""
+    base = _prompt("director.md")
+    return f"{base}\n\n{_prompt('mature.md')}" if mature else base
 
 
 def build_request(request: str, scene: Scene, linked: bool = False) -> str:

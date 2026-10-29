@@ -65,7 +65,9 @@ def main() -> int:
     if key is None:
         console.print("ANTHROPIC_API_KEY is not set (put it in .env)")
         return 1
-    director = Director(create_client(key), settings.model, settings.effort)
+    director = Director(
+        create_client(key), settings.model, settings.effort, settings.mature
+    )
     painter, _ = build_painter(pollinations_key(), settings.image_model)
     brave = search_key()
     args.out.mkdir(exist_ok=True)

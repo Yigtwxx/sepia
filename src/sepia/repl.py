@@ -23,6 +23,7 @@ from sepia.config import (
     ConfigError,
     Effort,
     Settings,
+    Switch,
     api_key,
     config_dir,
     load_environment,
@@ -196,6 +197,13 @@ class Repl:
             if picked is not None:
                 self.director.effort = cast(Effort, picked)
                 self.console.print(ui.reply(self.words("effort_set", effort=picked)))
+        elif command.name == "mature":
+            switches = cast(tuple[str, ...], get_args(Switch))
+            current = "on" if self.director.mature else "off"
+            picked = self._pick("mature", switches, current, command.argument)
+            if picked is not None:
+                self.director.mature = picked == "on"
+                self.console.print(ui.reply(self.words(f"mature_{picked}")))
         elif command.name in ("style", "charset"):
             if command.name == "style":
                 styles = cast(tuple[str, ...], get_args(ArtStyle))
@@ -422,6 +430,8 @@ class Repl:
         model = (
             f"{self.settings.model.removeprefix('claude-')} ({self.director.effort})"
         )
+        if self.director.mature:
+            model += " · mature"
         return f"  /help · {model} · {self.style}/{self.charset} · {window} window"
 
 
@@ -439,7 +449,9 @@ def run_repl() -> int:
         key = _ask_for_key(console, words)
         if key is None:
             return 1
-    director = Director(create_client(key), settings.model, settings.effort)
+    director = Director(
+        create_client(key), settings.model, settings.effort, settings.mature
+    )
     painter, _ = build_painter(pollinations_key(), settings.image_model)
     ledger = Ledger(
         config_dir() / "usage.json",

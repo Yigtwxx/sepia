@@ -15,10 +15,10 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/repl.py`: the prompt window loop, slash commands, spinner, session folders, viewer relaunch.
 - `src/sepia/ui.py`: wordmark, palette, spinner frames, replies, interface strings (English only).
 - `src/sepia/director.py`: one Claude call per request; structured JSON reply (`message`, `prompt`, `edit`, `references`); maps API errors to `Failure`.
-- `src/sepia/prompts/`: `director.md` (system prompt) and `request.md` (per-request template).
+- `src/sepia/prompts/`: `director.md` (system prompt), `mature.md` (appended to it while `/mature` is on) and `request.md` (per-request template).
 - `src/sepia/reference.py`: finds a reference picture for a named subject (Brave image search with `BRAVE_SEARCH_API_KEY`, else a link or page `og:image`), pasted links in requests, https and public hosts only.
 - `src/sepia/painter.py`: `ApiPainter` (Pollinations), `LocalPainter` (FLUX.2 [klein]), `FallbackPainter` with 120 s cooldown, `select_device`, model download.
-- `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`, `/effort`).
+- `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`, `/effort`, `/mature`).
 - `src/sepia/usage.py`: totals for `/usage` (tokens, searches, estimated cost from list prices, pictures per source); `Ledger` keeps all-time totals in `usage.json` in the config dir, with a one-time estimate of earlier use from the prompt history and session folders.
 - `src/sepia/scene.py`: `Scene` (requests, prompts, latest image, fixed seed) and `Canvas` (viewer size in cells).
 - `src/sepia/raster.py`: autocontrast, saturation boost, cover-crop to the grid, letterbox for pictures shown as they are.

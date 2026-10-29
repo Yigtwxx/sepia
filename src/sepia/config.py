@@ -15,6 +15,7 @@ from sepia.ascii_art import ArtStyle, Charset
 from sepia.painter import DEFAULT_IMAGE_MODEL
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
+Switch = Literal["off", "on"]
 
 DEFAULT_MODEL = "claude-haiku-5-5"
 DEFAULT_EFFORT: Effort = "high"
@@ -37,6 +38,8 @@ class Settings:
     style: ArtStyle = DEFAULT_STYLE
     charset: Charset = DEFAULT_CHARSET
     image_model: str = DEFAULT_IMAGE_MODEL
+    mature: bool = False
+    """Let Claude paint sexy, dark and violent pictures of adults, never explicit."""
 
 
 def config_dir() -> Path:
@@ -64,12 +67,14 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
     effort = _choice(environ, "SEPIA_EFFORT", get_args(Effort), DEFAULT_EFFORT)
     style = _choice(environ, "SEPIA_STYLE", get_args(ArtStyle), DEFAULT_STYLE)
     charset = _choice(environ, "SEPIA_CHARSET", get_args(Charset), DEFAULT_CHARSET)
+    mature = _choice(environ, "SEPIA_MATURE", get_args(Switch), "off")
     return Settings(
         model=model,
         effort=cast(Effort, effort),
         style=cast(ArtStyle, style),
         charset=cast(Charset, charset),
         image_model=image_model,
+        mature=mature == "on",
     )
 
 
