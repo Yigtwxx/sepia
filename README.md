@@ -38,6 +38,7 @@ Every request starts a new picture; `/add` builds on the current one. sepia only
 - **Free to paint, local when you need it.** [FLUX.2 [klein] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) paints every picture: on [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) with a free account (about 100 pictures a day), or, with the optional `local` extra, on your own GPU (CUDA or Apple Silicon) whenever the API fails or rate limits. `/local` keeps it on your GPU.
 - **Real subjects stay recognizable.** Name a character, a famous person, a creature, product or landmark, or paste a link to a picture, and sepia paints from a reference picture instead of inventing a stranger.
 - **Made for the terminal.** 24-bit color, two styles and two character sets, a redraw on every resize without new API calls, and ripples that spread from the mouse pointer over the picture.
+- **Your camera, as text.** `/cam` shows the webcam live in the picture window; `/cam` again keeps the frame, and `/add` paints over it.
 - **Costs you can see.** `/usage` shows Claude's tokens, searches and estimated cost, for the session and for all time.
 - **Nothing hidden.** The two windows talk over an authenticated loopback socket, and sepia has no telemetry.
 
@@ -70,6 +71,14 @@ uv tool install "sepia-cli[local]"
 uv tool install "sepia-cli[local]" --index https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match
 ```
 
+**With the camera.** OpenCV for `/cam`, about 45 MB:
+
+```bash
+uv tool install "sepia-cli[cam]"
+```
+
+Extras combine: `"sepia-cli[local,cam]"`.
+
 Nothing is downloaded at install. The first `/local` names the model and its size (FLUX.2 [klein] 4B, about 16 GB from Hugging Face) and downloads it once you say yes. `sepia --download` fetches it ahead of time instead.
 
 ## Usage
@@ -81,6 +90,9 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | Command | What it does |
 | --- | --- |
 | `/add <text>` | Add to the current picture instead of starting a new one. |
+| `/again` | Paint the current picture again from the same prompt with fresh noise, without asking Claude; after `/add`, over the same picture. A picture shown as found has no prompt to paint again. |
+| `/undo` | Go back to the picture before, with its scene, so the next `/add` builds on it. `/clear` can be undone too; there is no redo. |
+| `/cam [off]` | Show the webcam live in the viewer window, mirrored. `/cam` again keeps the frame as the picture, cut to the window's shape; `/add` and `/save` while it is live keep the frame first. A request, `/again`, `/undo` and `/clear` stop the camera, as does `/cam off`. Needs `sepia-cli[cam]`. |
 | `/clear` | Clear the screen and start a fresh picture. |
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background and suits dark themes; `fill` also paints each cell's background and works on any theme. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. |
@@ -232,6 +244,7 @@ What leaves your machine:
 - **To Brave Search:** a short image search query for a named subject, written by Claude, only when `BRAVE_SEARCH_API_KEY` is set.
 - **To the site of a reference picture:** a plain download of the linked page or picture, when a request names a subject or contains a link.
 - **To Cloudflare:** the generated English prompt, the picture size, the seed and, as input pictures of at most 512 px a side, the reference picture and, for `/add`, the previous picture. Your original request is not sent. Nothing goes to Cloudflare when the picture is painted locally.
+- **The camera:** nowhere. Its frames are drawn in the viewer window and never sent; a frame you keep is a picture like any other, so an `/add` on it sends it to the painter as the previous picture.
 - **To Hugging Face:** only the model download, after you say yes to it under `/local` or run `sepia --download`.
 
 Pictures, the request history and the API key file stay in the user config folder on your machine; a picture you keep with `/save` goes to the `sepia` folder of your Pictures folder. sepia has no telemetry of its own.

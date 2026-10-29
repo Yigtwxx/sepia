@@ -6,7 +6,7 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 
 - Python 3.12+, uv (build backend `uv_build`), src layout.
 - Runtime: anthropic, prompt-toolkit, rich, pillow, numpy, pydantic, platformdirs, python-dotenv.
-- Optional extra `local`: torch, diffusers, transformers, accelerate, bitsandbytes (not on macOS). `[tool.uv.sources]` takes torch from the PyTorch cu130 index on Windows and Linux.
+- Optional extra `local`: torch, diffusers, transformers, accelerate, bitsandbytes (not on macOS). Optional extra `cam`: opencv-python-headless. `[tool.uv.sources]` takes torch from the PyTorch cu130 index on Windows and Linux.
 - Dev group: ruff, mypy (strict), pytest.
 
 ## Layout
@@ -22,12 +22,13 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`, `/effort`, `/mature`).
 - `src/sepia/snapshot.py`: `/save`; draws the window's symbol art to a PNG (12x24 px cells, a system monospace font, Pillow's own shrunk to fit as the fallback) in `Pictures/sepia`.
 - `src/sepia/usage.py`: totals for `/usage` (tokens, searches, estimated cost from list prices, pictures per source); `Ledger` keeps all-time totals in `usage.json` in the config dir, with a one-time estimate of earlier use from the prompt history and session folders.
-- `src/sepia/scene.py`: `Scene` (requests, prompts, latest image, fixed seed) and `Canvas` (viewer size in cells).
+- `src/sepia/scene.py`: `Scene` (requests, prompts, latest image and its file, fixed seed), `History` (earlier scenes for `/undo`) and `Canvas` (viewer size in cells).
 - `src/sepia/raster.py`: autocontrast, saturation boost, cover-crop to the grid, letterbox for pictures shown as they are.
 - `src/sepia/ascii_art.py`: pixels to `SymbolArt` (density ramps, Bayer dither, ink/fill colors, optional Sobel outlines) and to rich `Text`.
 - `src/sepia/ipc.py`: HMAC-authenticated loopback channel, JSON messages only, session file.
 - `src/sepia/launcher.py`: opens the viewer (Windows Terminal window with a purple "sepia" tab and a fragment profile, conhost fallback, Terminal.app via osascript).
-- `src/sepia/viewer.py`: full-screen picture window; redraws on resize and on messages.
+- `src/sepia/viewer.py`: full-screen picture window; redraws on resize and on messages; `LiveView` draws the camera as raw ANSI for `/cam`.
+- `src/sepia/camera.py`: the webcam for `/cam` (optional extra `cam`, OpenCV imported inside functions), read on a thread, newest frame mirrored.
 - `src/sepia/mouse.py`: pointer reports from the terminal (SGR mouse mode); `src/sepia/ripple.py`: the rings that spread from the pointer, drawn as ANSI over the changed cells only.
 - `src/sepia/config.py`: settings from env and `.env` files, slash-command choices kept in `choices.json` (they win over `SEPIA_*`), key storage (`save_keys`), config dir.
 - `src/sepia/keys.py`: the Anthropic and Cloudflare keys asked for on the first run and by `/keys`; hidden prompts, a key's state is only set or not set.

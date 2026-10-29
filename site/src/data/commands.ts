@@ -13,6 +13,9 @@ export const install: readonly { label: string; cmd: string }[] = [
 /* The prompt window's slash commands, word for word from src/sepia/ui.py. */
 export const slashCommands: readonly Command[] = [
     { cmd: '/add <text>', comment: 'add to the current picture instead of starting a new one' },
+    { cmd: '/again', comment: 'paint the picture again with fresh noise, no new prompt' },
+    { cmd: '/undo', comment: 'go back to the picture before' },
+    { cmd: '/cam [off]', comment: 'show the webcam live; /cam again keeps the frame' },
     { cmd: '/clear', comment: 'clear the screen and start a fresh picture' },
     { cmd: '/style [ink|fill]', comment: 'choose how the picture is drawn' },
     { cmd: '/charset [classic|symbols]', comment: 'choose the characters that draw it' },

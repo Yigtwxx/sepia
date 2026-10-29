@@ -10,6 +10,12 @@ tag all carry.
 
 ## [Unreleased]
 
+### Added
+
+- `/undo` goes back to the picture before, with its scene: the next `/add` builds on it, and `/clear` can be undone too.
+- `/again` paints the current picture again from the same prompt with fresh noise, without asking Claude; after `/add` it paints over the same picture.
+- `/cam` shows the webcam live in the picture window as colored text, mirrored, at up to 15 frames a second. `/cam` again keeps the frame as the picture, which `/add` paints over and `/save` saves; `/cam off` stops it. Install `sepia-cli[cam]` for it.
+
 ### Changed
 
 - The landing page lists `/save` and `/keys`, `SEPIA_MATURE` and the current
@@ -17,6 +23,7 @@ tag all carry.
 
 ### Fixed
 
+- A request that fails no longer drops the picture before it: `/save` and `/add` still work on the picture in the window.
 - The status line names the painter that actually paints: after `/keys`
   leaves only one of the two Cloudflare values set, it says `local GPU`
   instead of `cloudflare`.
