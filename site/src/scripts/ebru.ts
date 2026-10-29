@@ -2,12 +2,13 @@
    of ink floated on a bath. Drops of the page's inks open one after another, each
    pushing every earlier one outward by the area it takes (Jaffer's marbling map,
    a point at distance d from the drop moves to sqrt(d^2 + r^2)), so the first
-   ones thin into rings; now and then a comb is drawn through the bath and the
-   rings feather. The pointer drags the ink like a stylus. After a while the sheet
-   is lifted (it fades) and a new one starts.
+   ones thin into rings; now and then a comb is drawn slowly through the bath and
+   the rings feather. The pointer drags the ink like a stylus. After a while the
+   sheet is lifted (it fades) and a new one comes up.
 
-   Each pool runs only while it is tall enough and on screen; under reduced
-   motion it draws one still, combed sheet. */
+   Timed in seconds, not frames, so a fast screen does not hurry it. Each pool runs
+   only while it is tall enough and on screen; under reduced motion it draws one
+   still, combed sheet. */
 
 const INKS = [
     '#db2777',
@@ -20,13 +21,19 @@ const INKS = [
     '#f9a8d4',
     '#9333ea',
 ];
+const EDGE = 'rgba(34, 16, 43, 0.14)'; // the fine line where two inks meet
 const MIN_HEIGHT = 150; // px of room below which a pool stays empty
-const STEP = 4; // px: longer edges get a midpoint, so the bands stay smooth
-const MAX_POINTS = 16000; // per blot, as numbers (x and y)
-const SHARP = 9; // px: a tine's pull halves every this far from it
+const STEP = 2.5; // px: longer edges get a midpoint, so the bands stay smooth
+const MAX_POINTS = 24000; // per blot, as numbers (x and y)
+const SHARP = 13; // px: a tine's pull halves every this far from it
 const SHEET_EVENTS = 30; // drops and combs before the sheet is lifted
 const COMB_EVERY = 6; // every sixth event is a comb
-const FADE_FRAMES = 60;
+const GROW_RATE = 1.5; // per second: how fast a drop closes on its full size
+const PAUSE = [1.4, 3] as const; // seconds between one event and the next
+const COMB_SECONDS = 5;
+const LIFT_SECONDS = 1.8; // the old sheet fading out
+const RISE_SECONDS = 1.4; // the new one fading in
+const STYLUS = 0.55; // how much of the pointer's motion the ink takes
 
 interface Blot {
     pts: number[];
@@ -49,12 +56,12 @@ interface Comb {
     vertical: boolean;
     offset: number;
     spacing: number;
-    left: number;
-    dz: number;
+    total: number; // px each tine travels
+    t: number; // 0 to 1
 }
 
 const ring = (x: number, y: number, r: number): number[] => {
-    const n = Math.max(48, Math.ceil((2 * Math.PI * r) / STEP));
+    const n = Math.max(64, Math.ceil((2 * Math.PI * r) / STEP));
     const pts: number[] = [];
     for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
@@ -62,6 +69,7 @@ const ring = (x: number, y: number, r: number): number[] => {
     }
     return pts;
 };
+const ease = (t: number): number => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 
 /** One sheet of marbling, in CSS pixels of a w x h bath. */
 class Sheet {
@@ -72,7 +80,8 @@ class Sheet {
     private spot: { x: number; y: number };
     private events = 0;
     private wait = 0;
-    fading = 0;
+    private lift = 0; // seconds left of the fade out
+    private rise = 0; // seconds left of the fade in
 
     constructor(
         private readonly w: number,
@@ -87,6 +96,7 @@ class Sheet {
         this.growing = undefined;
         this.comb = undefined;
         this.events = 0;
+        this.wait = PAUSE[0];
         // A sheet starts already worked, so it never shows a few lone dots.
         this.settle(16);
     }
@@ -100,8 +110,8 @@ class Sheet {
     private nextSpot(): { x: number; y: number } {
         if (Math.random() < 0.5) return this.spot;
         this.spot = {
-            x: this.w * (0.15 + Math.random() * 0.7),
-            y: this.h * (0.15 + Math.random() * 0.7),
+            x: this.w * (0.18 + Math.random() * 0.64),
+            y: this.h * (0.18 + Math.random() * 0.64),
         };
         return this.spot;
     }
@@ -138,13 +148,13 @@ class Sheet {
     }
 
     stylus(s: Stir): void {
-        const spread = 2 * 24 * 24;
+        const spread = 2 * 26 * 26;
         for (const b of this.blots) {
             const p = b.pts;
             for (let i = 0; i < p.length; i += 2) {
                 const dx = p[i]! - s.x;
                 const dy = p[i + 1]! - s.y;
-                const f = Math.exp(-(dx * dx + dy * dy) / spread) * 0.9;
+                const f = Math.exp(-(dx * dx + dy * dy) / spread) * STYLUS;
                 p[i] = p[i]! + s.dx * f;
                 p[i + 1] = p[i + 1]! + s.dy * f;
             }
@@ -183,14 +193,14 @@ class Sheet {
         return INKS[this.colour++ % INKS.length]!;
     }
 
-    private newComb(frames: number): Comb {
+    private newComb(): Comb {
         const sign = Math.random() < 0.5 ? -1 : 1;
         return {
             vertical: Math.random() < 0.5,
             offset: Math.random() * 60,
-            spacing: 46 + Math.random() * 30,
-            left: frames,
-            dz: (sign * (50 + Math.random() * 40)) / frames,
+            spacing: 50 + Math.random() * 30,
+            total: sign * (40 + Math.random() * 30),
+            t: 0,
         };
     }
 
@@ -198,8 +208,8 @@ class Sheet {
     settle(events: number): void {
         for (let e = 1; e <= events; e++) {
             if (e % COMB_EVERY === 0) {
-                const comb = this.newComb(1);
-                this.tine(comb, comb.dz);
+                const comb = this.newComb();
+                this.tine(comb, comb.total);
             } else {
                 const s = this.nextSpot();
                 this.dropNow(s.x, s.y, this.radius());
@@ -208,48 +218,74 @@ class Sheet {
         }
     }
 
-    /** One frame's change. Returns the sheet's opacity. */
-    step(): number {
+    /** Advance by `dt` seconds. Returns the sheet's opacity. */
+    step(dt: number): number {
+        if (this.lift > 0) {
+            this.lift -= dt;
+            if (this.lift > 0) return ease(this.lift / LIFT_SECONDS);
+            this.start();
+            this.rise = RISE_SECONDS;
+        }
         if (this.growing) {
             const g = this.growing;
-            const r = g.r + (g.to - g.r) * 0.08;
+            const r = g.r + (g.to - g.r) * (1 - Math.exp(-GROW_RATE * dt));
             this.push(g.x, g.y, r * r - g.r * g.r, g.blot);
             g.r = r;
             g.blot.pts = ring(g.x, g.y, r);
             if (g.to - r < 0.3) this.growing = undefined;
         } else if (this.comb) {
-            this.tine(this.comb, this.comb.dz);
-            if (--this.comb.left <= 0) this.comb = undefined;
-        } else if (this.fading > 0) {
-            this.fading -= 1;
-            if (this.fading === 0) this.start();
-            return this.fading === 0 ? 1 : this.fading / FADE_FRAMES;
-        } else if (--this.wait <= 0) {
+            // Drawn through slowly, starting and stopping gently.
+            const c = this.comb;
+            const t = Math.min(1, c.t + dt / COMB_SECONDS);
+            this.tine(c, c.total * (ease(t) - ease(c.t)));
+            c.t = t;
+            if (t >= 1) this.comb = undefined;
+        } else if ((this.wait -= dt) <= 0) {
             this.events += 1;
-            if (this.events > SHEET_EVENTS) this.fading = FADE_FRAMES;
-            else if (this.events % COMB_EVERY === 0) this.comb = this.newComb(80);
+            if (this.events > SHEET_EVENTS) this.lift = LIFT_SECONDS;
+            else if (this.events % COMB_EVERY === 0) this.comb = this.newComb();
             else {
                 const s = this.nextSpot();
                 const blot = { pts: ring(s.x, s.y, 0.5), colour: this.nextInk() };
                 this.blots.push(blot);
                 this.growing = { x: s.x, y: s.y, r: 0.5, to: this.radius(), blot };
             }
-            this.wait = 14 + Math.floor(Math.random() * 24);
+            this.wait = PAUSE[0] + Math.random() * (PAUSE[1] - PAUSE[0]);
         }
         this.refine();
+        if (this.rise > 0) {
+            this.rise = Math.max(0, this.rise - dt);
+            return ease(1 - this.rise / RISE_SECONDS);
+        }
         return 1;
     }
 
+    /** Each blot as a smooth closed curve through its points' midpoints, with a
+        hairline where it meets the next ink. */
     draw(ctx: CanvasRenderingContext2D): void {
         ctx.clearRect(0, 0, this.w, this.h);
+        ctx.lineWidth = 0.6;
+        ctx.strokeStyle = EDGE;
+        ctx.lineJoin = 'round';
         for (const b of this.blots) {
             const p = b.pts;
+            const n = p.length;
+            if (n < 6) continue;
             ctx.beginPath();
-            ctx.moveTo(p[0]!, p[1]!);
-            for (let i = 2; i < p.length; i += 2) ctx.lineTo(p[i]!, p[i + 1]!);
+            ctx.moveTo((p[n - 2]! + p[0]!) / 2, (p[n - 1]! + p[1]!) / 2);
+            for (let i = 0; i < n; i += 2) {
+                const j = (i + 2) % n;
+                ctx.quadraticCurveTo(
+                    p[i]!,
+                    p[i + 1]!,
+                    (p[i]! + p[j]!) / 2,
+                    (p[i + 1]! + p[j + 1]!) / 2,
+                );
+            }
             ctx.closePath();
             ctx.fillStyle = b.colour;
             ctx.fill();
+            ctx.stroke();
         }
     }
 }
@@ -262,6 +298,7 @@ class Pool {
     private size = { w: 0, h: 0 };
     private onScreen = false;
     private frame = 0;
+    private last = 0;
     private stir: Stir | undefined;
     private readonly reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -302,10 +339,8 @@ class Pool {
         if (!this.ctx) return;
         this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         this.sheet = new Sheet(w, h);
-        if (this.reduced) {
-            this.sheet.settle(8);
-            this.sheet.draw(this.ctx);
-        }
+        if (this.reduced) this.sheet.settle(8);
+        this.sheet.draw(this.ctx);
         this.update();
     }
 
@@ -316,24 +351,30 @@ class Pool {
 
     update(): void {
         const run = Boolean(this.sheet) && this.onScreen && !document.hidden && !this.reduced;
-        if (run && !this.frame) this.frame = requestAnimationFrame(this.tick);
+        if (run && !this.frame) {
+            this.last = 0;
+            this.frame = requestAnimationFrame(this.tick);
+        }
         if (!run && this.frame) {
             cancelAnimationFrame(this.frame);
             this.frame = 0;
         }
     }
 
-    private readonly tick = (): void => {
+    private readonly tick = (now: number): void => {
         this.frame = 0;
         const sheet = this.sheet;
         const ctx = this.ctx;
         if (!sheet || !ctx) return;
+        // A long gap (a stalled tab) counts as one ordinary frame, not a jump.
+        const dt = this.last ? Math.min(0.05, (now - this.last) / 1000) : 1 / 60;
+        this.last = now;
         const s = this.stir;
         if (s && (s.dx || s.dy)) {
             sheet.stylus(s);
             this.stir = { ...s, dx: 0, dy: 0 };
         }
-        this.canvas.style.opacity = String(sheet.step());
+        this.canvas.style.opacity = String(sheet.step(dt));
         sheet.draw(ctx);
         this.update();
     };
