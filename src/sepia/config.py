@@ -88,7 +88,8 @@ def search_key(environ: Mapping[str, str] = os.environ) -> str | None:
 
 
 def pollinations_key(environ: Mapping[str, str] = os.environ) -> str | None:
-    """Optional key from enter.pollinations.ai: no logo and better models."""
+    """Optional key from enter.pollinations.ai: no logo and better models, paid
+    from the account's pollen."""
     return environ.get("POLLINATIONS_KEY", "").strip() or None
 
 

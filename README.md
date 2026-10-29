@@ -105,7 +105,7 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | none | Required. Asked for on the first run if missing and saved to the user config `.env`. |
 | `BRAVE_SEARCH_API_KEY` | none | Optional key from [brave.com/search/api](https://brave.com/search/api) (monthly free credits, about 1,000 searches). Named subjects come from the top pictures of an image search instead of wiki pages. |
-| `POLLINATIONS_KEY` | none | Optional free key from [enter.pollinations.ai](https://enter.pollinations.ai). Uses the keyed endpoint with `flux.2-klein-4b` and no logo. |
+| `POLLINATIONS_KEY` | none | Optional key from [enter.pollinations.ai](https://enter.pollinations.ai). Uses the keyed endpoint with `flux.2-klein-4b` and no logo. Pictures are paid from the account's pollen (1 pollen = $1, about $0.005 a picture); new accounts get a one-time bonus and there is no free refill. Out of pollen, sepia moves on to the next painter. |
 | `SEPIA_MODEL` | `claude-haiku-5-5` | The art director model. `claude-sonnet-5-5` also works, at about 15 times the price. |
 | `SEPIA_EFFORT` | `high` | Starting Claude effort: `low`, `medium`, `high`, `xhigh` or `max`. `/effort` changes it while sepia runs. |
 | `SEPIA_STYLE` | `ink` | Starting style: `ink` or `fill`. |
@@ -121,9 +121,9 @@ The user config folder is `%LOCALAPPDATA%\sepia` on Windows and `~/Library/Appli
 
 | Backend | When it runs | Notes |
 | --- | --- | --- |
-| Pollinations, keyed (`gen.pollinations.ai`) | First, when `POLLINATIONS_KEY` is set | `flux.2-klein-4b`, no logo. |
-| Pollinations, keyless (`image.pollinations.ai`) | First without a key; second with a key | About one picture per 15 seconds, adds a small logo. Requests are sent with `private=true`. |
-| FLUX.2 [klein] 4B, local | When the API fails or rate limits | Needs `sepia-cli[local]` and `sepia --download`. |
+| Pollinations, keyed (`gen.pollinations.ai`) | First, when `POLLINATIONS_KEY` is set | `flux.2-klein-4b`, no logo, paid from the account's pollen. |
+| FLUX.2 [klein] 4B, local | Once downloaded, before the keyless API; without it, last | Needs `sepia-cli[local]` and `sepia --download`. The same model as the keyed API. |
+| Pollinations, keyless (`image.pollinations.ai`) | Last once the local model is downloaded; otherwise right after the keyed API (first without a key) | Free, about one picture per 15 seconds, a weaker model and a small logo. Requests are sent with `private=true`. |
 
 After a rate-limit or out-of-credit answer (HTTP 429 or 402), sepia skips that endpoint for 120 seconds instead of retrying it on every picture.
 
@@ -141,7 +141,7 @@ The model loads on the first local picture, so that picture takes longer. Edits 
 | --- | --- |
 | Claude Haiku as art director | About $0.001 per request with the default model and effort, plus $0.01 per web search |
 | Brave image search | About $0.005 per named subject, covered by Brave's monthly free credits |
-| Pollinations | Free (keyless, or with the free key) |
+| Pollinations | Keyless: free. With a key: about $0.005 a picture from your pollen, after a one-time bonus for new accounts |
 | Local model | Free, runs on your hardware |
 
 `SEPIA_MODEL=claude-sonnet-5-5` or a higher `SEPIA_EFFORT` costs more per request.
