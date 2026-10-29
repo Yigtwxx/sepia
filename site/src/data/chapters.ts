@@ -53,7 +53,7 @@ export const chapters: readonly Chapter[] = [
         plateCaption:
             '*Common cuttlefish*, Brehms Tierleben, 1890. Two long arms, kept for the catch.',
         body: [
-            'One Claude call per request. Claude, `claude-haiku-5-5` at high effort, is told to *look for an idea* before the first cliché, then writes a detailed English photo prompt made for symbol rendering: one dominant shape, strong light, saturated colour, no text.',
+            'One Claude call per request. Claude, `claude-haiku-5-5` at high effort, is told to *stay true to the request*, the picture a search shows first, and to add a twist only when asked, then writes a detailed English photo prompt made for symbol rendering: one dominant shape, strong light, saturated colour, no text.',
             'The same reply decides whether the request *edits the current picture* or starts a new one, and carries the one sentence the prompt window shows you.',
         ],
         tagsLabel: 'the reply',

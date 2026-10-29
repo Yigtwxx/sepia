@@ -34,7 +34,7 @@ Every request starts a new picture; `/add` builds on the current one. sepia only
 
 ## Features
 
-- **An art director, not a prompt box.** Claude looks for a striking scene instead of the first cliché, writes a detailed English photo prompt tuned for text rendering, and decides whether a request edits the current picture or starts a new one.
+- **An art director, not a prompt box.** Claude paints what you asked for, as a search would show it, and finds its own twist only when you ask for one. It writes a detailed English photo prompt tuned for text rendering, and decides whether a request edits the current picture or starts a new one.
 - **Free to paint, local when you need it.** [FLUX.2 [klein] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) paints every picture: on [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) with a free account (about 100 pictures a day), or, with the optional `local` extra, on your own GPU (CUDA or Apple Silicon) whenever the API fails or rate limits. `/local` keeps it on your GPU.
 - **Real subjects stay recognizable.** Name a character, creature, product or landmark, or paste a link to a picture, and sepia paints from a reference picture instead of inventing a stranger.
 - **Made for the terminal.** 24-bit color, two styles and two character sets, a redraw on every resize without new API calls, and ripples that spread from the mouse pointer over the picture.

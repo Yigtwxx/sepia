@@ -10,6 +10,13 @@ tag all carry.
 
 ## [Unreleased]
 
+### Changed
+
+- The art director paints what a request usually looks like, the picture a
+  web search shows first for it, instead of reinterpreting it ("multiverse" is
+  bubble universes again, not a hallway of doors). Ask for something creative
+  or surprising and it still finds its own twist.
+
 ## [0.3.1] - 2026-10-29
 
 ### Added
