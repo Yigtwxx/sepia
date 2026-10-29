@@ -10,6 +10,8 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-29
+
 ### Added
 
 - `/model [haiku|sonnet|opus|fable]` switches the art director between Claude
@@ -226,7 +228,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Yigtwxx/sepia/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Yigtwxx/sepia/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Yigtwxx/sepia/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Yigtwxx/sepia/compare/v0.1.0...v0.2.0
