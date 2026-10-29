@@ -10,12 +10,36 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-29
+
+### Added
+
+- Ctrl+C twice closes sepia, as in Claude Code: the first clears the line and
+  the status line says to press it again.
+
 ### Changed
 
 - The art director paints what a request usually looks like, the picture a
   web search shows first for it, instead of reinterpreting it ("multiverse" is
   bubble universes again, not a hallway of doors). Ask for something creative
   or surprising and it still finds its own twist.
+- Nothing is downloaded at install: the first `/local` names the local model
+  and its size (FLUX.2 [klein] 4B, about 16 GB) and downloads it once you say
+  yes. `sepia --download` still fetches it ahead of time.
+- A bare name ("yasuo lol") shows the subject's full picture with its
+  background: Claude lists a League of Legends champion's splash art first, and
+  a picture with a background wins over a cut-out 3D render (the League wiki's
+  preview picture). With `BRAVE_SEARCH_API_KEY`, the search's first picture is
+  shown as it ranks.
+
+### Fixed
+
+- Resizing the prompt window no longer breaks the welcome box and transcript
+  apart: the window is drawn again at its new size, and a half-typed request
+  stays in the bar.
+- The picture window draws each new picture from its top-left corner. After a
+  ripple or a resize the cursor was left mid-screen, so a new picture started
+  off its first row and left a strip of the old one at the top.
 
 ## [0.3.1] - 2026-10-29
 
@@ -235,7 +259,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Yigtwxx/sepia/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Yigtwxx/sepia/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Yigtwxx/sepia/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Yigtwxx/sepia/compare/v0.2.0...v0.2.1
