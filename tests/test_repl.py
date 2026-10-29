@@ -953,10 +953,12 @@ def test_repl_keys_half_set_cloudflare_leaves_only_the_local_painter(
 ) -> None:
     keys, _ = terminal
     keys.send_text("sk-new\r")
+    _with_cloudflare(rig, StubPainter("api"))  # painting with Cloudflare until now
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "account-1")  # no token
     rig.say("/keys anthropic")
     assert rig.repl.api is None, "A half-set Cloudflare key cannot paint"
     assert rig.repl.painter is rig.local, "The local painter paints"
+    assert "local GPU" in rig.repl._status(), "The status must name what paints"
 
 
 @pytest.mark.parametrize("typed", ["\r", "\x03", "\x04"])
@@ -1028,6 +1030,14 @@ def test_repl_status_shows_model_painter_art_and_window(rig: Rig) -> None:
     status = rig.repl._status()
     assert "· mature" in status and "● window" in status, status
     assert "cloudflare · fill/classic" in status, status
+
+
+def test_repl_status_api_chosen_without_a_chain_shows_the_local_painter(
+    rig: Rig,
+) -> None:
+    rig.repl.paint_with = "api"  # chosen, but there is no usable Cloudflare key
+    status = rig.repl._status()
+    assert "local GPU" in status, f"The local model paints, but got {status!r}"
 
 
 def test_repl_status_asks_for_a_second_ctrl_c_after_the_first(rig: Rig) -> None:

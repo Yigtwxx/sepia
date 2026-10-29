@@ -448,6 +448,12 @@ class Repl:
         self.search_key = search_key()
 
     @property
+    def source(self) -> Source:
+        """Where the next picture is painted: /api paints locally while there is
+        no usable Cloudflare key, so the choice alone does not say."""
+        return "api" if self.paint_with == "api" and self.api is not None else "local"
+
+    @property
     def painter(self) -> Painter:
         """What paints the next picture."""
         if self.paint_with == "api" and self.api is not None:
@@ -697,7 +703,7 @@ class Repl:
         )
         if self.director.mature:
             model += " · mature"
-        painter = self.words(f"source.{self.paint_with}")
+        painter = self.words(f"source.{self.source}")
         art = f"{self.style}/{self.charset}"
         return f"  /help · {model} · {painter} · {art} · {window} window"
 

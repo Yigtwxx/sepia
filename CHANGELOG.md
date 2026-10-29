@@ -10,6 +10,12 @@ tag all carry.
 
 ## [Unreleased]
 
+### Fixed
+
+- The status line names the painter that actually paints: after `/keys`
+  leaves only one of the two Cloudflare values set, it says `local GPU`
+  instead of `cloudflare`.
+
 ## [0.3.4] - 2026-10-29
 
 ### Added
