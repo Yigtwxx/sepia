@@ -1,6 +1,6 @@
 [project]
 name = "sepia-cli"
-version = "0.3.3"
+version = "0.3.4"
 description = "Describe a picture and watch it appear as colored text in a second terminal window."
 readme = "README.md"
 license = "MIT"
