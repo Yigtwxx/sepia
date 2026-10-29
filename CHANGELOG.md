@@ -10,6 +10,20 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-29
+
+### Added
+
+- The first run asks for each key in turn, hidden, with a link to where it
+  comes from: the Anthropic API key, which sepia needs, then the Cloudflare
+  account ID and API token, which Enter skips. Brave Search is not asked for,
+  since it is paid beyond a monthly credit; `BRAVE_SEARCH_API_KEY` in `.env`
+  still works.
+- `/keys [anthropic|cloudflare]` sets a key later from inside sepia; the
+  menu shows which keys are set, never the keys themselves. A new key is used
+  from the next request on, without a restart, and a new Cloudflare key turns
+  Cloudflare painting on.
+
 ## [0.3.2] - 2026-10-29
 
 ### Added
@@ -259,7 +273,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/Yigtwxx/sepia/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/Yigtwxx/sepia/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Yigtwxx/sepia/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Yigtwxx/sepia/compare/v0.2.1...v0.3.0
