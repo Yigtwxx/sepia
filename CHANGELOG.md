@@ -16,6 +16,12 @@ tag all carry.
   folder of the Pictures folder: its colored characters as the window shows
   them, without the tab bar or frame, named after the time.
 
+### Changed
+
+- With `/mature on`, the Brave image search for a named subject no longer
+  filters out adult pictures (`safesearch=off`; illegal ones stay filtered).
+  It stays `strict` otherwise, now asked for explicitly.
+
 ### Fixed
 
 - Famous people ("keanu reeves", a YouTuber, an athlete) are painted from

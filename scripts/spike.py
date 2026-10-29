@@ -81,7 +81,12 @@ def main() -> int:
         size = image_size(canvas.aspect)
         try:
             direction = director.direct(request, scene)
-            found, _ = find_subject(direction.subject, direction.references, brave)
+            found, _ = find_subject(
+                direction.subject,
+                direction.references,
+                brave,
+                mature=director.mature,
+            )
             if found is not None and direction.show:
                 image = letterbox(found.cutout or found.image, *size)
                 painting = Painting(image, "api", 0.0)

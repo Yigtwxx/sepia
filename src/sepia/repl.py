@@ -563,7 +563,10 @@ class Repl:
         key, then Claude's links. Says so when none of them has a usable one."""
         found, searches = self._wait(
             lambda: find_subject(
-                direction.subject, direction.references, self.search_key
+                direction.subject,
+                direction.references,
+                self.search_key,
+                mature=self.director.mature,
             ),
             "looking",
         )

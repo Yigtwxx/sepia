@@ -105,27 +105,41 @@ def find_reference(links: Sequence[str], *, ranked: bool = False) -> Reference |
 
 
 def find_subject(
-    subject: str, links: Sequence[str], search_key: str | None
+    subject: str,
+    links: Sequence[str],
+    search_key: str | None,
+    *,
+    mature: bool = False,
 ) -> tuple[Reference | None, int]:
     """The best picture of a named subject, and the image searches it took.
 
     With a key, Brave's top image results for `subject` come first, as a search
     engine shows them; the pages Claude linked follow when none is usable.
+    `mature` turns the search's adult filter off, as `/mature on` does.
     """
     searches = 0
     if search_key and subject:
         searches = 1
-        found = find_reference(image_search(subject, search_key), ranked=True)
+        results = image_search(subject, search_key, mature=mature)
+        found = find_reference(results, ranked=True)
         if found is not None:
             return found, searches
     return find_reference(links), searches
 
 
-def image_search(query: str, key: str) -> list[str]:
+def image_search(query: str, key: str, *, mature: bool = False) -> list[str]:
     """Picture links for `query` from Brave's image search, best first: each
     result's original picture, then Brave's 500-pixel copy of it, which loads even
-    where the original's site refuses. Empty when the search fails."""
-    params = urllib.parse.urlencode({"q": query, "count": IMAGE_RESULTS})
+    where the original's site refuses. Empty when the search fails.
+
+    Adult pictures are filtered out unless `mature`; illegal ones always are."""
+    params = urllib.parse.urlencode(
+        {
+            "q": query,
+            "count": IMAGE_RESULTS,
+            "safesearch": "off" if mature else "strict",
+        }
+    )
     request = urllib.request.Request(
         f"{IMAGE_SEARCH}?{params}",
         headers={"Accept": "application/json", "X-Subscription-Token": key},

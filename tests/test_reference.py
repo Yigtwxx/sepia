@@ -180,8 +180,10 @@ ORIGINAL = "https://art.example.org/yunara-splash.jpg"
 THUMBNAIL = "https://imgs.search.brave.com/yunara-splash"
 
 
-def _search_url(query: str) -> str:
-    params = urllib.parse.urlencode({"q": query, "count": IMAGE_RESULTS})
+def _search_url(query: str, safesearch: str = "strict") -> str:
+    params = urllib.parse.urlencode(
+        {"q": query, "count": IMAGE_RESULTS, "safesearch": safesearch}
+    )
     return f"{IMAGE_SEARCH}?{params}"
 
 
@@ -216,6 +218,26 @@ def test_image_search_sends_the_key_as_a_header_only(
     request = sent[0]
     assert request.get_header("X-subscription-token") == "secret-key", "Key missing"
     assert "secret-key" not in request.full_url, "The key must not be in the URL"
+
+
+@pytest.mark.parametrize(("mature", "safesearch"), [(False, "strict"), (True, "off")])
+def test_image_search_mature_sets_the_adult_filter(
+    web, mature: bool, safesearch: str
+) -> None:
+    web[_search_url("Yunara", safesearch)] = (_results(SPLASH), "application/json")
+    links = image_search("Yunara", "key", mature=mature)
+    assert links == [ORIGINAL, THUMBNAIL], (
+        f"mature={mature} should search with safesearch={safesearch}, got {links}"
+    )
+
+
+def test_find_subject_mature_searches_without_the_adult_filter(web) -> None:
+    web[_search_url("Yunara", "off")] = (_results(SPLASH), "application/json")
+    web[ORIGINAL] = (_png(), "image/png")
+    found, _ = find_subject("Yunara", [], "key", mature=True)
+    assert found is not None and found.url == ORIGINAL, (
+        f"Mature mode should search with safesearch=off, got {found}"
+    )
 
 
 def test_image_search_failure_returns_nothing(web) -> None:

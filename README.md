@@ -115,7 +115,7 @@ Reference pictures work with both painters: Cloudflare receives the picture as a
 
 ### Mature mode
 
-With `/mature on` (or `SEPIA_MATURE=on`), Claude paints sexy, hot, dark and violent scenes of adults as asked instead of toning them down: glamour, boudoir, lingerie, artistic or implied nudity. It is never explicit (no sex acts, no visible genitals), never shows anyone who is or looks under 18, and never shows a real person undressed; such a request gets the nearest acceptable picture instead of a refusal.
+With `/mature on` (or `SEPIA_MATURE=on`), Claude paints sexy, hot, dark and violent scenes of adults as asked instead of toning them down: glamour, boudoir, lingerie, artistic or implied nudity. It is never explicit (no sex acts, no visible genitals), never shows anyone who is or looks under 18, and never shows a real person undressed; such a request gets the nearest acceptable picture instead of a refusal. With `BRAVE_SEARCH_API_KEY`, it also turns off the image search's adult filter (`safesearch=off`; it is `strict` otherwise).
 
 ### Command-line flags
 
