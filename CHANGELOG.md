@@ -10,6 +10,8 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-29
+
 ### Added
 
 - A landing page at https://sepia-cli.vercel.app, built from `site/` (Astro).
@@ -18,6 +20,10 @@ tag all carry.
 
 ### Changed
 
+- The spinner counts the seconds since the request began ("painting · 12s",
+  then "2m 05s"). It no longer names Pollinations, which it did even while
+  the local GPU was painting; the reply under the picture still says which
+  painter drew it.
 - The package's homepage link points at the landing page.
 
 ## [0.2.1] - 2026-10-29
@@ -173,7 +179,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Yigtwxx/sepia/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Yigtwxx/sepia/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Yigtwxx/sepia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Yigtwxx/sepia/releases/tag/v0.1.0
