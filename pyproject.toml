@@ -40,6 +40,8 @@ local = [
     "accelerate>=1.10",
     "bitsandbytes>=0.50.2; sys_platform != 'darwin'",
 ]
+# /cam: the webcam, shown live in the picture window (about 45 MB).
+cam = ["opencv-python-headless>=5.0.0.93"]
 
 [project.urls]
 Homepage = "https://sepia-cli.vercel.app"
@@ -93,6 +95,12 @@ files = ["src"]
 # diffusers ships without type information; treat it as untyped.
 [[tool.mypy.overrides]]
 module = ["diffusers", "diffusers.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+# The cam extra may not be installed either; OpenCV is used through a Protocol.
+[[tool.mypy.overrides]]
+module = ["cv2", "cv2.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

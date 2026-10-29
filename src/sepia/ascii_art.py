@@ -197,6 +197,29 @@ def to_text(art: SymbolArt) -> Text:
     return text
 
 
+def to_ansi(art: SymbolArt) -> str:
+    """The art as one ANSI string, each row placed with a cursor move: what
+    `to_text` prints, built without rich, fast enough for live video."""
+    chars, fg = art.chars.tolist(), art.fg.tolist()
+    bg = None if art.bg is None else art.bg.tolist()
+    parts = ["[0m"]
+    for row in range(art.rows):
+        parts.append(f"[{row + 1};1H")
+        color = ""
+        for col in range(art.cols):
+            red, green, blue = fg[row][col]
+            cell = f"[38;2;{red};{green};{blue}m"
+            if bg is not None:
+                bg_red, bg_green, bg_blue = bg[row][col]
+                cell += f"[48;2;{bg_red};{bg_green};{bg_blue}m"
+            if cell != color:
+                parts.append(cell)
+                color = cell
+            parts.append(chars[row][col])
+    parts.append("[0m")
+    return "".join(parts)
+
+
 def _srgb_to_linear(c: FloatArray) -> FloatArray:
     return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
 

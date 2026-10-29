@@ -1,9 +1,18 @@
+import re
 from collections.abc import Callable
 
 import numpy as np
 import pytest
 
-from sepia.ascii_art import CELL_HEIGHT, CELL_WIDTH, RAMPS, image_to_art, to_text
+from sepia.ascii_art import (
+    CELL_HEIGHT,
+    CELL_WIDTH,
+    RAMPS,
+    SymbolArt,
+    image_to_art,
+    to_ansi,
+    to_text,
+)
 
 Canvas = Callable[..., np.ndarray]  # the `make_canvas` fixture from conftest.py
 RAMP_ORDER = [char for char, _ in RAMPS["symbols"]]
@@ -126,3 +135,41 @@ def test_image_to_art_without_edges_uses_only_ramp_characters(
     img[:, 4 * CELL_WIDTH :] = 255
     text = "".join(image_to_art(img, 8, 3, charset="symbols").lines())
     assert set(text) <= set(RAMP_ORDER), f"Outline glyphs without edges: {text!r}"
+
+
+def _art(chars: list[str], fg: list[list[tuple[int, int, int]]], bg=None) -> SymbolArt:
+    """Hand-made art: one string per row, one color per cell."""
+    grid = np.array([list(row) for row in chars])
+    colors = np.array(fg, dtype=np.uint8)
+    return SymbolArt(grid, colors, None if bg is None else np.array(bg, np.uint8))
+
+
+ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def test_to_ansi_places_each_row_at_its_first_column(make_canvas: Canvas) -> None:
+    art = image_to_art(make_canvas(6, 3), 6, 3)
+    ansi = to_ansi(art)
+    starts = [ansi.index(f"\x1b[{row};1H") for row in (1, 2, 3)]
+    assert starts == sorted(starts), f"Rows must come in order, got {starts}"
+    shown = ESCAPE.sub("", ansi)
+    expected = to_text(art).plain.replace("\n", "")
+    assert shown == expected, f"Expected the characters of to_text, got {shown!r}"
+
+
+def test_to_ansi_writes_each_cells_color_once_per_run() -> None:
+    red, blue = (255, 0, 0), (0, 0, 255)
+    ansi = to_ansi(_art(["abc"], [[red, red, blue]]))
+    assert ansi.count("\x1b[38;2;255;0;0m") == 1, f"Red repeated in {ansi!r}"
+    assert "\x1b[38;2;255;0;0mab\x1b[38;2;0;0;255mc" in ansi, f"Got {ansi!r}"
+
+
+def test_to_ansi_fill_style_paints_backgrounds() -> None:
+    ansi = to_ansi(_art(["a"], [[(250, 250, 250)]], [[(10, 20, 30)]]))
+    assert "\x1b[48;2;10;20;30m" in ansi, f"No background in {ansi!r}"
+
+
+def test_to_ansi_starts_and_ends_with_a_reset() -> None:
+    ansi = to_ansi(_art(["a"], [[(1, 2, 3)]]))
+    assert ansi.startswith("\x1b[0m"), f"A stale color must not leak in: {ansi!r}"
+    assert ansi.endswith("\x1b[0m"), f"The color must not leak out: {ansi!r}"

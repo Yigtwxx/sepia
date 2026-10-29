@@ -83,6 +83,28 @@ STRINGS: dict[str, str] = {
     "at least 256 px on each side).",
     "opening": "Opening the picture window…",
     "add_usage": "Say what to add: /add snowy mountains",
+    "again_done": "Painted again, with fresh noise",
+    "again_empty": "Nothing to paint again yet: describe a picture first",
+    "again_shown": "That picture was shown as it is, so there is nothing to paint "
+    "again",
+    "undo_done": "Back to: {request}",
+    "undo_blank": "Back to an empty window",
+    "undo_empty": "Nothing to undo",
+    "camera_missing": "The camera needs the cam extra: install sepia-cli[cam], then "
+    "type /cam again",
+    "camera_opening": "Working on it… (opening the camera · {elapsed})",
+    "keeping": "Working on it… (keeping the frame · {elapsed})",
+    "camera_on": "Camera on: /cam again keeps this frame, /cam off stops it",
+    "camera_off": "Camera off",
+    "camera_kept": "Kept this frame: /add paints over it, /save saves it",
+    "camera_request": "a frame from the camera",
+    "camera_failed": "The camera did not work: {error}",
+    "camera_silent": "The camera did not answer in time",
+    "camera_no_window": "The camera shows in the picture window, which is not open",
+    "camera_hint_windows": "Settings › Privacy & security › Camera lets desktop apps "
+    "use it; close any other app that has it",
+    "camera_hint_macos": "System Settings › Privacy & Security › Camera must allow "
+    "your terminal",
     "style_set": "Style: {style} · charset: {charset}",
     "effort_set": "Effort: {effort}, from the next picture on",
     "model_set": "Model: {model}, from the next picture on",
@@ -176,6 +198,9 @@ STRINGS: dict[str, str] = {
 
 COMMANDS: Sequence[tuple[str, str]] = (
     ("/add <text>", "add to the current picture instead of starting a new one"),
+    ("/again", "paint the picture again with fresh noise, no new prompt"),
+    ("/undo", "go back to the picture before"),
+    ("/cam [off]", "show the webcam live; /cam again keeps the frame"),
     ("/clear", "clear the screen and start a fresh picture"),
     ("/style [ink|fill]", "choose how the picture is drawn"),
     ("/charset [classic|symbols]", "choose the characters that draw it"),

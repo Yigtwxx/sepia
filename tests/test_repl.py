@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -203,6 +204,9 @@ class FakeHost:
         self.sent: list[dict[str, Any]] = []
         self.accepting = 0
         self.closed = False
+        self.answers: list[dict[str, Any]] = []
+        """What the viewer replies, in turn, to camera messages that wait for one.
+        A kept frame is written where the prompt asked for it."""
 
     def accept_in_background(self) -> None:
         self.accepting += 1
@@ -215,6 +219,12 @@ class FakeHost:
         if not self.connected:
             return False
         self.sent.append(message)
+        waits = message.get("on") is True or "keep" in message
+        if message.get("type") == "camera" and waits and self.answers:
+            answer = self.answers.pop(0)
+            if answer.get("state") == "kept":
+                Image.new("RGB", (64, 40), (90, 90, 90)).save(message["keep"])
+            self.on_message(answer)
         return True
 
     def close(self) -> None:
@@ -775,6 +785,328 @@ def test_repl_viewer_size_message_resizes_the_canvas_only_when_valid(
     rig.host.on_message(message)
     expected = Canvas(*size) if size else before
     assert rig.repl.canvas == expected, f"{message}: canvas {rig.repl.canvas}"
+
+
+# --- /undo and /again --------------------------------------------------------------
+
+
+def test_repl_undo_brings_back_the_picture_before_and_its_scene(rig: Rig) -> None:
+    rig.say("a lake")
+    lake = rig.repl.scene
+    rig.say("a river")
+    rig.say("/undo")
+    assert rig.repl.scene is lake, "The lake's scene must come back"
+    shown = rig.host.sent[-1]
+    assert shown["path"] == str(rig.folder / "01.png"), f"Viewer got {shown}"
+    assert "Back to: a lake" in rig.printed(), rig.printed()
+
+
+def test_repl_undo_after_add_lets_add_build_on_the_restored_picture(rig: Rig) -> None:
+    rig.say("a lake")
+    first = rig.repl.scene.image
+    rig.direct(edit=True, prompt="a lake with swans")
+    rig.say("/add swans")
+    rig.say("/undo")
+    rig.say("/add boats")
+    assert rig.local.calls[2][3] is first, "/add must paint over the restored picture"
+    assert rig.repl.scene.requests == ["a lake", "boats"], rig.repl.scene.requests
+
+
+def test_repl_undo_past_the_first_picture_clears_the_window(rig: Rig) -> None:
+    rig.say("a lake")
+    rig.say("/undo")
+    assert rig.repl.scene.is_empty, "Before the first picture there was none"
+    assert rig.host.sent[-1] == {"type": "clear"}, f"Viewer got {rig.host.sent[-1]}"
+    assert "Back to an empty window" in rig.printed(), rig.printed()
+
+
+def test_repl_undo_with_nothing_left_says_so(rig: Rig) -> None:
+    rig.say("/undo")
+    assert "Nothing to undo" in rig.printed(), rig.printed()
+    assert rig.host.sent == [], f"The viewer must hear nothing, got {rig.host.sent}"
+
+
+def test_repl_undo_after_clear_brings_the_picture_back(rig: Rig) -> None:
+    rig.say("a lake")
+    rig.say("/clear")
+    rig.say("/undo")
+    assert rig.repl.scene.requests == ["a lake"], rig.repl.scene.requests
+    assert rig.host.sent[-1]["type"] == "image", f"Viewer got {rig.host.sent[-1]}"
+
+
+def test_repl_failed_new_request_keeps_the_picture_before(rig: Rig) -> None:
+    rig.say("a lake")
+    lake = rig.repl.scene
+    rig.local.error = PainterError("out of memory")
+    rig.say("a river")
+    assert rig.repl.scene is lake, "A failed picture must not replace the scene"
+    assert lake.requests == ["a lake"], f"The scene was emptied: {lake.requests}"
+    assert lake.image is not None, "The old picture must stay for /save and /add"
+
+
+@pytest.fixture
+def fixed_seed(monkeypatch: pytest.MonkeyPatch) -> int:
+    """The seed /again draws; the test knows it in advance."""
+    monkeypatch.setattr(repl, "new_seed", lambda: 4242)
+    return 4242
+
+
+def test_repl_again_repaints_the_last_prompt_with_new_noise_without_claude(
+    rig: Rig, fixed_seed: int
+) -> None:
+    rig.say("a lake")
+    rig.say("/again")
+    prompt, _, seed, reference, _ = rig.local.calls[1]
+    assert prompt == "a lake at dawn", f"Painted {prompt!r}"
+    assert seed == fixed_seed == rig.repl.scene.seed, f"Painted with seed {seed}"
+    assert reference is None, "A new picture is painted over nothing"
+    calls = rig.client.beta.messages.stream.call_count
+    assert calls == 1, f"Claude must not be asked again, asked {calls} times"
+    assert rig.repl.scene.requests == ["a lake"], "The request stays the same"
+    shown = rig.host.sent[-1]
+    assert shown["path"] == str(rig.folder / "02.png"), f"Viewer got {shown}"
+    assert rig.repl.usage.pictures == {"local": 2}, rig.repl.usage.pictures
+    assert "Painted again" in rig.printed(), rig.printed()
+    assert rig.printed().count("local GPU · 1.5s") == 2, "Painter and time are shown"
+
+
+def test_repl_again_after_add_paints_over_the_same_picture(
+    rig: Rig, fixed_seed: int
+) -> None:
+    rig.say("a lake")
+    first = rig.repl.scene.image
+    rig.direct(edit=True, prompt="a lake with swans")
+    rig.say("/add swans")
+    rig.say("/again")
+    prompt, _, _, reference, _ = rig.local.calls[2]
+    assert prompt == "a lake with swans", f"Painted {prompt!r}"
+    assert reference is first, "/again must paint over what /add painted over"
+
+
+def test_repl_again_keeps_the_likeness(
+    rig: Rig, fixed_seed: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    found = _reference()
+    monkeypatch.setattr(repl, "find_reference", lambda links: found)
+    rig.say("a cat like https://example.com/a.png")
+    rig.say("/again")
+    assert rig.local.calls[1][4] is found, "The painter must copy the same look"
+
+
+def test_repl_again_can_be_undone(rig: Rig, fixed_seed: int) -> None:
+    rig.say("a lake")
+    lake = rig.repl.scene
+    rig.say("/again")
+    rig.say("/undo")
+    assert rig.repl.scene is lake, "/undo must bring the first painting back"
+
+
+def test_repl_again_on_a_shown_picture_explains_and_paints_nothing(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(repl, "find_reference", lambda links: _reference())
+    rig.say("https://example.com/a.png")
+    rig.say("/again")
+    assert "shown as it is" in rig.printed(), rig.printed()
+    assert rig.local.calls == [], "Nothing may be painted"
+
+
+def test_repl_again_without_a_picture_says_so(rig: Rig) -> None:
+    rig.say("/again")
+    assert "Nothing to paint again yet" in rig.printed(), rig.printed()
+    assert rig.local.calls == [], "Nothing may be painted"
+
+
+def test_repl_again_paint_failure_keeps_the_picture(rig: Rig, fixed_seed: int) -> None:
+    rig.say("a lake")
+    lake = rig.repl.scene
+    rig.local.error = PainterError("out of memory")
+    rig.say("/again")
+    assert rig.repl.scene is lake, "A failed picture must not replace the scene"
+    assert "Could not paint the picture: out of memory" in rig.printed()
+
+
+# --- /cam --------------------------------------------------------------------------
+
+CAMERA_ON = {"type": "camera", "state": "on"}
+KEPT = {"type": "camera", "state": "kept"}
+CAMERA_OFF = {"type": "camera", "on": False}
+
+
+@pytest.fixture
+def camera(rig: Rig, monkeypatch: pytest.MonkeyPatch) -> FakeHost:
+    """The rig's viewer, with OpenCV installed; set its `answers` to script it.
+    A camera that never answers gives up at once."""
+    monkeypatch.setattr(repl, "camera_installed", lambda: True)
+    monkeypatch.setattr(repl, "CAMERA_SECONDS", 0.05)
+    return rig.host
+
+
+def test_repl_cam_without_the_extra_explains_the_install(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(repl, "camera_installed", lambda: False)
+    rig.say("/cam")
+    assert "sepia-cli[cam]" in rig.printed(), rig.printed()
+    assert rig.host.sent == [], f"The viewer must hear nothing, got {rig.host.sent}"
+    assert not rig.repl.camera_live, "The camera must stay off"
+
+
+def test_repl_cam_turns_the_camera_on_in_the_window(rig: Rig, camera: FakeHost) -> None:
+    camera.answers = [CAMERA_ON]
+    rig.say("/cam")
+    assert rig.launched == [rig.repl.session_file], "The window must open for it"
+    assert camera.sent[-1] == {"type": "camera", "on": True}, f"Sent {camera.sent}"
+    assert rig.repl.camera_live, "The prompt must know the camera is live"
+    assert "Camera on" in rig.printed(), rig.printed()
+
+
+def test_repl_cam_failure_explains_where_to_allow_the_camera(
+    rig: Rig, camera: FakeHost
+) -> None:
+    camera.answers = [{"type": "camera", "error": "no camera answered"}]
+    rig.say("/cam")
+    assert "The camera did not work: no camera answered" in rig.printed()
+    hint = {"win32": "Privacy & security", "darwin": "Privacy & Security"}
+    if sys.platform in hint:
+        assert hint[sys.platform] in rig.printed(), "Say where to allow the camera"
+    assert not rig.repl.camera_live, "A camera that failed is not live"
+
+
+def test_repl_cam_without_an_answer_in_time_gives_up_and_stops_it(
+    rig: Rig, camera: FakeHost
+) -> None:
+    rig.say("/cam")
+    assert "did not answer in time" in rig.printed(), rig.printed()
+    assert camera.sent[-1] == CAMERA_OFF, "A camera that opens late must be stopped"
+    assert not rig.repl.camera_live, "No answer, no live camera"
+
+
+def test_repl_cam_without_the_window_says_so(rig: Rig, camera: FakeHost) -> None:
+    camera.opens_viewer = False
+    rig.say("/cam")
+    assert "picture window" in rig.printed(), rig.printed()
+    assert not rig.repl.camera_live, "No window, no camera"
+
+
+def test_repl_cam_again_keeps_the_frame_as_the_picture(
+    rig: Rig, camera: FakeHost
+) -> None:
+    camera.answers = [CAMERA_ON, KEPT]
+    rig.say("/cam")
+    rig.say("/cam")
+    path = rig.folder / "01.png"
+    keep, shown = camera.sent[-2:]
+    assert keep == {"type": "camera", "keep": str(path)}, f"Sent {keep}"
+    assert shown["type"] == "image" and shown["path"] == str(path), f"Sent {shown}"
+    scene = rig.repl.scene
+    assert scene.requests == ["a frame from the camera"], scene.requests
+    assert scene.prompts == [""], "A kept frame is shown as it is, not painted"
+    assert scene.image is not None and scene.path == path, "The frame is the picture"
+    assert not rig.repl.camera_live, "Keeping a frame stops the camera"
+    assert "Kept this frame" in rig.printed(), rig.printed()
+    assert rig.client.beta.messages.stream.call_count == 0, "Claude is not needed"
+
+
+def test_repl_cam_keep_failure_says_why_and_keeps_the_scene(
+    rig: Rig, camera: FakeHost
+) -> None:
+    camera.answers = [CAMERA_ON, {"type": "camera", "error": "no frame to keep"}]
+    rig.say("/cam")
+    rig.say("/cam")
+    assert "The camera did not work: no frame to keep" in rig.printed()
+    assert rig.repl.scene.is_empty, "No frame, no picture"
+    assert not rig.repl.camera_live, "The viewer stopped the camera"
+
+
+def test_repl_kept_frame_can_be_undone(rig: Rig, camera: FakeHost) -> None:
+    rig.say("a lake")
+    lake = rig.repl.scene
+    camera.answers = [CAMERA_ON, KEPT]
+    rig.say("/cam")
+    rig.say("/cam")
+    rig.say("/undo")
+    assert rig.repl.scene is lake, "/undo must bring the painting back"
+
+
+def test_repl_cam_off_stops_without_keeping(rig: Rig, camera: FakeHost) -> None:
+    camera.answers = [CAMERA_ON]
+    rig.say("/cam")
+    rig.say("/cam off")
+    assert camera.sent[-1] == CAMERA_OFF, f"Sent {camera.sent[-1]}"
+    assert not rig.repl.camera_live, "The camera must be off"
+    assert rig.repl.scene.is_empty, "Nothing is kept"
+    assert "Camera off" in rig.printed(), rig.printed()
+
+
+def test_repl_add_while_live_keeps_the_frame_then_paints_over_it(
+    rig: Rig, camera: FakeHost
+) -> None:
+    camera.answers = [CAMERA_ON, KEPT]
+    rig.say("/cam")
+    rig.direct(edit=True, prompt="a portrait with a viking helmet")
+    rig.say("/add a viking helmet")
+    painted_over = rig.local.calls[0][3]
+    assert painted_over is not None, "/add must paint over the kept frame"
+    assert painted_over.size == (64, 40), "The frame the viewer kept is the base"
+    expected = ["a frame from the camera", "a viking helmet"]
+    assert rig.repl.scene.requests == expected, rig.repl.scene.requests
+
+
+def test_repl_save_while_live_keeps_the_frame_then_saves_it(
+    rig: Rig, camera: FakeHost, tmp_path: Path
+) -> None:
+    camera.answers = [CAMERA_ON, KEPT]
+    rig.say("/cam")
+    rig.say("/save")
+    saved = list((tmp_path / "pictures").glob("*.png"))
+    assert len(saved) == 1, f"Saved {saved}"
+    assert rig.repl.scene.requests == ["a frame from the camera"], "Kept first"
+
+
+def test_repl_request_while_live_stops_the_camera_first(
+    rig: Rig, camera: FakeHost
+) -> None:
+    camera.answers = [CAMERA_ON]
+    rig.say("/cam")
+    rig.say("a lake")
+    kinds = [message.get("on", message["type"]) for message in camera.sent]
+    assert kinds.index(False) < kinds.index("image"), f"Sent in order {kinds}"
+    assert not rig.repl.camera_live, "A new picture ends the live camera"
+
+
+@pytest.mark.parametrize("command", ["/again", "/undo", "/clear"])
+def test_repl_picture_commands_while_live_stop_the_camera(
+    rig: Rig, camera: FakeHost, command: str
+) -> None:
+    camera.answers = [CAMERA_ON]
+    rig.say("/cam")
+    rig.say(command)
+    assert CAMERA_OFF in camera.sent, f"{command} must stop the camera: {camera.sent}"
+    assert not rig.repl.camera_live, f"{command} ends the live camera"
+
+
+def test_repl_settings_while_live_leave_the_camera_on(
+    rig: Rig, camera: FakeHost
+) -> None:
+    camera.answers = [CAMERA_ON]
+    rig.say("/cam")
+    rig.say("/style fill")
+    assert rig.repl.camera_live, "/style changes the live view, it does not end it"
+    assert CAMERA_OFF not in camera.sent, f"Sent {camera.sent}"
+
+
+def test_repl_status_shows_the_live_camera(rig: Rig, camera: FakeHost) -> None:
+    camera.answers = [CAMERA_ON]
+    rig.say("/cam")
+    assert "· camera ·" in rig.repl._status(), rig.repl._status()
+
+
+def test_repl_camera_lost_later_marks_it_off(rig: Rig, camera: FakeHost) -> None:
+    camera.answers = [CAMERA_ON]
+    rig.say("/cam")
+    rig.host.on_message({"type": "camera", "error": "the camera stopped"})
+    assert not rig.repl.camera_live, "A lost camera is not live any more"
 
 
 # --- /save -------------------------------------------------------------------------

@@ -9,7 +9,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import cast, get_args
 
-from PIL import Image, UnidentifiedImageError
+import numpy as np
+from PIL import Image, ImageOps, UnidentifiedImageError
 from rich.console import Console, ScreenContext
 from rich.control import Control
 from rich.text import Text
@@ -21,12 +22,15 @@ from sepia.ascii_art import (
     Charset,
     SymbolArt,
     image_to_art,
+    to_ansi,
     to_text,
 )
+from sepia.camera import Camera, CameraError
 from sepia.config import DEFAULT_CHARSET, DEFAULT_STYLE
 from sepia.ipc import Channel, Message, Session, connect
 from sepia.mouse import MOUSE_OFF, MOUSE_ON, MouseParser, read_input
-from sepia.raster import enhance, fit_image
+from sepia.painter import image_size
+from sepia.raster import RGBImage, enhance, fit_image
 from sepia.ripple import (
     DURATION,
     FRAME_SECONDS,
@@ -36,11 +40,17 @@ from sepia.ripple import (
     ripple_ansi,
     spaced,
 )
+from sepia.scene import Canvas
 
 POLL_SECONDS = 0.01
 """How long to wait for a message before checking the window size again."""
 RESIZE_SETTLE_SECONDS = 0.15
 """A resize drag fires many sizes; redraw once the window has stopped changing."""
+LIVE_FPS = 15
+"""Camera frames drawn a second, at most."""
+LIVE_CELL_WIDTH, LIVE_CELL_HEIGHT = 4, 8
+"""Pixels a cell averages in the live view: a quarter of a picture's, so a frame
+draws in about 35 ms."""
 
 
 @dataclass
@@ -151,6 +161,101 @@ class Hover:
             self._frame_at = now
 
 
+def live_frame(
+    pixels: RGBImage, cols: int, rows: int, style: ArtStyle, charset: Charset
+) -> str:
+    """One camera frame drawn over the whole window, as ANSI."""
+    small = fit_image(
+        Image.fromarray(pixels),
+        cols * LIVE_CELL_WIDTH,
+        rows * LIVE_CELL_HEIGHT,
+        resample=Image.Resampling.BILINEAR,
+    )
+    enhanced = np.asarray(enhance(Image.fromarray(small)), dtype=np.uint8)
+    return to_ansi(image_to_art(enhanced, cols, rows, style=style, charset=charset))
+
+
+class LiveView:
+    """The camera shown live, each frame written straight as ANSI (rich takes
+    about 120 ms a frame), until it is stopped or a frame is kept. `handle` and
+    `step` return the replies the prompt waits for."""
+
+    def __init__(
+        self, write: Callable[[str], object], make_camera: Callable[[], Camera]
+    ) -> None:
+        self._write = write
+        self._make_camera = make_camera
+        self._camera: Camera | None = None
+        self._announced = False
+        self._drawn_at = float("-inf")
+
+    @property
+    def active(self) -> bool:
+        return self._camera is not None
+
+    def handle(self, message: Message, cols: int, rows: int) -> Message | None:
+        """Act on a `camera` message: on, off, or keep the newest frame."""
+        if "keep" in message:
+            return self._keep(message["keep"], cols, rows)
+        if message.get("on") is True and self._camera is None:
+            camera = self._make_camera()
+            try:
+                camera.start()
+            except CameraError as exc:
+                return {"type": "camera", "error": str(exc)}
+            self._camera, self._announced = camera, False
+            self._drawn_at = float("-inf")
+        elif message.get("on") is False:
+            self.stop()
+        return None
+
+    def step(
+        self, cols: int, rows: int, style: ArtStyle, charset: Charset
+    ) -> Message | None:
+        """Draw the newest frame when one is due. Says "on" with the first frame,
+        and an error when the camera is lost."""
+        camera = self._camera
+        if camera is None:
+            return None
+        if camera.failed:
+            self.stop()
+            return {"type": "camera", "error": "the camera stopped giving pictures"}
+        now = time.monotonic()
+        frame = camera.latest()
+        due = now - self._drawn_at >= 1 / LIVE_FPS
+        if frame is None or not due or cols <= 0 or rows <= 0:
+            return None
+        self._write(live_frame(frame, cols, rows, style, charset))
+        self._drawn_at = now
+        if self._announced:
+            return None
+        self._announced = True
+        return {"type": "camera", "state": "on"}
+
+    def stop(self) -> None:
+        """Let go of the camera, if it is on."""
+        if self._camera is not None:
+            self._camera.stop()
+            self._camera = None
+
+    def _keep(self, path: object, cols: int, rows: int) -> Message:
+        """Save the newest frame at `path`, cut to the window's shape at the size
+        a painting has, so /add can paint over it; then stop."""
+        frame = None if self._camera is None else self._camera.latest()
+        self.stop()
+        if frame is None or not isinstance(path, str) or cols <= 0 or rows <= 0:
+            return {"type": "camera", "error": "there was no frame to keep"}
+        size = image_size(Canvas(cols, rows).aspect)
+        kept = ImageOps.fit(
+            Image.fromarray(frame), size, method=Image.Resampling.LANCZOS
+        )
+        try:
+            kept.save(path)
+        except (OSError, ValueError) as exc:
+            return {"type": "camera", "error": str(exc)}
+        return {"type": "camera", "state": "kept", "path": path}
+
+
 def run_viewer(session_file: Path) -> int:
     channel = connect(Session.load(session_file))
     console = Console(highlight=False)
@@ -170,17 +275,23 @@ def _loop(channel: Channel, console: Console) -> None:
     frame = Text("")
     art: SymbolArt | None = None
     hover = Hover(console.file.write)
+    live = LiveView(console.file.write, Camera)
     with console.screen(hide_cursor=True) as screen:
         hover.start()
         try:
             size = console.size
             channel.send({"type": "size", "cols": size.width, "rows": size.height})
+            # Stays dirty while the camera is live, so its end redraws the picture.
             dirty, changed_at = True, 0.0
             while True:
                 try:
                     if channel.poll(POLL_SECONDS):
-                        if not state.apply(channel.receive()):
+                        message = channel.receive()
+                        if not state.apply(message):
                             return
+                        if message.get("type") == "camera":
+                            reply = live.handle(message, size.width, size.height)
+                            _answer(channel, reply, state)
                         dirty = True
                 except (EOFError, OSError, ValueError):
                     return  # the prompt is gone
@@ -191,7 +302,13 @@ def _loop(channel: Channel, console: Console) -> None:
                         channel.send(
                             {"type": "size", "cols": size.width, "rows": size.height}
                         )
-                if dirty and time.monotonic() - changed_at >= RESIZE_SETTLE_SECONDS:
+                if live.active:
+                    reply = live.step(
+                        size.width, size.height, state.style, state.charset
+                    )
+                    _answer(channel, reply, state)
+                settled = time.monotonic() - changed_at >= RESIZE_SETTLE_SECONDS
+                if dirty and settled and not live.active:
                     with contextlib.suppress(
                         OSError, UnidentifiedImageError, ValueError
                     ):
@@ -200,10 +317,22 @@ def _loop(channel: Channel, console: Console) -> None:
                     draw_frame(console, screen, frame)
                     hover.forget()  # the full redraw wiped any ripple
                     dirty = False
-                hover.step(art, read_input())
+                # No ripples over a live camera: the next frame would wipe them.
+                hover.step(None if live.active else art, read_input())
                 console.file.flush()
         finally:
+            live.stop()
             hover.stop()
+
+
+def _answer(channel: Channel, reply: Message | None, state: ViewerState) -> None:
+    """Tell the prompt what the camera did; a kept frame becomes the picture."""
+    if reply is None:
+        return
+    if reply.get("state") == "kept":
+        state.path = reply["path"]
+    with contextlib.suppress(OSError, EOFError):
+        channel.send(reply)
 
 
 @contextlib.contextmanager

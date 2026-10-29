@@ -65,3 +65,11 @@ def test_letterbox_transparent_parts_become_black() -> None:
 def test_letterbox_empty_canvas_raises() -> None:
     with pytest.raises(ValueError):
         letterbox(Image.new("RGB", (4, 4)), 0, 10)
+
+
+def test_fit_image_uses_the_resampling_it_is_given(wide_image: Image.Image) -> None:
+    sharp = fit_image(wide_image, 20, 10, resample=Image.Resampling.NEAREST)
+    colors = {tuple(pixel) for pixel in sharp.reshape(-1, 3).tolist()}
+    assert colors == {RED, BLUE}, (
+        f"Nearest must blend nothing, got {len(colors)} colors"
+    )

@@ -13,17 +13,21 @@ SATURATION = 1.25
 """Color boost; symbols cover only part of a cell, so they need richer color."""
 
 
-def fit_image(image: Image.Image, width: int, height: int) -> RGBImage:
+def fit_image(
+    image: Image.Image,
+    width: int,
+    height: int,
+    resample: Image.Resampling = Image.Resampling.LANCZOS,
+) -> RGBImage:
     """Scale `image` to cover exactly `width` x `height` pixels and center-crop it.
 
     A window whose shape differs from the picture loses a little of the picture's
-    edges instead of showing empty bars or a stretched image.
+    edges instead of showing empty bars or a stretched image. A live camera frame
+    takes a cheaper `resample` than a picture does.
     """
     if width <= 0 or height <= 0:
         raise ValueError(f"canvas must be positive, got {width}x{height}")
-    fitted = ImageOps.fit(
-        image.convert("RGB"), (width, height), method=Image.Resampling.LANCZOS
-    )
+    fitted = ImageOps.fit(image.convert("RGB"), (width, height), method=resample)
     return np.asarray(fitted, dtype=np.uint8)
 
 

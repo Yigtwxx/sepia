@@ -15,10 +15,21 @@ from rich.text import Text
 
 from sepia import viewer
 from sepia.ascii_art import SymbolArt
+from sepia.camera import CameraError
 from sepia.ipc import Channel, Session
 from sepia.mouse import MOUSE_OFF, MOUSE_ON
+from sepia.painter import image_size
 from sepia.ripple import DURATION, FRAME_SECONDS
-from sepia.viewer import Hover, ViewerState, draw_frame, render_frame
+from sepia.scene import Canvas
+from sepia.viewer import (
+    LIVE_FPS,
+    Hover,
+    LiveView,
+    ViewerState,
+    draw_frame,
+    live_frame,
+    render_frame,
+)
 
 
 @pytest.fixture
@@ -535,3 +546,191 @@ def test_quiet_console_without_a_console_changes_nothing(
         pass
     assert console.set_to == [], f"The mode was set: {console.set_to}"
     assert not console.flushed, "Nothing may be flushed without a console"
+
+
+# --- the camera, live --------------------------------------------------------------
+
+
+class FakeCamera:
+    """Stands in for the webcam, which is hardware: one fixed frame (or none), or a
+    camera that cannot open."""
+
+    def __init__(self, frame: np.ndarray | None = None, error: str = "") -> None:
+        self.frame = frame
+        self.error = error
+        self.failed = False
+        self.started = 0
+        self.stopped = 0
+
+    def start(self) -> None:
+        self.started += 1
+        if self.error:
+            raise CameraError(self.error)
+
+    def latest(self) -> np.ndarray | None:
+        return self.frame
+
+    def stop(self) -> None:
+        self.stopped += 1
+
+
+def _frame() -> np.ndarray:
+    """A 160x90 RGB frame: red with a blue square, like the test picture."""
+    frame = np.zeros((90, 160, 3), dtype=np.uint8)
+    frame[:, :] = (200, 40, 40)
+    frame[30:60, 60:100] = (40, 40, 200)
+    return frame
+
+
+ON = {"type": "camera", "on": True}
+
+
+def _live(camera: FakeCamera) -> tuple[LiveView, list[str]]:
+    written: list[str] = []
+    return LiveView(written.append, lambda: camera), written
+
+
+def test_live_view_on_starts_the_camera_and_says_so_with_the_first_frame() -> None:
+    camera = FakeCamera(_frame())
+    live, written = _live(camera)
+    assert live.handle(ON, 30, 10) is None, "On is said once a frame is drawn"
+    assert live.active and camera.started == 1, "The camera must be started"
+    reply = live.step(30, 10, "ink", "classic")
+    assert reply == {"type": "camera", "state": "on"}, f"Replied {reply}"
+    assert len(written) == 1 and "\x1b[10;1H" in written[0], "A whole frame is drawn"
+
+
+def test_live_view_camera_that_cannot_open_replies_the_error() -> None:
+    live, _ = _live(FakeCamera(error="no camera answered"))
+    reply = live.handle(ON, 30, 10)
+    assert reply == {"type": "camera", "error": "no camera answered"}, f"Got {reply}"
+    assert not live.active, "No camera, no live view"
+
+
+def test_live_view_on_twice_starts_the_camera_once() -> None:
+    camera = FakeCamera(_frame())
+    live, _ = _live(camera)
+    live.handle(ON, 30, 10)
+    live.handle(ON, 30, 10)
+    assert camera.started == 1, f"Started {camera.started} times"
+
+
+def test_live_view_off_stops_the_camera() -> None:
+    camera = FakeCamera(_frame())
+    live, _ = _live(camera)
+    live.handle(ON, 30, 10)
+    assert live.handle({"type": "camera", "on": False}, 30, 10) is None, "No reply"
+    assert not live.active and camera.stopped == 1, "The camera must be let go"
+
+
+def test_live_view_keep_saves_the_frame_at_the_window_shape_and_stops(
+    tmp_path: Path,
+) -> None:
+    camera = FakeCamera(_frame())
+    live, _ = _live(camera)
+    live.handle(ON, 30, 10)
+    path = str(tmp_path / "03.png")
+    reply = live.handle({"type": "camera", "keep": path}, 30, 10)
+    assert reply == {"type": "camera", "state": "kept", "path": path}, f"Got {reply}"
+    with Image.open(path) as kept:
+        expected = image_size(Canvas(30, 10).aspect)
+        assert kept.size == expected, (
+            f"Kept at {kept.size}, the paint size is {expected}"
+        )
+        red = kept.getpixel((2, 2))
+    assert red == (200, 40, 40), f"The frame's colors must be kept, got {red}"
+    assert not live.active and camera.stopped == 1, "Keeping a frame stops the camera"
+
+
+@pytest.mark.parametrize(
+    ("frame", "keep"),
+    [(None, "03.png"), (_frame(), 42)],
+    ids=["no frame", "no path"],
+)
+def test_live_view_keep_without_a_frame_or_a_path_replies_an_error(
+    tmp_path: Path, frame: np.ndarray | None, keep: object
+) -> None:
+    live, _ = _live(FakeCamera(frame))
+    live.handle(ON, 30, 10)
+    target = str(tmp_path / keep) if isinstance(keep, str) else keep
+    reply = live.handle({"type": "camera", "keep": target}, 30, 10)
+    assert reply is not None and "error" in reply, f"Replied {reply}"
+    assert not live.active, "The live view must stop"
+    assert list(tmp_path.iterdir()) == [], "Nothing may be saved"
+
+
+def test_live_view_keep_while_off_replies_an_error(tmp_path: Path) -> None:
+    live, _ = _live(FakeCamera(_frame()))
+    reply = live.handle({"type": "camera", "keep": str(tmp_path / "a.png")}, 30, 10)
+    assert reply is not None and "error" in reply, f"Replied {reply}"
+
+
+def test_live_view_frames_are_limited_to_the_frame_rate(clock: list[float]) -> None:
+    live, written = _live(FakeCamera(_frame()))
+    live.handle(ON, 30, 10)
+    live.step(30, 10, "ink", "classic")
+    clock[0] += 1 / LIVE_FPS / 4
+    live.step(30, 10, "ink", "classic")
+    assert len(written) == 1, f"A second frame came too soon: {len(written)}"
+    clock[0] += 1 / LIVE_FPS
+    assert live.step(30, 10, "ink", "classic") is None, "On is said only once"
+    assert len(written) == 2, f"The next frame was not drawn: {len(written)}"
+
+
+def test_live_view_without_a_frame_yet_draws_nothing() -> None:
+    live, written = _live(FakeCamera(None))
+    live.handle(ON, 30, 10)
+    assert live.step(30, 10, "ink", "classic") is None, "Nothing to say yet"
+    assert written == [], f"Nothing to draw, got {written!r}"
+
+
+def test_live_view_lost_camera_stops_and_replies_an_error() -> None:
+    camera = FakeCamera(_frame())
+    live, _ = _live(camera)
+    live.handle(ON, 30, 10)
+    camera.failed = True
+    reply = live.step(30, 10, "ink", "classic")
+    assert reply is not None and "error" in reply, f"Replied {reply}"
+    assert not live.active and camera.stopped == 1, "A lost camera must be let go"
+
+
+@pytest.mark.parametrize("style", ["ink", "fill"])
+def test_live_frame_draws_every_cell_of_the_window(style: str) -> None:
+    ansi = live_frame(_frame(), 30, 10, style, "classic")
+    shown = _ANSI.sub("", ansi)
+    assert len(shown) == 300, f"Expected 30x10 cells, got {len(shown)}"
+    assert ("\x1b[48;2;" in ansi) == (style == "fill"), "Only fill paints backgrounds"
+
+
+def test_loop_camera_on_draws_live_then_keep_shows_the_kept_frame(
+    tmp_path: Path, window: tuple[Console, io.StringIO], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    console, out = window
+    camera = FakeCamera(_frame())
+    monkeypatch.setattr(viewer, "Camera", lambda: camera)
+    path = str(tmp_path / "02.png")
+    link = _FakeConnection(_wire(ON))
+    keep = {"type": "camera", "keep": path}
+    _drive(
+        monkeypatch,
+        link,
+        {0: lambda: link.incoming.extend(_wire(keep)), 1: _say_bye(link)},
+    )
+    viewer._loop(Channel(link), console)
+    assert link.sent[1:] == [
+        {"type": "camera", "state": "on"},
+        {"type": "camera", "state": "kept", "path": path},
+    ], f"Replies {link.sent}"
+    kept = render_frame(ViewerState(path=path), 30, 10).plain.split("\n")
+    assert kept[0] in _ANSI.sub("", out.getvalue()), "The kept frame must be drawn"
+
+
+def test_loop_leaving_lets_go_of_the_camera(
+    window: tuple[Console, io.StringIO], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    console, _ = window
+    camera = FakeCamera(_frame())
+    monkeypatch.setattr(viewer, "Camera", lambda: camera)
+    link = _FakeConnection(_wire(ON, {"type": "bye"}))
+    viewer._loop(Channel(link), console)
+    assert camera.stopped == 1, "The camera must be released on the way out"

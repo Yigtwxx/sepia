@@ -1,7 +1,9 @@
 """The prompt window: read requests, direct them, paint them, show them."""
 
 import os
+import queue
 import shutil
+import sys
 import time
 import urllib.parse
 from collections.abc import Callable
@@ -11,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TypeVar, cast, get_args
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from prompt_toolkit.history import FileHistory
 from rich.console import Console, RenderableType
 from rich.live import Live
@@ -19,6 +21,7 @@ from rich.text import Text
 
 from sepia import ui
 from sepia.ascii_art import ArtStyle, Charset
+from sepia.camera import camera_installed
 from sepia.chatbar import BottomBar, ChatBar, Resized
 from sepia.config import (
     MODELS,
@@ -58,7 +61,7 @@ from sepia.painter import image_size as paint_size
 from sepia.picker import choose, show
 from sepia.raster import letterbox
 from sepia.reference import Reference, find_reference, find_subject, split_links
-from sepia.scene import Canvas, Scene
+from sepia.scene import Canvas, History, Scene, new_seed
 from sepia.snapshot import pictures_dir, save_snapshot, snapshot
 from sepia.usage import SESSION_FORMAT, Ledger, Usage, estimate_earlier
 
@@ -75,6 +78,10 @@ EXIT_SECONDS = 2.0
 """A second Ctrl+C within this long of the first closes sepia."""
 RESIZE_SETTLE_SECONDS = 0.15
 """A resize drag fires many sizes; redraw once the window has stopped changing."""
+CAMERA_SECONDS = 15.0
+"""How long to wait for the camera to come on, or for a kept frame."""
+CAMERA_HINTS = {"win32": "camera_hint_windows", "darwin": "camera_hint_macos"}
+"""Where each system lets a program use the camera."""
 
 
 class Interrupts:
@@ -188,6 +195,12 @@ class Repl:
         """What /api and /local switch between."""
         self.folder = folder
         self.scene = Scene()
+        self.history = History()
+        """Earlier scenes, for /undo."""
+        self.camera_live = False
+        """The picture window shows the camera (/cam)."""
+        self._camera_replies: queue.Queue[Message] = queue.Queue()
+        """What the viewer answers about the camera, for the command waiting."""
         self.usage = Usage()
         self.ledger = ledger
         self.search_key = search_key
@@ -287,14 +300,23 @@ class Repl:
                 model = self.director.model.removeprefix("claude-")
                 self.transcript.say(ui.reply(self.words("model_set", model=model)))
         elif command.name == "clear":
-            self.scene.reset()
-            self.host.send({"type": "clear"})
+            self._stop_camera()
+            if not self.scene.is_empty:
+                self.history.push(self.scene)
+            self._enter(Scene())
             self._open_screen()
         elif command.name == "add":
-            if command.argument:
-                self._draw(command.argument, add=True)
-            else:
+            if not command.argument:
                 self.transcript.say(ui.reply(self.words("add_usage"), failed=True))
+            elif not self.camera_live or self._keep_frame():
+                # A live camera's frame is what /add paints over.
+                self._draw(command.argument, add=True)
+        elif command.name == "again":
+            self._again()
+        elif command.name == "undo":
+            self._undo()
+        elif command.name == "cam":
+            self._camera(command.argument)
         elif command.name == "effort":
             levels = cast(tuple[str, ...], get_args(Effort))
             effort = self.director.effort
@@ -344,6 +366,8 @@ class Repl:
 
     def _save(self) -> None:
         """Keep the picture in the window, drawn as its characters, as a PNG."""
+        if self.camera_live and not self._keep_frame():
+            return
         if self.scene.image is None:
             self.transcript.say(ui.reply(self.words("save_empty"), failed=True))
             return
@@ -485,12 +509,13 @@ class Repl:
         """Paint `request`: a new picture, or with `add` an addition to this one.
 
         /add on an empty scene simply paints a new picture. A bare name ("yunara
-        lol") or a bare picture link shows the subject's picture as it is.
+        lol") or a bare picture link shows the subject's picture as it is. The
+        current scene stays until the new picture is there.
         """
         self._started = time.monotonic()
+        self._stop_camera()
         add = add and not self.scene.is_empty
-        if not add:
-            self.scene.reset()
+        scene = self.scene.copy() if add else Scene()
         self._ensure_viewer()
         words, links = split_links(request)
         found: Reference | None = None
@@ -501,29 +526,174 @@ class Repl:
                 if not words:
                     return
             elif not words and not add:
-                self._present(request, found, self.words("showing_link"))
+                self._present(request, found, self.words("showing_link"), scene)
                 return
-        direction = self._direct(words, found)
+        direction = self._direct(words, found, scene)
         if direction is None:
             return
         if found is None and (direction.subject or direction.references):
             found = self._find_subject(direction)
             if found is not None and direction.show:
-                self._present(words, found, direction.message)
+                self._present(words, found, direction.message, scene)
                 return
             if found is not None:
                 # Claude now sees the picture, so the prompt describes the real look.
-                direction = self._direct(words, found) or direction
+                direction = self._direct(words, found, scene) or direction
         # A new picture starts from an empty scene; /add keeps the last reference.
-        likeness = found or self.scene.likeness
+        likeness = found or scene.likeness
+        base = scene.image
+        painting = self._paint(direction.prompt, scene.seed, base, likeness)
+        if painting is None:
+            return
+        path = self._keep(painting.image)
+        scene.record(
+            words or request,
+            direction.prompt,
+            painting.image,
+            likeness,
+            path=path,
+            base=base,
+        )
+        self._commit(scene)
+        detail = self._painted(painting, likeness)
+        self.transcript.say(ui.reply(direction.message, detail))
+
+    def _again(self) -> None:
+        """Paint the latest prompt again with fresh noise, over the picture an /add
+        painted over; Claude is not asked."""
+        self._stop_camera()
+        if self.scene.is_empty:
+            self.transcript.say(ui.reply(self.words("again_empty"), failed=True))
+            return
+        prompt = self.scene.prompts[-1]
+        if not prompt:
+            self.transcript.say(ui.reply(self.words("again_shown"), failed=True))
+            return
+        self._started = time.monotonic()
+        self._ensure_viewer()
+        scene = self.scene.copy()
+        scene.seed = new_seed()
+        painting = self._paint(prompt, scene.seed, scene.base, scene.likeness)
+        if painting is None:
+            return
+        scene.image, scene.path = painting.image, self._keep(painting.image)
+        self._commit(scene)
+        detail = self._painted(painting, scene.likeness)
+        self.transcript.say(ui.reply(self.words("again_done"), detail))
+
+    def _undo(self) -> None:
+        """Go back to the scene before this one; there is no redo."""
+        self._stop_camera()
+        earlier = self.history.pop()
+        if earlier is None:
+            self.transcript.say(ui.reply(self.words("undo_empty"), failed=True))
+            return
+        self._enter(earlier)
+        if earlier.is_empty:
+            message = self.words("undo_blank")
+        else:
+            message = self.words("undo_done", request=earlier.requests[-1])
+        self.transcript.say(ui.reply(message))
+
+    def _camera(self, argument: str) -> None:
+        """/cam turns the camera on in the picture window, /cam again keeps its
+        frame as the picture, /cam off stops it."""
+        if argument.strip().lower() == "off":
+            self._stop_camera()
+            self.transcript.say(ui.reply(self.words("camera_off")))
+        elif self.camera_live:
+            self._keep_frame()
+        else:
+            self._start_camera()
+
+    def _start_camera(self) -> None:
+        if not camera_installed():
+            self.transcript.say(ui.reply(self.words("camera_missing"), failed=True))
+            return
+        self._started = time.monotonic()
+        self._ensure_viewer()
         self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
-        reference = self.scene.image if add else None
+        reply = self._ask_camera({"type": "camera", "on": True}, "camera_opening")
+        if reply is None or "error" in reply:
+            # A camera that opens after all must not stay on unseen.
+            self.host.send({"type": "camera", "on": False})
+            if reply is not None:
+                self._camera_failed(reply)
+            return
+        self.camera_live = True
+        self.transcript.say(ui.reply(self.words("camera_on")))
+
+    def _keep_frame(self) -> bool:
+        """Make the camera's newest frame the picture, as the window shows it;
+        False after saying why not. The camera stops either way."""
+        self._started = time.monotonic()
+        path = self._next_path()
+        reply = self._ask_camera({"type": "camera", "keep": str(path)}, "keeping")
+        self.camera_live = False
+        if reply is None:
+            return False
+        if "error" in reply:
+            self._camera_failed(reply)
+            return False
+        try:
+            with Image.open(path) as kept:
+                image = kept.convert("RGB")
+        except (OSError, UnidentifiedImageError) as exc:
+            self._camera_failed({"error": str(exc)})
+            return False
+        scene = Scene()
+        scene.record(self.words("camera_request"), "", image, path=path)
+        self._commit(scene)
+        self.transcript.say(ui.reply(self.words("camera_kept")))
+        return True
+
+    def _stop_camera(self) -> None:
+        """Stop the live camera, if it is on; the window shows its picture again."""
+        if self.camera_live:
+            self.host.send({"type": "camera", "on": False})
+            self.camera_live = False
+
+    def _ask_camera(self, message: Message, step: str) -> Message | None:
+        """Send `message` to the viewer and wait for its camera reply under the
+        spinner; None after saying why none came."""
+        while not self._camera_replies.empty():  # a late error from earlier
+            self._camera_replies.get_nowait()
+        if not self.host.send(message):
+            self.transcript.say(ui.reply(self.words("camera_no_window"), failed=True))
+            return None
+
+        def answer() -> Message | None:
+            try:
+                return self._camera_replies.get(timeout=CAMERA_SECONDS)
+            except queue.Empty:
+                return None
+
+        reply = self._wait(answer, step)
+        if reply is None:
+            self.transcript.say(ui.reply(self.words("camera_silent"), failed=True))
+        return reply
+
+    def _camera_failed(self, reply: Message) -> None:
+        """Say why the camera did not work, and where its access is allowed."""
+        message = self.words("camera_failed", error=reply.get("error", ""))
+        hint = CAMERA_HINTS.get(sys.platform)
+        detail = self.words(hint) if hint is not None else ""
+        self.transcript.say(ui.reply(message, detail, failed=True))
+
+    def _paint(
+        self,
+        prompt: str,
+        seed: int,
+        base: Image.Image | None,
+        likeness: Reference | None,
+    ) -> Painting | None:
+        """Paint `prompt` over `base` (None for a new picture) and count it; None
+        after saying why it failed."""
+        self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
         size = paint_size(self.canvas.aspect)
         try:
             painting: Painting = self._wait(
-                lambda: self.painter.paint(
-                    direction.prompt, size, self.scene.seed, reference, likeness
-                ),
+                lambda: self.painter.paint(prompt, size, seed, base, likeness),
                 "painting",
             )
         except PainterError as exc:
@@ -533,27 +703,32 @@ class Repl:
             # Without Cloudflare only the local model paints; say how to add it.
             hint = self.words("api_missing") if self.api is None else ""
             self.transcript.say(ui.reply(message, hint, failed=True))
-            return
-        self.scene.record(words or request, direction.prompt, painting.image, likeness)
+            return None
         self._tally(
             lambda usage: usage.add_painting(painting, referenced=likeness is not None)
         )
-        self._keep(painting.image)
+        return painting
+
+    def _painted(self, painting: Painting, likeness: Reference | None) -> str:
+        """The detail under a painted picture: what painted it, how long it took,
+        why Cloudflare did not, and after which picture."""
         detail = f"{self.words(f'source.{painting.source}')} · {painting.seconds:.1f}s"
         failure = self._api_failure()
         if painting.source == "local" and failure is not None:
             detail += f" · {failure}"
         if likeness is not None:
             detail += f" · {self.words('reference', host=_host(likeness.url))}"
-        self.transcript.say(ui.reply(direction.message, detail))
+        return detail
 
-    def _direct(self, words: str, found: Reference | None) -> Direction | None:
-        """Claude's direction for `words`, shown `found` when there is one; None
-        after saying why it failed."""
+    def _direct(
+        self, words: str, found: Reference | None, scene: Scene
+    ) -> Direction | None:
+        """Claude's direction for `words` in `scene`, shown `found` when there is
+        one; None after saying why it failed."""
         picture = found.image if found is not None else None
         try:
             direction = self._wait(
-                lambda: self.director.direct(words, self.scene, picture),
+                lambda: self.director.direct(words, scene, picture),
                 "directing",
             )
         except DirectorError as exc:
@@ -584,23 +759,43 @@ class Repl:
             self.transcript.say(ui.reply(message, failed=True))
         return found
 
-    def _present(self, request: str, found: Reference, message: str) -> None:
+    def _present(
+        self, request: str, found: Reference, message: str, scene: Scene
+    ) -> None:
         """Show `found` itself as the picture, whole and on black: what a search
         shows for a bare name, or the picture a bare link points to."""
         width, height = paint_size(self.canvas.aspect)
         image = letterbox(found.cutout or found.image, width, height)
         self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
-        self.scene.record(request, "", image, found)
-        self._keep(image)
+        scene.record(request, "", image, found, path=self._keep(image))
+        self._commit(scene)
         detail = self.words("shown", host=_host(found.url))
         self.transcript.say(ui.reply(message, detail))
 
-    def _keep(self, image: Image.Image) -> None:
-        """Save the scene's new picture to the session folder and show it."""
-        self._count += 1
-        path = self.folder / f"{self._count:02d}.png"
+    def _commit(self, scene: Scene) -> None:
+        """Make `scene` the current one and show it; /undo brings back the one it
+        replaces."""
+        self.history.push(self.scene)
+        self._enter(scene)
+
+    def _enter(self, scene: Scene) -> None:
+        """Make `scene` the current one and show its picture, or an empty window."""
+        self.scene = scene
+        if scene.path is None:
+            self.host.send({"type": "clear"})
+        else:
+            self._show(scene.path)
+
+    def _keep(self, image: Image.Image) -> Path:
+        """Save a new picture to the session folder."""
+        path = self._next_path()
         image.save(path)
-        self._show(path)
+        return path
+
+    def _next_path(self) -> Path:
+        """Where the session's next picture goes: 01.png, 02.png, and so on."""
+        self._count += 1
+        return self.folder / f"{self._count:02d}.png"
 
     def _tally(self, change: Callable[[Usage], None]) -> None:
         """Count something used, for this session and for all time."""
@@ -653,6 +848,12 @@ class Repl:
         return future.result()
 
     def _on_viewer_message(self, message: Message) -> None:
+        """A message from the viewer, on the host's reader thread."""
+        if message.get("type") == "camera":
+            if "error" in message:
+                self.camera_live = False  # also when the camera is lost later
+            self._camera_replies.put(message)
+            return
         cols, rows = message.get("cols"), message.get("rows")
         if message.get("type") != "size":
             return
@@ -705,6 +906,8 @@ class Repl:
             model += " · mature"
         painter = self.words(f"source.{self.source}")
         art = f"{self.style}/{self.charset}"
+        if self.camera_live:
+            art += " · camera"
         return f"  /help · {model} · {painter} · {art} · {window} window"
 
 
