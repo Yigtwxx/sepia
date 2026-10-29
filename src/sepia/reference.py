@@ -84,14 +84,24 @@ def _trim(link: str) -> str:
     return link
 
 
-def find_reference(links: Sequence[str]) -> Reference | None:
-    """The first usable picture behind `links`, or None when none has one."""
+def find_reference(links: Sequence[str], *, ranked: bool = False) -> Reference | None:
+    """The first usable picture behind `links`, or None when none has one.
+
+    A cut-out (a game wiki's 3D model render on transparency) shows the subject
+    floating on black, so a later picture with its own background wins over it;
+    the first cut-out is kept for when no such picture follows. `ranked` links,
+    a search engine's results, are taken in their order as they are.
+    """
+    cutout: Reference | None = None
     for link in links:
         try:
-            return _picture(link, follow_page=True)
+            found = _picture(link, follow_page=True)
         except UnusableLink:
             continue
-    return None
+        if ranked or found.cutout is None:
+            return found
+        cutout = cutout or found
+    return cutout
 
 
 def find_subject(
@@ -105,7 +115,7 @@ def find_subject(
     searches = 0
     if search_key and subject:
         searches = 1
-        found = find_reference(image_search(subject, search_key))
+        found = find_reference(image_search(subject, search_key), ranked=True)
         if found is not None:
             return found, searches
     return find_reference(links), searches

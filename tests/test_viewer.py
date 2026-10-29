@@ -1,11 +1,14 @@
+import io
 from pathlib import Path
 
 import numpy as np
 import pytest
 from PIL import Image
+from rich.console import Console
+from rich.text import Text
 
 from sepia.ascii_art import SymbolArt
-from sepia.viewer import Hover, ViewerState, render_frame
+from sepia.viewer import Hover, ViewerState, draw_frame, render_frame
 
 
 @pytest.fixture
@@ -62,6 +65,18 @@ def test_render_frame_fills_the_window(picture: str) -> None:
     lines = render_frame(ViewerState(path=picture), 30, 10).plain.split("\n")
     assert len(lines) == 10, f"Expected 10 rows, got {len(lines)}"
     assert {len(line) for line in lines} == {30}, "Every row must span the window"
+
+
+def test_draw_frame_starts_at_the_top_left_wherever_the_cursor_was() -> None:
+    out = io.StringIO()
+    console = Console(file=out, force_terminal=True, width=12, height=3)
+    with console.screen() as screen:
+        console.file.write("\x1b[2;7H")  # a ripple left the cursor mid-screen
+        out.seek(0)
+        out.truncate()
+        draw_frame(console, screen, Text("abc\ndef\nghi"))
+    drawn = out.getvalue()
+    assert drawn.startswith("\x1b[H"), f"Frame must start from home, got {drawn!r}"
 
 
 def _gray_art() -> SymbolArt:

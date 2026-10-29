@@ -270,3 +270,32 @@ def test_find_reference_skips_a_preview_drawn_from_svg(web) -> None:
     web[PAGE] = (_page(f'<meta property="og:image" content="{logo}">'), "text/html")
     web[logo] = (_png(), "image/png")
     assert find_reference([PAGE]) is None, "An SVG logo is not the subject"
+
+
+def test_find_reference_cutout_first_takes_a_later_full_picture(web) -> None:
+    render = "https://a.example.org/Yasuo_Render.png"
+    web[render] = (_png(color=(0, 0, 0, 0)), "image/png")
+    web[PICTURE] = (_png(), "image/png")
+    found = find_reference([render, PICTURE])
+    assert found is not None and found.url == PICTURE, (
+        f"A picture with its background beats a cut-out render, got {found}"
+    )
+
+
+def test_find_reference_only_cutouts_falls_back_to_the_first(web) -> None:
+    first, second = "https://a.example.org/1.png", "https://b.example.org/2.png"
+    web[first] = (_png(color=(0, 0, 0, 0)), "image/png")
+    web[second] = (_png(color=(0, 0, 0, 0)), "image/png")
+    found = find_reference([first, second])
+    assert found is not None and found.url == first, f"Got {found}"
+
+
+def test_find_subject_search_takes_its_first_picture_even_a_cutout(web) -> None:
+    second = {"properties": {"url": PICTURE}, "thumbnail": {}}
+    web[_search_url("Yunara")] = (_results(SPLASH, second), "application/json")
+    web[ORIGINAL] = (_png(color=(0, 0, 0, 0)), "image/png")
+    web[PICTURE] = (_png(), "image/png")
+    found, _ = find_subject("Yunara", [], "key")
+    assert found is not None and found.url == ORIGINAL, (
+        f"The search's first picture is drawn as ranked, got {found}"
+    )

@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import cast, get_args
 
 from PIL import Image, UnidentifiedImageError
-from rich.console import Console
+from rich.console import Console, ScreenContext
+from rich.control import Control
 from rich.text import Text
 
 from sepia.ascii_art import (
@@ -90,6 +91,14 @@ def _art(
 @lru_cache(maxsize=4)
 def _art_text(art: SymbolArt) -> Text:
     return to_text(art)
+
+
+def draw_frame(console: Console, screen: ScreenContext, frame: Text) -> None:
+    """Draw `frame` over the whole window. rich prints a screen from wherever the
+    cursor is, and a ripple or a resize leaves it mid-screen, where the frame would
+    start off its first row and scroll the window; so it starts from home."""
+    console.control(Control.home())
+    screen.update(frame)
 
 
 @lru_cache(maxsize=2)
@@ -188,7 +197,7 @@ def _loop(channel: Channel, console: Console) -> None:
                     ):
                         art = render_art(state, size.width, size.height)
                         frame = Text("") if art is None else _art_text(art)
-                    screen.update(frame)
+                    draw_frame(console, screen, frame)
                     hover.forget()  # the full redraw wiped any ripple
                     dirty = False
                 hover.step(art, read_input())
