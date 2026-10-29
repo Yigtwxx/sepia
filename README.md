@@ -84,6 +84,7 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/clear` | Clear the screen and start a fresh picture. |
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background and suits dark themes; `fill` also paints each cell's background and works on any theme. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. |
+| `/save` | Save the picture in the viewer window as a PNG in the `sepia` folder of your Pictures folder: its colored characters as the window shows them, without the tab bar or frame, named after the time. |
 | `/model [haiku\|sonnet\|opus\|fable]` | Which Claude writes the prompts, from the next request on: Haiku 5.5 (the default), Sonnet 5.5, Opus 5.5 or Fable 5.1. |
 | `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. |
 | `/mature [on\|off]` | Mature pictures; see [Mature mode](#mature-mode). Off by default. |

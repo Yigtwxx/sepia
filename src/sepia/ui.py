@@ -104,6 +104,9 @@ STRINGS: dict[str, str] = {
     "download_failed": "Could not download the local model: {error}",
     "no_window": "Could not open the picture window: {error}",
     "unknown": "No such command {command}",
+    "save_empty": "Nothing to save yet: describe a picture first",
+    "saved": "Saved to {path}",
+    "save_failed": "Could not save the picture: {error}",
     "help_title": "commands",
     "setup": "Welcome to sepia. It needs an Anthropic API key; Cloudflare is "
     "optional, and Enter skips it.",
@@ -176,6 +179,7 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/clear", "clear the screen and start a fresh picture"),
     ("/style [ink|fill]", "choose how the picture is drawn"),
     ("/charset [classic|symbols]", "choose the characters that draw it"),
+    ("/save", "save the picture in the window to Pictures/sepia"),
     ("/model [haiku|sonnet|opus|fable]", "choose which Claude writes the prompts"),
     ("/effort [low|medium|high|xhigh|max]", "choose how long Claude thinks"),
     ("/mature [on|off]", "allow sexy and dark pictures, never explicit"),

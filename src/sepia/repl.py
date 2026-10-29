@@ -59,6 +59,7 @@ from sepia.picker import choose, show
 from sepia.raster import letterbox
 from sepia.reference import Reference, find_reference, find_subject, split_links
 from sepia.scene import Canvas, Scene
+from sepia.snapshot import pictures_dir, save_snapshot, snapshot
 from sepia.usage import SESSION_FORMAT, Ledger, Usage, estimate_earlier
 
 T = TypeVar("T")
@@ -334,10 +335,26 @@ class Repl:
             )
             message = self.words("style_set", style=self.style, charset=self.charset)
             self.transcript.say(ui.reply(message))
+        elif command.name == "save":
+            self._save()
         else:
             unknown = self.words("unknown", command=f"/{command.name}")
             self.transcript.say(ui.reply(unknown, failed=True))
         return True
+
+    def _save(self) -> None:
+        """Keep the picture in the window, drawn as its characters, as a PNG."""
+        if self.scene.image is None:
+            self.transcript.say(ui.reply(self.words("save_empty"), failed=True))
+            return
+        picture = snapshot(self.scene.image, self.canvas, self.style, self.charset)
+        try:
+            path = save_snapshot(picture, pictures_dir(), datetime.now())
+        except OSError as exc:
+            failed = self.words("save_failed", error=exc)
+            self.transcript.say(ui.reply(failed, failed=True))
+            return
+        self.transcript.say(ui.reply(self.words("saved", path=path)))
 
     def _switch_painter(self, source: Source) -> None:
         """Paint with Cloudflare (the local model when it fails) or only on this

@@ -207,3 +207,17 @@ def test_words_name_and_switch_to_every_painter() -> None:
         if not (words(f"source.{source}") and words(f"painter_{source}"))
     ]
     assert not missing, f"No name or switch reply for {missing}"
+
+
+def test_words_commands_include_save() -> None:
+    names = [usage.split()[0] for usage, _ in ui.Words().commands]
+    assert "/save" in names, f"Got {names}"
+
+
+def test_words_save_replies_fill_in_the_path_and_the_error() -> None:
+    words = ui.Words()
+    saved = words("saved", path="C:/Pictures/sepia/a.png")
+    failed = words("save_failed", error="disk full")
+    assert saved == "Saved to C:/Pictures/sepia/a.png", f"Got {saved!r}"
+    assert failed == "Could not save the picture: disk full", f"Got {failed!r}"
+    assert words("save_empty"), "The empty-scene reply must say something"

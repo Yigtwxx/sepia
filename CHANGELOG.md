@@ -10,6 +10,12 @@ tag all carry.
 
 ## [Unreleased]
 
+### Added
+
+- `/save` keeps the picture in the viewer window as a PNG in the `sepia`
+  folder of the Pictures folder: its colored characters as the window shows
+  them, without the tab bar or frame, named after the time.
+
 ## [0.3.3] - 2026-10-29
 
 ### Added
