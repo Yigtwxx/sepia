@@ -13,7 +13,7 @@
 
 <sub><code>› waterfall</code>, drawn by the viewer as 9,520 characters, each chosen and colored to match the patch of the picture under it.</sub>
 
-[Quick start](#quick-start) · [Usage](#usage) · [Configuration](#configuration) · [How it works](#how-it-works) · [Privacy](#privacy)
+[Website](https://sepia-cli.vercel.app) · [Quick start](#quick-start) · [Usage](#usage) · [Configuration](#configuration) · [How it works](#how-it-works) · [Privacy](#privacy)
 
 </div>
 
