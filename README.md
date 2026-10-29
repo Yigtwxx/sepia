@@ -38,7 +38,7 @@ Every request starts a new picture; `/add` builds on the current one. sepia only
 - **Free to paint, local when you need it.** Pictures come from [Pollinations](https://pollinations.ai). With the optional `local` extra, [FLUX.2 [klein] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) paints on your own GPU (CUDA or Apple Silicon) whenever the API fails or rate limits.
 - **Real subjects stay recognizable.** Name a character, creature, product or landmark, or paste a link to a picture, and sepia paints from a reference picture instead of inventing a stranger.
 - **Made for the terminal.** 24-bit color, two styles and two character sets, a redraw on every resize without new API calls, and ripples that spread from the mouse pointer over the picture.
-- **Costs you can see.** `/usage` shows tokens, searches, the estimated cost and the pictures painted per source, for the session and for all time.
+- **Costs you can see.** `/usage` shows Claude's tokens, searches and estimated cost, for the session and for all time.
 - **Nothing hidden.** The two windows talk over an authenticated loopback socket, and sepia has no telemetry.
 
 ## Quick start
@@ -88,13 +88,14 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/clear` | Clear the screen and start a fresh picture. |
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background and suits dark themes; `fill` also paints each cell's background and works on any theme. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. |
+| `/model [haiku\|sonnet\|opus\|fable]` | Which Claude writes the prompts, from the next request on: Haiku 5.5 (the default), Sonnet 5.5, Opus 5.5 or Fable 5.1. |
 | `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. |
 | `/mature [on\|off]` | Mature pictures; see [Mature mode](#mature-mode). Off by default. |
-| `/usage` | What this session and all sessions used: Claude's tokens, web searches and estimated cost, and the pictures painted per source. |
+| `/usage` | What Claude used in this session and in all sessions: tokens, web searches and estimated cost. Esc closes it. |
 | `/help` | List the commands. |
 | `/exit` | Close sepia and the viewer window. `/quit`, `/q` and Ctrl+D do the same. |
 
-`/style`, `/charset`, `/effort` and `/mature` without an argument open a menu: the arrow keys and Enter (or the option's number) pick, Esc cancels. In `/usage`, the session bars are drawn against the all-time totals, so their gray rest is earlier use; use from before tracking began is estimated once from the prompt history and the saved sessions.
+`/style`, `/charset`, `/model`, `/effort` and `/mature` without an argument open a menu: the arrow keys and Enter (or the option's number) pick, Esc cancels. `/usage` opens a panel that Esc (or Enter) closes without leaving it in the transcript. Its session bar is drawn against the all-time total, so its gray rest is earlier use; use from before tracking began is estimated once from the prompt history and the saved sessions.
 
 ### Keys and the viewer
 
@@ -133,7 +134,7 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | `ANTHROPIC_API_KEY` | none | Required. Asked for on the first run if missing and saved to the user config `.env`. |
 | `BRAVE_SEARCH_API_KEY` | none | Optional key from [brave.com/search/api](https://brave.com/search/api) (monthly free credits, about 1,000 searches). Named subjects come from the top pictures of an image search instead of wiki pages. |
 | `POLLINATIONS_KEY` | none | Optional key from [enter.pollinations.ai](https://enter.pollinations.ai). Uses the keyed endpoint with `flux.2-klein-4b` and no logo. Pictures are paid from the account's pollen (1 pollen = $1, about $0.005 a picture); new accounts get a one-time bonus and there is no free refill. Out of pollen, sepia moves on to the next painter. |
-| `SEPIA_MODEL` | `claude-haiku-5-5` | The art director model. `claude-sonnet-5-5` also works, at about 15 times the price. |
+| `SEPIA_MODEL` | `claude-haiku-5-5` | The starting art director model. `/model` switches between `claude-haiku-5-5`, `claude-sonnet-5-5` (about 20 times the price), `claude-opus-5-5` (about 40 times) and `claude-fable-5-1` (about 100 times) while sepia runs. |
 | `SEPIA_EFFORT` | `high` | Starting Claude effort: `low`, `medium`, `high`, `xhigh` or `max`. `/effort` changes it while sepia runs. |
 | `SEPIA_STYLE` | `ink` | Starting style: `ink` or `fill`. |
 | `SEPIA_CHARSET` | `classic` | Starting character set: `classic` or `symbols`. |
@@ -195,7 +196,7 @@ Once the model is downloaded, it starts loading in the background as soon as sep
 | Pollinations | Keyless: free. With a key: about $0.005 a picture from your pollen, after a one-time bonus for new accounts |
 | Local model | Free, runs on your hardware |
 
-`SEPIA_MODEL=claude-sonnet-5-5` or a higher `SEPIA_EFFORT` costs more per request.
+A larger model (`/model`, `SEPIA_MODEL`) or a higher effort costs more per request: about $0.03 on Sonnet 5.5, $0.05 on Opus 5.5 and $0.12 on Fable 5.1.
 
 ## Platform support
 

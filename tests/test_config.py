@@ -15,6 +15,15 @@ from sepia.config import (
 )
 
 
+def test_models_cover_each_family_once_and_include_the_default() -> None:
+    ids = list(config.MODELS.values())
+    assert list(config.MODELS) == ["haiku", "sonnet", "opus", "fable"], (
+        f"Got {list(config.MODELS)}"
+    )
+    assert len(set(ids)) == len(ids), f"Two names share a model: {ids}"
+    assert config.DEFAULT_MODEL in ids, f"{config.DEFAULT_MODEL} has no /model name"
+
+
 def test_load_settings_empty_environment_uses_defaults() -> None:
     settings = load_settings({})
     assert settings == Settings(), f"Expected defaults, got {settings}"

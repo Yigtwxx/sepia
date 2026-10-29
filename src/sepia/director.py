@@ -23,8 +23,9 @@ from pydantic import BaseModel, Field, ValidationError
 from sepia.config import Effort
 from sepia.scene import Scene
 
-MAX_TOKENS = 8_000
-"""Room for thinking plus a short JSON reply."""
+MAX_TOKENS = 32_000
+"""Room for thinking plus a short JSON reply; Opus and Fable think at length at
+high effort and above. Only what is written is billed."""
 MAX_RETRIES = 3
 """The SDK retries connection errors, 429 and 5xx with exponential backoff."""
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -142,6 +143,15 @@ class Director:
         self._model = model
         self._effort = effort
         self._mature = mature
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @model.setter
+    def model(self, model: str) -> None:
+        """Takes effect from the next request; /model sets it while sepia waits."""
+        self._model = model
 
     @property
     def effort(self) -> Effort:

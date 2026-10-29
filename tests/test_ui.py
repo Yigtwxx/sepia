@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.text import Text
 
 from sepia import ui
-from sepia.config import Effort, Switch
+from sepia.config import MODELS, Effort, Switch
 from sepia.usage import AllTime, Earlier, Usage
 
 
@@ -76,7 +76,7 @@ def _cells(bar: Text, style: str) -> int:
     return sum(span.end - span.start for span in bar.spans if span.style == style)
 
 
-def test_usage_view_session_shows_claude_cost_and_pictures_by_source() -> None:
+def test_usage_view_session_shows_claude_cost_and_requests() -> None:
     usage = _usage()
     text = _view_text(usage, AllTime(since=datetime(2026, 10, 29), total=usage))
     pieces = [
@@ -87,13 +87,29 @@ def test_usage_view_session_shows_claude_cost_and_pictures_by_source() -> None:
         "3.1k",
         "2 web searches",
         "3 requests",
-        "7 pictures · 58.3s",
-        "pollinations 5",
-        "local GPU 2",
-        "3 after a reference picture",
     ]
     missing = [piece for piece in pieces if piece not in text]
     assert not missing, f"{missing} missing from: {text!r}"
+
+
+def test_usage_view_leaves_the_pictures_and_their_painters_out() -> None:
+    usage = _usage()
+    usage.image_searches = 4
+    earlier = Earlier(requests=40, pictures=26, cost=0.04)
+    all_time = AllTime(since=datetime(2026, 10, 29), total=usage, earlier=earlier)
+    text = _view_text(usage, all_time)
+    shown = [
+        word
+        for word in (
+            "Pictures",
+            "pictures",
+            "pollinations",
+            "local GPU",
+            "image searches",
+        )
+        if word in text
+    ]
+    assert not shown, f"{shown} still shown in: {text!r}"
 
 
 def test_usage_view_all_time_adds_the_estimate_from_before_tracking() -> None:
@@ -105,9 +121,7 @@ def test_usage_view_all_time_adds_the_estimate_from_before_tracking() -> None:
         "all time · since 29 Oct 2026",
         "$0.0684",
         "43 requests",
-        "33 pictures",
         "about 40 requests, $0.0400",
-        "about 26 pictures",
     ]
     missing = [piece for piece in pieces if piece not in text]
     assert not missing, f"{missing} missing from: {text!r}"
@@ -158,6 +172,17 @@ def test_words_describe_every_effort_level() -> None:
     assert not missing, f"No description for {missing}"
 
 
+def test_words_describe_every_model() -> None:
+    words = ui.Words()
+    missing = [name for name in MODELS if not words(f"model.{name}")]
+    assert not missing, f"No description for {missing}"
+
+
+def test_words_commands_include_model() -> None:
+    names = [usage.split()[0] for usage, _ in ui.Words().commands]
+    assert "/model" in names, f"Got {names}"
+
+
 def test_words_describe_every_mature_switch() -> None:
     words = ui.Words()
     missing = [
@@ -166,10 +191,3 @@ def test_words_describe_every_mature_switch() -> None:
         if not (words(f"mature.{switch}") and words(f"mature_{switch}"))
     ]
     assert not missing, f"No description or reply for {missing}"
-
-
-def test_usage_view_lists_image_searches_once_there_are_some() -> None:
-    usage = _usage()
-    usage.image_searches = 4
-    text = _view_text(usage, AllTime(since=datetime(2026, 10, 29), total=usage))
-    assert "4 image searches" in text, f"Image searches missing from: {text!r}"

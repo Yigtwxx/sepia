@@ -74,6 +74,18 @@ def test_director_effort_change_applies_to_the_next_request(
     assert config["effort"] == "max", f"Got {config}"
 
 
+def test_director_model_change_applies_to_the_next_request(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message(REPLY))
+    director = Director(fake_client, "claude-haiku-5-5", "low")
+    director.model = "claude-opus-5-5"
+    director.direct("şelale", Scene())
+    kwargs = fake_client.beta.messages.stream.call_args.kwargs
+    assert kwargs["model"] == "claude-opus-5-5", f"Got {kwargs['model']}"
+    assert kwargs["fallbacks"] == "default", "Opus 5.5 takes the server-side fallback"
+
+
 def test_director_mature_adds_its_rules_to_the_system_prompt(
     fake_client: MagicMock, make_message, set_final_message
 ) -> None:

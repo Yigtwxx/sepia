@@ -16,8 +16,17 @@ from sepia.painter import DEFAULT_IMAGE_MODEL
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
 Switch = Literal["off", "on"]
+ModelName = Literal["haiku", "sonnet", "opus", "fable"]
 
-DEFAULT_MODEL = "claude-haiku-5-5"
+MODELS: dict[ModelName, str] = {
+    "haiku": "claude-haiku-5-5",
+    "sonnet": "claude-sonnet-5-5",
+    "opus": "claude-opus-5-5",
+    "fable": "claude-fable-5-1",
+}
+"""The art directors /model switches between, cheapest first: each family's newest
+model. All four take effort, structured output, the web search tool and pictures."""
+DEFAULT_MODEL = MODELS["haiku"]
 DEFAULT_EFFORT: Effort = "high"
 """Haiku 5.5 thinks little more at high than at low (about $0.001 a request either
 way), and the extra thought goes into finding an idea for the picture."""

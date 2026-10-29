@@ -1,13 +1,14 @@
-"""A small menu for picking one option with the arrow keys, as in Claude Code.
+"""A small menu for picking one option with the arrow keys, and a panel to read and
+close, as in Claude Code.
 
-It draws where the transcript's cursor is and erases itself once a choice is made,
-so only the reply that follows stays in the transcript.
+Both draw where the transcript's cursor is and erase themselves once done, so only
+the reply that follows stays in the transcript.
 """
 
 from collections.abc import Callable, Sequence
 
 from prompt_toolkit.application import Application
-from prompt_toolkit.formatted_text import StyleAndTextTuples
+from prompt_toolkit.formatted_text import ANSI, StyleAndTextTuples, to_formatted_text
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.layout import FormattedTextControl, Layout, Window
 from prompt_toolkit.styles import Style
@@ -86,6 +87,37 @@ def choose(
     )
     picked: str | None = app.run()
     return picked
+
+
+def show(panel: str, hint: str) -> None:
+    """Show `panel` (text with ANSI colors) with `hint` under it until Esc, Enter,
+    q or Ctrl+C closes it; then it leaves the screen."""
+    body: StyleAndTextTuples = [
+        *to_formatted_text(ANSI(panel)),
+        ("", "\n\n"),
+        ("class:hint", f" {hint}"),
+    ]
+    keys = KeyBindings()
+
+    @keys.add("escape", eager=True)
+    @keys.add("enter")
+    @keys.add("q")
+    @keys.add("c-c")
+    def _close(event: KeyPressEvent) -> None:
+        event.app.exit()
+
+    window = Window(
+        FormattedTextControl(body, show_cursor=False), dont_extend_height=True
+    )
+    app: Application[None] = Application(
+        layout=Layout(window),
+        key_bindings=keys,
+        style=STYLE,
+        full_screen=False,
+        erase_when_done=True,
+        mouse_support=False,
+    )
+    app.run()
 
 
 def _picker_for(value: str) -> Callable[[KeyPressEvent], None]:

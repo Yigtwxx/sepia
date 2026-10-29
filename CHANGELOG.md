@@ -10,6 +10,22 @@ tag all carry.
 
 ## [Unreleased]
 
+### Added
+
+- `/model [haiku|sonnet|opus|fable]` switches the art director between Claude
+  Haiku 5.5, Sonnet 5.5, Opus 5.5 and Fable 5.1, from the next request on;
+  without a name it opens a menu. The bottom bar and `/usage` show the model
+  in use. `SEPIA_MODEL` still sets the one sepia starts with.
+
+### Changed
+
+- `/usage` opens as a panel, as in Claude Code: Esc, Enter or q closes it, and
+  it leaves nothing in the transcript. It shows Claude's tokens, searches and
+  cost only; the pictures bar with its painters is gone.
+- Claude may write up to 32,000 tokens a request (was 8,000), so Opus and
+  Fable thinking at high effort or above are not cut off. Only what is
+  written is billed.
+
 ## [0.3.0] - 2026-10-29
 
 ### Added

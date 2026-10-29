@@ -19,7 +19,6 @@ SHADOW = "#4c1d95"
 ACCENT = "#e879f9"
 MUTED = "#8b8b9a"
 WARN = "#fb7185"
-GOOD = "#c084fc"
 SPINNER = "✻✽✶✳✢·"
 PROMPT = " › "
 POINTER = "❯"
@@ -85,6 +84,7 @@ STRINGS: dict[str, str] = {
     "add_usage": "Say what to add: /add snowy mountains",
     "style_set": "Style: {style} · charset: {charset}",
     "effort_set": "Effort: {effort}, from the next picture on",
+    "model_set": "Model: {model}, from the next picture on",
     "mature_on": "Mature pictures on, from the next picture on: sexy and dark "
     "scenes are painted as asked, never explicit",
     "mature_off": "Mature pictures off, from the next picture on",
@@ -109,6 +109,8 @@ STRINGS: dict[str, str] = {
     "pick_style": "How should the picture be drawn?",
     "pick_charset": "Which characters should draw it?",
     "pick_effort": "How long should Claude think about each picture?",
+    "pick_model": "Which Claude should write the prompts?",
+    "close_hint": "Esc to close",
     "pick_mature": "Should Claude paint mature pictures?",
     "style.ink": "colored symbols on the terminal's background, made for dark themes",
     "style.fill": "also paints each cell's background, so it shows on any theme",
@@ -119,30 +121,26 @@ STRINGS: dict[str, str] = {
     "effort.high": "time to find an idea for the picture (the default)",
     "effort.xhigh": "longer thought, a slower reply",
     "effort.max": "as much thought as Claude wants: the slowest and costliest",
+    "model.haiku": "Haiku 5.5, quick and cheap, about $0.001 a picture (the default)",
+    "model.sonnet": "Sonnet 5.5, more care for the idea, about $0.03 a picture",
+    "model.opus": "Opus 5.5, richer ideas and slower, about $0.05 a picture",
+    "model.fable": "Fable 5.1, Anthropic's most capable and the slowest, about $0.12",
     "mature.off": "Claude's usual judgment (the default)",
     "mature.on": "sexy, hot, dark and violent pictures of adults, never explicit",
     "usage_title": "Usage",
     "usage_session": "this session",
     "usage_all_time": "all time · since {since}",
     "usage_claude": "Claude",
-    "usage_pictures": "Pictures",
     "usage_input": "input {tokens} tokens",
     "usage_output": "output {tokens} tokens",
     "usage_searches": "{n} web searches",
     "usage_requests": "{n} requests",
-    "usage_painted": "{n} pictures · {seconds}s",
-    "usage_count": "{n} pictures",
-    "usage_referenced": "{n} after a reference picture",
     "usage_earlier_claude": "before tracking: about {n} requests, ${cost}"
     " (estimated from your prompt history)",
-    "usage_earlier_pictures": "before tracking: about {n} pictures"
-    " (estimated from your saved sessions and prompt history)",
     "usage_unpriced": "{n} requests on a model without a known price are left out",
-    "usage_scale": "Session bars are drawn against all time; "
-    "their gray rest is earlier use.",
-    "usage_image_searches": "{n} image searches",
-    "usage_note": "Estimated from list prices; Pollinations and Brave bill their "
-    "own accounts.",
+    "usage_scale": "The session bar is drawn against all time; "
+    "its gray rest is earlier use.",
+    "usage_note": "Estimated from Anthropic's list prices.",
 }
 
 COMMANDS: Sequence[tuple[str, str]] = (
@@ -150,9 +148,10 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/clear", "clear the screen and start a fresh picture"),
     ("/style [ink|fill]", "choose how the picture is drawn"),
     ("/charset [classic|symbols]", "choose the characters that draw it"),
+    ("/model [haiku|sonnet|opus|fable]", "choose which Claude writes the prompts"),
     ("/effort [low|medium|high|xhigh|max]", "choose how long Claude thinks"),
     ("/mature [on|off]", "allow sexy and dark pictures, never explicit"),
-    ("/usage", "show what Claude and the image models used, now and in all"),
+    ("/usage", "show what Claude used and cost, now and in all"),
     ("/help", "show this list"),
     ("/exit", "close sepia and its window (also Ctrl+D)"),
 )
@@ -237,33 +236,26 @@ EARLIER = BANDS[0]
 """What was used before tracking began, in the all-time bars."""
 DEEP = "#7c3aed"
 """A third part of a bar, darker than the other two so the three stay apart."""
-SOURCES = ("api", "local", "keyless")
-SOURCE_COLORS = {"api": ACCENT, "local": GOOD, "keyless": DEEP}
 
 
 def usage_view(
     words: Words, session: "Usage", all_time: "AllTime", model: str, width: int
 ) -> Group:
-    """Usage laid out like Claude Code's /usage: this session, then all time, each
-    service with a heading, a bar and a legend. A bar's colors show what its total
-    is made of. The session bars are drawn against the all-time totals, so their
+    """Claude's usage laid out like Claude Code's /usage: this session, then all
+    time, each with a heading, a bar and a legend. A bar's colors show what its
+    cost is made of. The session bar is drawn against the all-time cost, so its
     gray rest is earlier use."""
     size = max(min(width - 26, USAGE_BAR), 10)
     total, earlier = all_time.total, all_time.earlier
-    pictures = sum(total.pictures.values()) + earlier.pictures
     since = words("usage_all_time", since=f"{all_time.since:%d %b %Y}")
     lines: list[RenderableType] = [
         _title(words, words("usage_session")),
         Text(""),
         *_claude_lines(words, session, size, model, whole=total.cost + earlier.cost),
         Text(""),
-        *_picture_lines(words, session, size, whole=float(pictures)),
-        Text(""),
         _title(words, since),
         Text(""),
         *_claude_lines(words, total, size, "", earlier=earlier),
-        Text(""),
-        *_picture_lines(words, total, size, earlier=earlier),
         Text(""),
         Text(f" {words('usage_scale')}", style="dim"),
         Text(f" {words('usage_note')}", style="dim"),
@@ -306,43 +298,6 @@ def _claude_lines(
         _heading(words("usage_claude"), model.removeprefix("claude-")),
         _bar(parts, size, f"${cost:.4f}", whole),
         _legend(items, words("usage_requests", n=requests)),
-        *notes,
-    ]
-
-
-def _picture_lines(
-    words: Words,
-    usage: "Usage",
-    size: int,
-    *,
-    whole: float | None = None,
-    earlier: "Earlier | None" = None,
-) -> list[RenderableType]:
-    counts = [(source, usage.pictures.get(source, 0)) for source in SOURCES]
-    parts = [(float(count), SOURCE_COLORS[source]) for source, count in counts]
-    items = [
-        (f"{words(f'source.{source}')} {count}", SOURCE_COLORS[source])
-        for source, count in counts
-    ]
-    painted = sum(usage.pictures.values())
-    tail = words("usage_referenced", n=usage.referenced)
-    if usage.image_searches:
-        tail += f" · {words('usage_image_searches', n=usage.image_searches)}"
-    notes: list[RenderableType] = []
-    if earlier is None:
-        seconds = f"{usage.paint_seconds:.1f}"
-        label = words("usage_painted", n=painted, seconds=seconds)
-    else:
-        if earlier.pictures:
-            parts.append((float(earlier.pictures), EARLIER))
-            painted += earlier.pictures
-            note = words("usage_earlier_pictures", n=earlier.pictures)
-            notes.append(_note(note, EARLIER))
-        label = words("usage_count", n=painted)
-    return [
-        _heading(words("usage_pictures"), ""),
-        _bar(parts, size, label, whole),
-        _legend(items, tail),
         *notes,
     ]
 

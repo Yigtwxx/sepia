@@ -20,8 +20,10 @@ from sepia import ui
 from sepia.ascii_art import ArtStyle, Charset
 from sepia.chatbar import BottomBar, ChatBar
 from sepia.config import (
+    MODELS,
     ConfigError,
     Effort,
+    ModelName,
     Settings,
     Switch,
     api_key,
@@ -43,7 +45,7 @@ from sepia.painter import (
     local_model_ready,
 )
 from sepia.painter import image_size as paint_size
-from sepia.picker import choose
+from sepia.picker import choose, show
 from sepia.raster import letterbox
 from sepia.reference import Reference, find_reference, find_subject, split_links
 from sepia.scene import Canvas, Scene
@@ -185,10 +187,22 @@ class Repl:
                 self.words,
                 self.usage,
                 all_time,
-                self.settings.model,
+                self.director.model,
                 self.console.width,
             )
-            self.console.print(view)
+            # A panel to read and close, as in Claude Code: it leaves no trace.
+            with self.console.capture() as captured:
+                self.console.print(view)
+            show(captured.get().rstrip("\n"), self.words("close_hint"))
+        elif command.name == "model":
+            names = {model: name for name, model in MODELS.items()}
+            # A SEPIA_MODEL outside the four leaves no option checked.
+            current = names.get(self.director.model, "")
+            picked = self._pick("model", tuple(MODELS), current, command.argument)
+            if picked is not None:
+                self.director.model = MODELS[cast(ModelName, picked)]
+                model = self.director.model.removeprefix("claude-")
+                self.console.print(ui.reply(self.words("model_set", model=model)))
         elif command.name == "clear":
             self.scene.reset()
             self.host.send({"type": "clear"})
@@ -440,7 +454,7 @@ class Repl:
     def _status(self) -> str:
         window = "●" if self.host.connected else "○"
         model = (
-            f"{self.settings.model.removeprefix('claude-')} ({self.director.effort})"
+            f"{self.director.model.removeprefix('claude-')} ({self.director.effort})"
         )
         if self.director.mature:
             model += " · mature"

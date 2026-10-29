@@ -16,9 +16,10 @@ export const slashCommands: readonly Command[] = [
     { cmd: '/clear', comment: 'clear the screen and start a fresh picture' },
     { cmd: '/style [ink|fill]', comment: 'choose how the picture is drawn' },
     { cmd: '/charset [classic|symbols]', comment: 'choose the characters that draw it' },
+    { cmd: '/model [haiku|sonnet|opus|fable]', comment: 'choose which Claude writes the prompts' },
     { cmd: '/effort [low|medium|high|xhigh|max]', comment: 'choose how long Claude thinks' },
     { cmd: '/mature [on|off]', comment: 'allow sexy and dark pictures, never explicit' },
-    { cmd: '/usage', comment: 'show what Claude and the image models used, now and in all' },
+    { cmd: '/usage', comment: 'show what Claude used and cost, now and in all' },
     { cmd: '/help', comment: 'show this list' },
     { cmd: '/exit', comment: 'close sepia and its window (also Ctrl+D)' },
 ];
