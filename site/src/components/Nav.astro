@@ -1,0 +1,261 @@
+---
+/* Sticky, quiet, on the paper: the name in the middle, the sections
+   either side of it, the first half on the left and the rest with GitHub on the
+   right. Once the hero has scrolled away (`scripts/nav.ts` sets `data-scrolled`)
+   the links fade out and the name stays, a running head; everything else is CSS. */
+import { repo } from '../data/commands';
+
+const left = [
+    { href: '#watch', label: 'Watch' },
+    { href: '#ink', label: 'How it inks' },
+    { href: '#styles', label: 'Styles' },
+    { href: '#rules', label: 'Rules' },
+];
+const right = [
+    { href: '#measured', label: 'Measured' },
+    { href: '#limits', label: 'Limits' },
+    { href: '#cli', label: 'Commands' },
+    { href: repo, label: 'GitHub', external: true },
+];
+const UNDERLINE = 'M2 5 C 40 2.5, 80 6.5, 120 4 S 180 3, 198 5.5';
+---
+
+<header class="nav" data-nav-bar>
+    <span class="nav__progress" aria-hidden="true"></span>
+    <nav class="page nav__row" aria-label="Sections">
+        <ul class="nav__links nav__links--left">
+            {left.map((l) => (
+                <li>
+                    <a href={l.href} data-nav={l.href}>
+                        <span>{l.label}</span>
+                        <svg
+                            class="nav__ul"
+                            viewBox="0 0 200 8"
+                            preserveAspectRatio="none"
+                            aria-hidden="true"
+                            focusable="false"
+                        >
+                            <path d={UNDERLINE} />
+                        </svg>
+                    </a>
+                </li>
+            ))}
+        </ul>
+        <a class="nav__brand" href="#top" aria-label="sepia, back to top">
+            <span class="nav__name">sepia</span>
+        </a>
+        <ul class="nav__links nav__links--right">
+            {right.map((l) => (
+                <li>
+                    <a
+                        href={l.href}
+                        data-nav={l.external ? undefined : l.href}
+                        rel={l.external ? 'noopener' : undefined}
+                    >
+                        <span>{l.label}</span>
+                        <svg
+                            class="nav__ul"
+                            viewBox="0 0 200 8"
+                            preserveAspectRatio="none"
+                            aria-hidden="true"
+                            focusable="false"
+                        >
+                            <path d={UNDERLINE} />
+                        </svg>
+                    </a>
+                </li>
+            ))}
+        </ul>
+    </nav>
+</header>
+
+<style>
+    .nav {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        color: var(--ink);
+        backdrop-filter: blur(8px);
+        /* Ink on a nearly opaque sheet: whatever scrolls under it, even the orchid
+           field, cannot pull the links under 4.5:1. */
+        background: color-mix(in srgb, var(--paper) 90%, transparent);
+        border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+        transition: box-shadow 320ms var(--ease-pen);
+    }
+    .nav[data-scrolled] {
+        box-shadow: 0 10px 30px -22px color-mix(in srgb, var(--orchid) 70%, transparent);
+    }
+    /* How far down the page the reader is: an ink thread along the bar's lower
+       edge, pink to violet, drawn by the scroll itself. */
+    .nav__progress {
+        display: none;
+    }
+    @supports (animation-timeline: scroll()) {
+        @media (prefers-reduced-motion: no-preference) {
+            .nav__progress {
+                display: block;
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: -1px;
+                height: 2px;
+                background: linear-gradient(90deg, var(--ramp-1), var(--ramp-2), var(--ramp-4));
+                box-shadow: 0 0 10px color-mix(in srgb, var(--ramp-2) 45%, transparent);
+                transform-origin: left;
+                animation-name: nav-progress;
+                animation-timing-function: linear;
+                animation-fill-mode: both;
+                animation-timeline: scroll(root block);
+            }
+        }
+    }
+    @keyframes nav-progress {
+        from {
+            transform: scaleX(0);
+        }
+        to {
+            transform: scaleX(1);
+        }
+    }
+    /* Three columns: the two halves of the links take what is left either side of
+       the mark, so the mark sits on the page's centre line whatever their widths. */
+    .nav__row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
+        gap: clamp(1.5rem, 4vw, 3.5rem);
+        min-height: 3.5rem;
+    }
+    .nav__brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: inherit;
+        text-decoration: none;
+        font-family: var(--font-display);
+        font-size: var(--step-1);
+        font-variation-settings:
+            'opsz' 24,
+            'WONK' 1;
+    }
+    .nav__brand:hover {
+        text-decoration: none;
+        color: inherit;
+    }
+    /* The name in plum ink, running just perceptibly toward violet: the owner's
+       choice of a gradient, kept faint so it reads as ink, not as a light. */
+    .nav__name {
+        font-size: var(--step-2);
+        line-height: 1;
+        padding-bottom: 0.08em;
+        background: linear-gradient(100deg, #2a0f35 10%, #5a1660 60%, #4c1d95 95%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+    .nav__links {
+        display: flex;
+        gap: clamp(1.25rem, 3vw, 2.75rem);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        font-size: var(--step--1);
+        transition:
+            opacity 320ms var(--ease-pen),
+            transform 320ms var(--ease-pen),
+            visibility 0s linear 0s;
+    }
+    /* Faded and drawn in toward the name, then out of the tab order once the
+       fade has run. */
+    .nav[data-scrolled] .nav__links {
+        opacity: 0;
+        visibility: hidden;
+        transition:
+            opacity 320ms var(--ease-pen),
+            transform 320ms var(--ease-pen),
+            visibility 0s linear 320ms;
+    }
+    .nav[data-scrolled] .nav__links--left {
+        transform: translateX(12px);
+    }
+    .nav[data-scrolled] .nav__links--right {
+        transform: translateX(-12px);
+    }
+    .nav__links--left {
+        justify-content: flex-end;
+    }
+    .nav__links--right {
+        justify-content: flex-start;
+    }
+    .nav__links a {
+        position: relative;
+        display: inline-block;
+        color: inherit;
+        text-decoration: none;
+        padding-block: 0.25rem;
+        white-space: nowrap;
+    }
+    .nav__ul {
+        position: absolute;
+        left: -0.1em;
+        right: -0.1em;
+        bottom: -0.05em;
+        width: calc(100% + 0.2em);
+        height: 0.32em;
+        overflow: visible;
+        filter: url(#pencil-soft);
+        pointer-events: none;
+    }
+    .nav__ul path {
+        fill: none;
+        stroke: var(--pen);
+        stroke-width: var(--stroke-bold);
+        stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
+        stroke-dasharray: 240;
+        stroke-dashoffset: 240;
+        transition: stroke-dashoffset 320ms var(--ease-pen);
+    }
+    .nav__links a:hover .nav__ul path,
+    .nav__links a:focus-visible .nav__ul path,
+    .nav__links a[aria-current='true'] .nav__ul path {
+        stroke-dashoffset: 0;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .nav__ul path {
+            stroke-dasharray: none;
+            opacity: 0;
+            transition: opacity 0.01ms;
+        }
+        .nav__links a:hover .nav__ul path,
+        .nav__links a:focus-visible .nav__ul path,
+        .nav__links a[aria-current='true'] .nav__ul path {
+            opacity: 1;
+        }
+    }
+    /* Narrower, the sections nearest a neighbour go first, one from each side, so
+       the two halves stay about the same width round the mark. */
+    @media (max-width: 72rem) {
+        .nav__links li:has(> [data-nav='#styles']),
+        .nav__links li:has(> [data-nav='#limits']) {
+            display: none;
+        }
+    }
+    @media (max-width: 56rem) {
+        .nav__links li:has(> [data-nav='#rules']),
+        .nav__links li:has(> [data-nav='#measured']) {
+            display: none;
+        }
+    }
+    @media (max-width: 40rem) {
+        .nav__links li:has(> [data-nav='#ink']),
+        .nav__links li:has(> [data-nav='#cli']) {
+            display: none;
+        }
+    }
+</style>
+
+<script>
+    import { initNav } from '../scripts/nav';
+    initNav();
+</script>

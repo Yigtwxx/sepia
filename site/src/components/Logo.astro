@@ -1,0 +1,29 @@
+---
+/* The sepia mark (lib/emblem.ts): a cuttlefish in characters, with four arms of
+   characters, on a plum tile. Beside the name in the nav and the footer. */
+import { emblemSvg, type EmblemTone } from '../lib/emblem';
+import { uid } from '../lib/uid';
+
+interface Props {
+    size?: string;
+    /** `paper` on light grounds (the nav), `night` on the dark bands. */
+    tone?: EmblemTone;
+    class?: string;
+}
+const { size = '1.8em', tone = 'night', class: className } = Astro.props;
+const svg = emblemSvg(
+    uid('logo'),
+    `class="logo${className ? ` ${className}` : ''}" width="${size}" height="${size}" aria-hidden="true" focusable="false"`,
+    tone,
+);
+---
+
+<Fragment set:html={svg} />
+
+<style is:global>
+    .logo {
+        display: inline-block;
+        flex: none;
+        vertical-align: middle;
+    }
+</style>

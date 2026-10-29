@@ -1,0 +1,203 @@
+{
+    "plates": [
+        {
+            "id": "verany",
+            "title": "Sepia officinalis, plate 24",
+            "author": "Jean-Baptiste Vérany",
+            "year": "1851",
+            "source": "Mollusques méditerranéens, via Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Sepia_officinalis_Verany.jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/2/23/Sepia_officinalis_Verany.jpg",
+            "licence": "Public domain",
+            "licence_url": "https://commons.wikimedia.org/wiki/Template:PD-old-70",
+            "alt": "A common cuttlefish seen from above, its arms gathered to a point and its fins running along both sides of the mantle, drawn in pink and violet characters.",
+            "crop": [0.32, 0.39, 0.7, 0.85],
+            "cols": 72,
+            "levels": [0.1, 0.97],
+            "gamma": 0.6,
+            "erase": [[0.69, 0.64, 0.73, 0.67]]
+        },
+        {
+            "id": "verany-side",
+            "title": "Sepia officinalis, plate 24",
+            "author": "Jean-Baptiste Vérany",
+            "year": "1851",
+            "source": "Mollusques méditerranéens, via Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Sepia_officinalis_Verany.jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/2/23/Sepia_officinalis_Verany.jpg",
+            "licence": "Public domain",
+            "licence_url": "https://commons.wikimedia.org/wiki/Template:PD-old-70",
+            "alt": "A common cuttlefish from the side, swimming to the right with its arms held together, drawn in characters.",
+            "crop": [0.12, 0.11, 0.92, 0.37],
+            "cols": 120,
+            "levels": [0.1, 0.97],
+            "gamma": 0.7,
+            "erase": [[0.58, 0.33, 0.63, 0.36]]
+        },
+        {
+            "id": "salviani",
+            "title": "Sepia, Aquatilium animalium historiae, p. 165",
+            "author": "Ippolito Salviani",
+            "year": "1554",
+            "source": "Biodiversity Heritage Library, via Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Aquatilium_animalium_historiae,_liber_primus_(Page_165)_BHL44715951.jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/9/9d/Aquatilium_animalium_historiae%2C_liber_primus_%28Page_165%29_BHL44715951.jpg",
+            "licence": "Public domain",
+            "licence_url": "https://commons.wikimedia.org/wiki/Template:PD-scan",
+            "alt": "A Renaissance engraving of a cuttlefish seen head-on, its arms curling upward, drawn in characters.",
+            "crop": [0.12, 0.1, 0.82, 0.94],
+            "levels": [0.12, 0.72],
+            "cols": 64,
+            "erase": [
+                [0.15, 0.58, 0.205, 0.75],
+                [0.74, 0.66, 0.8, 0.77]
+            ]
+        },
+        {
+            "id": "gosse",
+            "title": "Cuttle, Natural History: Mollusca, p. 69",
+            "author": "Philip Henry Gosse",
+            "year": "1854",
+            "source": "Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Natural_History_-_Mollusca_-_Cuttle.png",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/0/07/Natural_History_-_Mollusca_-_Cuttle.png",
+            "licence": "Public domain",
+            "licence_url": "https://commons.wikimedia.org/wiki/Template:PD-old-100-1923",
+            "alt": "A small cuttlefish seen from above, drawn in characters.",
+            "cols": 30
+        },
+        {
+            "id": "brehm",
+            "title": "Common cuttlefish (Sepia officinalis), Brehms Tierleben, vol. 10",
+            "author": "Alfred Brehm and Eduard Pechuël-Loesche (eds.)",
+            "year": "1890",
+            "source": "Biodiversity Heritage Library, via Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Brehms_Tierleben_-_allgemeine_Kunde_des_Tierreichs_-_mit_1800_Abbildungen_im_Text,_9_Karten_und_180_Tafeln_in_Farbendruck_und_Holzschnitt_(1890)_(20226862979).jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Brehms_Tierleben_-_allgemeine_Kunde_des_Tierreichs_-_mit_1800_Abbildungen_im_Text%2C_9_Karten_und_180_Tafeln_in_Farbendruck_und_Holzschnitt_%281890%29_%2820226862979%29.jpg",
+            "licence": "No known copyright restrictions",
+            "licence_url": "https://www.flickr.com/commons/usage/",
+            "alt": "A wood engraving of a cuttlefish from above with its two long tentacles stretched forward, drawn in characters.",
+            "crop": [0.01, 0.32, 0.73, 1.0],
+            "cols": 64,
+            "erase": [
+                [0.14, 0.04, 0.18, 0.08],
+                [0.35, 0.355, 0.39, 0.385],
+                [0.84, 0.55, 0.88, 0.575]
+            ]
+        },
+        {
+            "id": "brehm-side",
+            "title": "Common cuttlefish (Sepia officinalis), Brehms Tierleben, vol. 10",
+            "author": "Alfred Brehm and Eduard Pechuël-Loesche (eds.)",
+            "year": "1890",
+            "source": "Biodiversity Heritage Library, via Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Brehms_Tierleben_-_allgemeine_Kunde_des_Tierreichs_-_mit_1800_Abbildungen_im_Text,_9_Karten_und_180_Tafeln_in_Farbendruck_und_Holzschnitt_(1890)_(20226862979).jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Brehms_Tierleben_-_allgemeine_Kunde_des_Tierreichs_-_mit_1800_Abbildungen_im_Text%2C_9_Karten_und_180_Tafeln_in_Farbendruck_und_Holzschnitt_%281890%29_%2820226862979%29.jpg",
+            "licence": "No known copyright restrictions",
+            "licence_url": "https://www.flickr.com/commons/usage/",
+            "alt": "A wood engraving of a cuttlefish from the side, drawn in characters.",
+            "crop": [0.0, 0.0, 1.0, 0.31],
+            "cols": 72,
+            "erase": [[0.14, 0.04, 0.18, 0.08]]
+        },
+        {
+            "id": "brehm-bone",
+            "title": "Common cuttlefish (Sepia officinalis), Brehms Tierleben, vol. 10",
+            "author": "Alfred Brehm and Eduard Pechuël-Loesche (eds.)",
+            "year": "1890",
+            "source": "Biodiversity Heritage Library, via Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Brehms_Tierleben_-_allgemeine_Kunde_des_Tierreichs_-_mit_1800_Abbildungen_im_Text,_9_Karten_und_180_Tafeln_in_Farbendruck_und_Holzschnitt_(1890)_(20226862979).jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Brehms_Tierleben_-_allgemeine_Kunde_des_Tierreichs_-_mit_1800_Abbildungen_im_Text%2C_9_Karten_und_180_Tafeln_in_Farbendruck_und_Holzschnitt_%281890%29_%2820226862979%29.jpg",
+            "licence": "No known copyright restrictions",
+            "licence_url": "https://www.flickr.com/commons/usage/",
+            "alt": "A cuttlebone, the animal's internal shell, drawn in characters.",
+            "crop": [0.74, 0.56, 0.98, 0.99],
+            "cols": 22,
+            "erase": [[0.84, 0.55, 0.88, 0.575]]
+        },
+        {
+            "id": "meyer",
+            "title": "Sepia officinalis, Tintenfische",
+            "author": "Werner Th. Meyer",
+            "year": "1913",
+            "source": "Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Sepia_officinalis1.jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Sepia_officinalis1.jpg",
+            "licence": "Public domain",
+            "licence_url": "https://commons.wikimedia.org/wiki/Template:PD-scan",
+            "alt": "A cuttlefish from the side, head to the left, its fin a pale frill along the mantle, drawn in characters.",
+            "cols": 96
+        },
+        {
+            "id": "psm",
+            "title": "Cuttle-fish (Sepia officinalis) and shell, Popular Science Monthly, vol. 35, p. 673",
+            "author": "Popular Science Monthly",
+            "year": "1889",
+            "source": "Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:PSM_V35_D673_Cuttle_fish_Sepia_officinalis.jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/6/67/PSM_V35_D673_Cuttle_fish_Sepia_officinalis.jpg",
+            "licence": "Public domain",
+            "licence_url": "https://commons.wikimedia.org/wiki/Template:PD-old",
+            "alt": "A cuttlefish from above in a plain line engraving, drawn in characters.",
+            "crop": [0.02, 0.045, 0.6, 0.86],
+            "cols": 56
+        },
+        {
+            "id": "psm-bone",
+            "title": "Cuttle-fish (Sepia officinalis) and shell, Popular Science Monthly, vol. 35, p. 673",
+            "author": "Popular Science Monthly",
+            "year": "1889",
+            "source": "Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:PSM_V35_D673_Cuttle_fish_Sepia_officinalis.jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/6/67/PSM_V35_D673_Cuttle_fish_Sepia_officinalis.jpg",
+            "licence": "Public domain",
+            "licence_url": "https://commons.wikimedia.org/wiki/Template:PD-old",
+            "alt": "A cuttlebone in a line engraving, drawn in characters.",
+            "crop": [0.64, 0.35, 0.99, 1.0],
+            "cols": 22
+        },
+        {
+            "id": "octopus",
+            "title": "Octopus vulgaris, plate 8",
+            "author": "Jean-Baptiste Vérany",
+            "year": "1851",
+            "source": "Mollusques méditerranéens, via Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Octopus_vulgaris_Verany.jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/f/fb/Octopus_vulgaris_Verany.jpg",
+            "licence": "Public domain",
+            "licence_url": "https://commons.wikimedia.org/wiki/Template:PD-old-70",
+            "alt": "A common octopus with its arms spread out, a cousin of the cuttlefish, drawn in characters.",
+            "crop": [0.075, 0.1, 0.93, 0.87],
+            "cols": 72,
+            "levels": [0.1, 0.97],
+            "gamma": 0.6
+        },
+        {
+            "id": "eggs",
+            "title": "Eggs of Sepia officinalis, I Cefalopodi viventi nel Golfo di Napoli",
+            "author": "Comingio Merculiano",
+            "year": "1896",
+            "source": "Wikimedia Commons",
+            "page_url": "https://commons.wikimedia.org/wiki/File:Sepia_officinalis_eggs.jpg",
+            "file_url": "https://upload.wikimedia.org/wikipedia/commons/f/f4/Sepia_officinalis_eggs.jpg",
+            "licence": "Public domain",
+            "licence_url": "https://commons.wikimedia.org/wiki/Template:PD-scan",
+            "alt": "A cluster of dark cuttlefish eggs on a stem, like a bunch of grapes, drawn in characters.",
+            "cols": 40
+        }
+    ],
+    "pictures": [
+        {
+            "id": "blackhole",
+            "file": "scripts/sources/blackhole.png",
+            "cols": 120,
+            "rows": 38
+        },
+        {
+            "id": "comet",
+            "file": "scripts/sources/comet.png",
+            "cols": 120,
+            "rows": 38
+        }
+    ]
+}

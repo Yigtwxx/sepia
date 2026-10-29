@@ -1,0 +1,133 @@
+---
+/* The ledger on the orchid field: each figure set large, what it counts and where
+   it comes from beside it, and the sources in their own box, so a reader can check
+   a number before trusting it. The animal from the side, in the bands' pink. */
+import { measures, method } from '../data/measured';
+import Inkprint from './Inkprint.astro';
+import SketchBox from './sketch/SketchBox.astro';
+import SketchRule from './sketch/SketchRule.astro';
+---
+
+<div class="measured">
+    <ol class="measured__list">
+        {measures.map((m) => (
+            <li class="measured__row">
+                <p class="measured__figure">
+                    <b>{m.figure}</b>
+                    <span class="measured__reading">{m.reading}</span>
+                </p>
+                <div class="measured__text">
+                    <p class="measured__what">{m.what}</p>
+                    <p class="measured__set">{m.source}</p>
+                </div>
+                <div class="measured__rule">
+                    <SketchRule tone="paper" />
+                </div>
+            </li>
+        ))}
+    </ol>
+    <div class="measured__side">
+        <figure class="measured__plate">
+            <Inkprint id="brehm-side" look="field" frame plate="Pl. VII" name="Sepia officinalis" />
+            <figcaption class="caption">
+                <cite>Common cuttlefish</cite>, Brehms Tierleben, 1890. Every stripe counted.
+            </figcaption>
+        </figure>
+        <SketchBox tone="paper" padding="md" draw fill class="measured__method">
+            <p class="measured__reading">{method.title}</p>
+            <ul class="measured__lines">
+                {method.lines.map((l) => (
+                    <li>{l}</li>
+                ))}
+            </ul>
+            <p class="marginalia">No benchmark of taste here: only what can be counted.</p>
+        </SketchBox>
+    </div>
+</div>
+
+<style>
+    .measured {
+        display: grid;
+        gap: var(--space-7);
+    }
+    @media (min-width: 64rem) {
+        .measured {
+            grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+            gap: var(--space-8);
+            align-items: start;
+        }
+    }
+    .measured__list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+    }
+    .measured__row {
+        position: relative;
+        display: grid;
+        gap: var(--space-2) var(--space-6);
+        padding-block: var(--space-5);
+    }
+    @media (min-width: 40rem) {
+        .measured__row {
+            grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+        }
+    }
+    .measured__figure {
+        display: grid;
+        margin: 0;
+    }
+    .measured__figure b {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: var(--step-5);
+        line-height: 1;
+        color: var(--cream);
+        font-variation-settings:
+            'opsz' 144,
+            'WONK' 1;
+    }
+    .measured__reading {
+        font-family: var(--font-type);
+        font-size: var(--step--1);
+        color: var(--pink-soft);
+        margin: var(--space-1) 0 0;
+    }
+    .measured__what {
+        font-family: var(--font-display);
+        font-size: var(--step-2);
+        line-height: 1.2;
+        margin: 0 0 var(--space-2);
+    }
+    .measured__set {
+        margin: 0;
+        font-size: var(--step--1);
+        color: var(--pink-soft);
+    }
+    .measured__rule {
+        position: absolute;
+        inset-inline: 0;
+        bottom: 0;
+    }
+    .measured__side {
+        display: grid;
+        gap: var(--space-6);
+    }
+    .measured__plate {
+        margin: 0;
+    }
+    .measured__plate figcaption {
+        margin-top: var(--space-3);
+    }
+    .measured__lines {
+        margin: var(--space-2) 0 var(--space-4);
+        padding-left: 1.1em;
+        font-size: var(--step--1);
+        display: grid;
+        gap: var(--space-2);
+    }
+    .measured__method .marginalia {
+        margin: 0;
+    }
+</style>

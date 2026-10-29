@@ -1,0 +1,226 @@
+---
+/* Orchid again: the animal from the side as a band, drawn in the bands' pink, then
+   links, the sibling tools, and the credits every engraving on the page earned.
+   Credits come from the image manifest, through art.generated.ts. */
+import { plates } from '../data/art.generated';
+import { repo, pypi, version, siblings } from '../data/commands';
+import Inkprint from './Inkprint.astro';
+import Logo from './Logo.astro';
+
+const seen = new Set<string>();
+const credits = Object.values(plates)
+    .map((p) => p.credit)
+    .filter((c) => (seen.has(c.page_url) ? false : (seen.add(c.page_url), true)));
+---
+
+<footer class="footer" id="footer">
+    <div class="page footer__band">
+        <Inkprint id="verany-side" look="field" origin={[0.9, 0.5]} />
+    </div>
+    <div class="page footer__grid">
+        <div class="footer__col">
+            <p class="footer__name">
+                <Logo size="1.5em" />
+                sepia
+                <span class="footer__version">v{version}</span>
+            </p>
+            <p class="footer__tag">Describe it. Watch it ink.</p>
+            <ul class="footer__links">
+                <li>
+                    <a href={repo} rel="noopener">
+                        GitHub
+                    </a>
+                </li>
+                <li>
+                    <a href={pypi} rel="noopener">
+                        PyPI
+                    </a>
+                </li>
+                <li>
+                    <a href={`${repo}/blob/main/CHANGELOG.md`} rel="noopener">
+                        Changelog
+                    </a>
+                </li>
+                <li>
+                    <a href={`${repo}/blob/main/LICENSE`} rel="noopener">
+                        Licence
+                    </a>
+                </li>
+            </ul>
+            <div class="footer__family">
+                <p class="footer__family-title">Same family</p>
+                <ul>
+                    {siblings.map((s) => (
+                        <li>
+                            <a href={s.href} rel="noopener">
+                                {s.name}
+                            </a>{' '}
+                            <span>— {s.tag}</span>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        </div>
+        <details class="footer__col footer__credits">
+            <summary class="footer__credits-title">Engravings on this page</summary>
+            <ul>
+                {credits.map((c) => (
+                    <li>
+                        <a href={c.page_url} rel="noopener">
+                            {c.author}, <cite>{c.title}</cite>
+                            {c.year ? `, ${c.year}` : ''}
+                        </a>
+                        <span class="footer__licence">
+                            {' '}
+                            — {c.source},{' '}
+                            <a href={c.licence_url} rel="noopener">
+                                {c.licence}
+                            </a>
+                        </span>
+                    </li>
+                ))}
+            </ul>
+            <p class="footer__note">
+                Every plate is drawn in characters at build time by sepia’s own code, the same
+                functions the viewer window runs, from public-domain originals. The frames, the arms
+                and the pencil lines are SVG; the ripples, the ink and the passing clouds are a
+                canvas. No cuttlefish was harmed; several were engraved.
+            </p>
+        </details>
+    </div>
+</footer>
+
+<style>
+    .footer {
+        --pen: var(--pink);
+        --caption: var(--pink-soft);
+        position: relative;
+        isolation: isolate;
+        background: var(--orchid);
+        color: var(--cream);
+        padding-block: var(--space-7);
+    }
+    .footer__band {
+        margin-bottom: var(--space-7);
+        opacity: 0.92;
+    }
+    .footer__grid {
+        display: grid;
+        gap: var(--space-6);
+    }
+    @media (min-width: 48rem) {
+        .footer__grid {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+            gap: var(--space-8);
+        }
+    }
+    .footer a {
+        color: inherit;
+    }
+    .footer a:hover {
+        color: var(--pink);
+    }
+    .footer :focus-visible {
+        outline-color: var(--pink);
+    }
+    .footer__name {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.35em;
+        font-family: var(--font-display);
+        font-size: var(--step-3);
+        margin: 0 0 var(--space-2);
+        font-variation-settings:
+            'opsz' 48,
+            'WONK' 1;
+    }
+    .footer__version {
+        color: var(--pink-soft);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        margin-left: 0.4em;
+    }
+    .footer__tag {
+        font-family: var(--font-display);
+        font-style: italic;
+    }
+    .footer__links {
+        list-style: none;
+        padding: 0;
+        margin: var(--space-3) 0 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0 var(--space-4);
+        font-size: var(--step--1);
+    }
+    .footer__links a {
+        display: inline-block;
+        padding-block: 0.35rem;
+    }
+    .footer__credits {
+        font-size: var(--step--1);
+    }
+    .footer__credits-title {
+        font-family: var(--font-display);
+        font-size: var(--step-1);
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-3);
+    }
+    .footer__credits-title::-webkit-details-marker {
+        display: none;
+    }
+    .footer__credits-title::after {
+        content: '+';
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        color: var(--pink-soft);
+        transition: transform 160ms ease;
+    }
+    .footer__credits[open] .footer__credits-title {
+        margin-bottom: var(--space-3);
+    }
+    .footer__credits[open] .footer__credits-title::after {
+        transform: rotate(45deg);
+    }
+    .footer__credits ul {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 var(--space-4);
+        display: grid;
+        gap: var(--space-2);
+    }
+    .footer__family {
+        margin-top: var(--space-5);
+        font-size: var(--step--1);
+    }
+    .footer__family-title {
+        font-family: var(--font-type);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--pink-soft);
+        margin: 0 0 var(--space-2);
+    }
+    .footer__family ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 0.3em;
+    }
+    .footer__family a {
+        display: inline-block;
+        padding-block: 0.2rem;
+    }
+    .footer__family span,
+    .footer__licence {
+        color: var(--pink-soft);
+    }
+    .footer__note {
+        color: var(--pink-soft);
+        max-width: 56ch;
+    }
+</style>

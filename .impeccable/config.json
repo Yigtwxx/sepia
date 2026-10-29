@@ -1,0 +1,23 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "fraunces",
+        "createdAt": "2026-10-29T09:41:52.877Z",
+        "reason": "User confirmed Fraunces is intentional: the display face shared by the sibling sites (spiyweb, proofpath, reasonhound)"
+      },
+      {
+        "rule": "single-font",
+        "value": "*",
+        "files": [
+          "site/src/pages/social.astro"
+        ],
+        "createdAt": "2026-10-29T09:41:52.981Z",
+        "reason": "False positive: the card sets Fraunces, Kalam and IBM Plex Mono through CSS variables; user confirmed"
+      }
+    ]
+  }
+}

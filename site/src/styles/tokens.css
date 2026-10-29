@@ -1,0 +1,99 @@
+/* Design tokens for the sepia site.
+   The page is a naturalist's plate in ink: pink-lilac paper, plum ink, an orchid
+   pen. Orchid is the field behind the rules, the numbers and the footer; pink is
+   the light on that field and a highlighter on paper, never text on paper. The
+   ink ramp colours the character plates, from the pink of a cuttlefish's skin to
+   the violet of its ink. */
+:root {
+    /* paper and ink: a warm sheet, plum ink */
+    --paper: #ecd0e3;
+    --paper-deep: #e1bed7;
+    --paper-line: #cf9fc2;
+    --ink: #22102b; /* 12.5:1 on --paper, 11.6:1 on --lilac */
+    --ink-soft: #4a3354; /* 7.8:1 on --paper, 7.2:1 on --lilac */
+    --ink-mute: #5c4666; /* 5.83:1 on --paper, 4.97:1 on --paper-deep, 5.42:1 on --lilac */
+
+    /* the lilac: a second, cooler ground for the sections between the fields */
+    --lilac: #e3c8e6;
+    --lilac-line: #c9a6d2;
+
+    /* the tint washed through the paper: pink from above, plum from below.
+       Faint enough that the pen stays above 4.5:1 anywhere on the page. */
+    --glow-pink: rgb(240 140 200 / 0.45);
+    --glow-plum: rgb(124 58 237 / 0.12);
+
+    /* the pen: emphasis on paper */
+    --pen: #821574; /* 6.37:1 on --paper, 5.92:1 on --lilac, 5.44:1 on --paper-deep */
+    --pen-deep: #5e0f56; /* 9:1 on --paper */
+    --violet: #6d28d9; /* 4.97:1 on --paper */
+
+    /* the field: orchid ground for the bands */
+    --orchid: #5b1356; /* 8.9:1 on --paper; the field */
+    --orchid-deep: #4a0f46;
+    --cream: #fdf2f8; /* 11.5:1 on --orchid, 13.3:1 on --orchid-deep */
+
+    /* the skin: pink light on the field, highlighter on paper, never text on paper */
+    --pink: #f9a8d4; /* 6.92:1 on --orchid */
+    --pink-soft: #f5c2e0; /* 8.18:1 on --orchid */
+    --pink-wash: #f3bfdf;
+
+    /* the ink ramp: plates drawn in characters, pink to violet (decorative) */
+    --ramp-1: #db2777;
+    --ramp-2: #c026d3;
+    --ramp-3: #9333ea;
+    --ramp-4: #7c3aed;
+    --ramp-5: #5b21b6;
+
+    /* terminal demo: the prompt window's own palette (src/sepia/ui.py) */
+    --tui-bg: #0c0710;
+    --tui-fg: #f3e8f7; /* 16.8:1 on --tui-bg */
+    --tui-dim: #a99bb0; /* 7.6:1 on --tui-bg */
+    --tui-muted: #8b8b9a; /* 5.94:1 on --tui-bg; ui.MUTED */
+    --tui-accent: #e879f9; /* ui.ACCENT */
+    --tui-good: #c084fc; /* ui.GOOD */
+    --tui-frame: #5b5b6b; /* ui.FRAME */
+    --tui-shadow: #4c1d95; /* ui.SHADOW */
+
+    /* type */
+    --font-display: 'Fraunces Variable', 'Fraunces Fallback', 'Iowan Old Style', Georgia, serif;
+    --font-body: 'Inter Variable', system-ui, -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    --font-type: var(--font-mono); /* labels and captions: the specimen tag */
+    --font-hand: 'Kalam', 'Bradley Hand', 'Segoe Print', cursive; /* notes in the margin */
+
+    /* fluid type scale: ratio 1.2 at 360px → 1.25 at 1280px */
+    --step--1: clamp(0.83rem, 0.8rem + 0.15vw, 0.92rem);
+    --step-0: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
+    --step-1: clamp(1.2rem, 1.1rem + 0.5vw, 1.44rem);
+    --step-2: clamp(1.44rem, 1.25rem + 0.9vw, 1.8rem);
+    --step-3: clamp(1.73rem, 1.4rem + 1.6vw, 2.25rem);
+    --step-4: clamp(2.07rem, 1.5rem + 2.7vw, 2.81rem);
+    --step-5: clamp(2.49rem, 1.6rem + 4.4vw, 3.52rem);
+    --step-6: clamp(2.99rem, 1.6rem + 6.8vw, 4.4rem);
+
+    /* fluid spacing */
+    --space-1: clamp(0.25rem, 0.23rem + 0.1vw, 0.31rem);
+    --space-2: clamp(0.5rem, 0.46rem + 0.2vw, 0.63rem);
+    --space-3: clamp(0.75rem, 0.69rem + 0.3vw, 0.94rem);
+    --space-4: clamp(1rem, 0.92rem + 0.4vw, 1.25rem);
+    --space-5: clamp(1.5rem, 1.38rem + 0.6vw, 1.88rem);
+    --space-6: clamp(2rem, 1.84rem + 0.8vw, 2.5rem);
+    --space-7: clamp(3rem, 2.76rem + 1.2vw, 3.75rem);
+    --space-8: clamp(4rem, 3.68rem + 1.6vw, 5rem);
+    --space-9: clamp(6rem, 5.5rem + 2.4vw, 7.5rem);
+
+    /* the pencil */
+    --stroke: 1.5px;
+    --stroke-bold: 2.5px;
+
+    /* layout: a plate with a field-notes column on wide screens */
+    --page-max: 72rem;
+    --gutter: clamp(1rem, 4vw, 2.5rem);
+    --margin-col: clamp(0px, 18vw, 16rem);
+    --measure: 62ch;
+
+    /* motion */
+    --draw-duration: 900ms;
+    --ease-pen: cubic-bezier(0.3, 0, 0.2, 1);
+    --ease-silk: cubic-bezier(0.22, 1, 0.36, 1); /* ease-out-quint: settles, does not bounce */
+}

@@ -1,0 +1,324 @@
+---
+/* One picture, four ways: the viewer's two styles and two character sets, live.
+   The pickers are the prompt window's own (/style and /charset open an arrow-key
+   menu), here as radio groups; the picture is the page's black hole, drawn by the
+   viewer's code, so what changes is only what the commands change. */
+import { pictures } from '../data/art.generated';
+import { RAMPS } from '../lib/ramps';
+
+const picture = pictures.blackhole;
+if (!picture) throw new Error('StyleLab: run npm run images');
+const groups = [
+    {
+        name: 'style',
+        command: '/style',
+        question: 'How should the picture be drawn?',
+        options: [
+            {
+                value: 'ink',
+                help: "colored symbols on the terminal's background, made for dark themes",
+            },
+            { value: 'fill', help: "also paints each cell's background, so it shows on any theme" },
+        ],
+    },
+    {
+        name: 'charset',
+        command: '/charset',
+        question: 'Which characters should draw it?',
+        options: [
+            {
+                value: 'classic',
+                help: 'the full ASCII-art alphabet, the finest shading for photos',
+            },
+            { value: 'symbols', help: 'punctuation only, a lighter and sparser look' },
+        ],
+    },
+] as const;
+const ramps = [
+    { name: 'classic', chars: RAMPS.classic.chars.join(''), count: RAMPS.classic.chars.length },
+    { name: 'symbols', chars: RAMPS.symbols.chars.join(''), count: RAMPS.symbols.chars.length },
+];
+const texts = JSON.stringify({ classic: picture.classic, symbols: picture.symbols });
+---
+
+<div class="lab" data-lab>
+    <div class="lab__screen-wrap">
+        <div
+            class="lab__screen"
+            style={`--cols: ${picture.cols}; --rows: ${picture.rows}`}
+            role="img"
+            aria-label="The black hole drawn in coloured characters, in the style and character set chosen beside it."
+        >
+            <pre class="lab__text" aria-hidden="true">{picture.classic}</pre>
+            <canvas class="lab__canvas" data-lab-canvas aria-hidden="true"></canvas>
+        </div>
+        <p class="caption lab__caption">
+            <code>› {picture.request}</code>, painted for this page and drawn as {picture.cols} ×{' '}
+            {picture.rows} characters. Switch it the way the prompt window does.
+        </p>
+    </div>
+    <div class="lab__side">
+        {groups.map((g) => (
+            <fieldset class="picker" data-lab-group={g.name}>
+                <legend class="picker__legend">
+                    <span class="picker__cmd">{g.command}</span>
+                    <span class="picker__q">{g.question}</span>
+                </legend>
+                {g.options.map((o, i) => (
+                    <label class="picker__opt">
+                        <input
+                            type="radio"
+                            name={`lab-${g.name}`}
+                            value={o.value}
+                            checked={i === 0}
+                        />
+                        <span class="picker__pointer" aria-hidden="true">
+                            ❯
+                        </span>
+                        <span class="picker__n" aria-hidden="true">
+                            {i + 1}.
+                        </span>
+                        <span class="picker__value">{o.value}</span>
+                        <span class="picker__help">{o.help}</span>
+                    </label>
+                ))}
+            </fieldset>
+        ))}
+        <dl class="lab__ramps">
+            {ramps.map((r) => (
+                <div>
+                    <dt>
+                        {r.name} <span>{r.count} weights</span>
+                    </dt>
+                    <dd>
+                        <code>{r.chars}</code>
+                    </dd>
+                </div>
+            ))}
+        </dl>
+    </div>
+    <script type="application/json" data-lab-texts set:html={texts} />
+</div>
+
+<style>
+    .lab {
+        display: grid;
+        gap: var(--space-6);
+        align-items: start;
+    }
+    @media (min-width: 64rem) {
+        .lab {
+            grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+            gap: var(--space-7);
+        }
+    }
+    .lab__screen {
+        position: relative;
+        container-type: inline-size;
+        aspect-ratio: var(--cols) / calc(var(--rows) * 2);
+        background: #000;
+        border-radius: 6px;
+        overflow: hidden;
+        box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--violet) 40%, transparent),
+            0 24px 60px -32px color-mix(in srgb, var(--orchid) 80%, transparent);
+    }
+    .lab__text {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        white-space: pre;
+        font-family: var(--font-mono);
+        font-weight: 500;
+        font-size: calc(100cqi / var(--cols) / 0.6);
+        line-height: 1.2;
+        color: #8fbf9a;
+        user-select: none;
+    }
+    .lab__canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .lab.is-live .lab__text {
+        visibility: hidden;
+    }
+    .lab__caption {
+        margin-top: var(--space-3);
+    }
+    .lab__side {
+        display: grid;
+        gap: var(--space-5);
+    }
+    /* The prompt window's arrow-key menu, as a radio group: the chosen option gets
+       the pointer and the accent; the number is the key that picks it. */
+    .picker {
+        margin: 0;
+        padding: var(--space-3) var(--space-4) var(--space-4);
+        border: 0;
+        border-radius: 6px;
+        background: var(--tui-bg);
+        color: var(--tui-fg);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+    }
+    .picker__legend {
+        display: grid;
+        float: left;
+        width: 100%;
+        gap: 0.15em;
+        margin-bottom: var(--space-3);
+        padding: 0;
+    }
+    .picker__legend + * {
+        clear: both;
+    }
+    .picker__cmd {
+        color: var(--tui-accent);
+        font-weight: 500;
+    }
+    .picker__q {
+        font-weight: 500;
+    }
+    .picker__opt {
+        display: grid;
+        grid-template-columns: 1.4em 1.6em minmax(0, 1fr);
+        column-gap: 0.2em;
+        padding: 0.3em 0.2em;
+        border-radius: 3px;
+        cursor: pointer;
+        color: var(--tui-muted);
+    }
+    .picker__opt input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+    .picker__pointer {
+        visibility: hidden;
+        color: var(--tui-accent);
+    }
+    .picker__value {
+        color: var(--tui-fg);
+    }
+    .picker__help {
+        grid-column: 3;
+        font-size: 0.92em;
+    }
+    .picker__opt:has(input:checked) .picker__pointer {
+        visibility: visible;
+    }
+    .picker__opt:has(input:checked) .picker__value {
+        color: var(--tui-accent);
+        font-weight: 500;
+    }
+    .picker__opt:has(input:focus-visible) {
+        outline: 2px solid var(--tui-accent);
+        outline-offset: 1px;
+    }
+    .picker__opt:hover .picker__value {
+        text-decoration: underline;
+        text-underline-offset: 0.2em;
+    }
+    .lab__ramps {
+        margin: 0;
+        display: grid;
+        gap: var(--space-3);
+    }
+    .lab__ramps dt {
+        font-family: var(--font-type);
+        font-size: var(--step--1);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--pen);
+    }
+    .lab__ramps dt span {
+        color: var(--ink-mute);
+        letter-spacing: 0.04em;
+        text-transform: none;
+        margin-left: 0.4em;
+    }
+    .lab__ramps dd {
+        margin: 0.2em 0 0;
+        container-type: inline-size;
+    }
+    /* The whole ramp on one line at any width: its size follows the column, so it
+       never needs a scrollbar. 31 characters at 0.6 em plus 0.12 em of spacing. */
+    .lab__ramps code {
+        display: block;
+        white-space: pre;
+        overflow: hidden;
+        font-size: min(var(--step-0), calc((100cqi - 1.2rem) / 22.5));
+        letter-spacing: 0.12em;
+        padding: 0.4rem 0.6rem;
+    }
+</style>
+
+<script>
+    import { InkField } from '../scripts/ink-field';
+    import { pictureColours } from '../scripts/run';
+    import type { ArtStyle, Charset } from '../lib/ramps';
+
+    for (const root of document.querySelectorAll<HTMLElement>('[data-lab]')) {
+        const canvas = root.querySelector<HTMLCanvasElement>('[data-lab-canvas]');
+        const raw = root.querySelector('[data-lab-texts]')?.textContent;
+        const screen = root.querySelector<HTMLElement>('.lab__screen');
+        if (!canvas || !raw || !screen) continue;
+        const texts = JSON.parse(raw) as Record<Charset, string>;
+        const cols = Number(getComputedStyle(screen).getPropertyValue('--cols'));
+        const rows = Number(getComputedStyle(screen).getPropertyValue('--rows'));
+        let field: InkField;
+        try {
+            field = new InkField(canvas, {
+                look: 'screen',
+                text: texts.classic,
+                cols,
+                rows,
+                ripples: window.matchMedia('(hover: hover)').matches,
+            });
+        } catch {
+            continue;
+        }
+        const chosen = (group: string): string =>
+            root.querySelector<HTMLInputElement>(`input[name="lab-${group}"]:checked`)?.value ?? '';
+        const apply = (): void =>
+            field.setLook(chosen('style') as ArtStyle, chosen('charset') as Charset);
+        root.addEventListener('change', apply);
+        // The menu's number keys, as in the prompt window: 1 and 2 pick in the
+        // group that has focus.
+        root.addEventListener('keydown', (event) => {
+            const group = (event.target as HTMLElement).closest<HTMLElement>('[data-lab-group]');
+            if (!group || !/^[12]$/.test(event.key)) return;
+            const input = group.querySelectorAll<HTMLInputElement>('input')[Number(event.key) - 1];
+            if (!input) return;
+            input.checked = true;
+            input.focus();
+            apply();
+        });
+        let width = 0;
+        new ResizeObserver(([entry]) => {
+            const next = Math.round(entry?.contentRect.width ?? 0);
+            if (next === width) return;
+            width = next;
+            field.fit();
+        }).observe(screen);
+        let loaded = false;
+        new IntersectionObserver(
+            ([entry]) => {
+                const on = Boolean(entry?.isIntersecting);
+                field.setVisible(on);
+                if (!on || loaded) return;
+                loaded = true;
+                pictureColours('blackhole')
+                    .then((c) => {
+                        field.setPicture(c, texts);
+                        apply();
+                        root.classList.add('is-live');
+                    })
+                    .catch(() => undefined);
+            },
+            { rootMargin: '200px 0px' },
+        ).observe(screen);
+    }
+</script>

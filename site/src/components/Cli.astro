@@ -1,0 +1,209 @@
+---
+/* Everything you type: the slash commands of the prompt window, the local painter
+   for when the API is down, and the settings it reads. */
+import { download, localInstall, settings, slashCommands } from '../data/commands';
+import InstallBox from './InstallBox.astro';
+import SketchBox from './sketch/SketchBox.astro';
+---
+
+<div class="cli">
+    <div class="cli__main">
+        <h3 class="cli__h">In the prompt window</h3>
+        <dl class="cli__commands">
+            {slashCommands.map((c) => (
+                <div class="cli__row">
+                    <dt>
+                        <code>{c.cmd}</code>
+                    </dt>
+                    <dd>{c.comment}</dd>
+                </div>
+            ))}
+        </dl>
+        <p class="cli__fine">
+            <code>/style</code>, <code>/charset</code>, <code>/effort</code> and{' '}
+            <code>/mature</code> without an argument open a menu: the arrow keys and Enter pick, Esc
+            cancels. Up and down walk the request history.
+        </p>
+    </div>
+    <div class="cli__side">
+        <h3 class="cli__h">Install</h3>
+        <InstallBox id="cli-install" />
+        <p class="marginalia cli__note">
+            The first run asks for your Anthropic key, typed hidden, and keeps it in your config
+            folder.
+        </p>
+        <SketchBox padding="md" class="cli__local" draw>
+            <h3 class="cli__h">The local painter</h3>
+            <p>
+                FLUX.2 [klein] 4B on your own GPU, whenever the API fails or rate limits. About 3 GB
+                of packages:
+            </p>
+            {localInstall.map((l) => (
+                <div class="cli__local-row">
+                    <p class="cli__local-label">
+                        {l.label} <span>{l.comment}</span>
+                    </p>
+                    <pre><code>{l.cmd}</code></pre>
+                </div>
+            ))}
+            <div class="cli__local-row">
+                <p class="cli__local-label">
+                    then <span>{download.comment}</span>
+                </p>
+                <pre><code>{download.cmd}</code></pre>
+            </div>
+        </SketchBox>
+    </div>
+    <div class="cli__settings">
+        <h3 class="cli__h">Settings</h3>
+        <p class="cli__fine">
+            From the environment, then <code>.env</code> in the current folder, then
+            <code>.env</code> in the user config folder. A value already set is never overridden.
+        </p>
+        <div class="cli__table-wrap">
+            <table class="cli__table">
+                <thead>
+                    <tr>
+                        <th scope="col">Variable</th>
+                        <th scope="col">Default</th>
+                        <th scope="col">What it sets</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {settings.map((s) => (
+                        <tr>
+                            <th scope="row">
+                                <code>{s.name}</code>
+                            </th>
+                            <td>{s.value}</td>
+                            <td>{s.what}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .cli {
+        display: grid;
+        gap: var(--space-7);
+    }
+    @media (min-width: 64rem) {
+        .cli {
+            grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+            gap: var(--space-7) var(--space-8);
+        }
+        .cli__settings {
+            grid-column: 1 / -1;
+        }
+    }
+    .cli__h {
+        font-size: var(--step-2);
+        margin-bottom: var(--space-4);
+    }
+    .cli__commands {
+        margin: 0;
+        display: grid;
+        border-top: 1px dashed var(--paper-line);
+    }
+    .cli__row {
+        display: grid;
+        gap: var(--space-1) var(--space-4);
+        padding-block: var(--space-2);
+        border-bottom: 1px dashed var(--paper-line);
+    }
+    @media (min-width: 40rem) {
+        .cli__row {
+            grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+            align-items: baseline;
+        }
+    }
+    .cli__row dt code {
+        background: none;
+        padding: 0;
+        color: var(--pen);
+        font-weight: 500;
+        overflow-wrap: anywhere;
+    }
+    .cli__row dd {
+        margin: 0;
+        color: var(--ink-soft);
+    }
+    .cli__fine {
+        font-size: var(--step--1);
+        color: var(--ink-mute);
+        margin-top: var(--space-4);
+    }
+    .cli__side {
+        display: grid;
+        align-content: start;
+        gap: var(--space-4);
+    }
+    .cli__note {
+        margin: 0;
+    }
+    .cli__local {
+        margin-top: var(--space-4);
+    }
+    .cli__local p {
+        font-size: var(--step--1);
+    }
+    .cli__local-row {
+        margin-top: var(--space-3);
+    }
+    .cli__local-label {
+        margin: 0 0 var(--space-1);
+        font-family: var(--font-type);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--pen);
+    }
+    .cli__local-label span {
+        color: var(--ink-mute);
+        text-transform: none;
+        letter-spacing: 0;
+        margin-left: 0.4em;
+    }
+    .cli__local pre {
+        background: var(--tui-bg);
+        color: var(--tui-fg);
+        padding: var(--space-2) var(--space-3);
+        border-radius: 4px;
+        font-size: var(--step--1);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+    .cli__table-wrap {
+        overflow-x: auto;
+    }
+    .cli__table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--step--1);
+    }
+    .cli__table th,
+    .cli__table td {
+        text-align: left;
+        padding: var(--space-2) var(--space-3) var(--space-2) 0;
+        border-bottom: 1px dashed var(--paper-line);
+        vertical-align: baseline;
+    }
+    .cli__table thead th {
+        font-family: var(--font-type);
+        font-weight: 400;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+    }
+    .cli__table tbody th {
+        font-weight: 400;
+    }
+    .cli__table tbody th code {
+        background: none;
+        padding: 0;
+        color: var(--pen);
+        white-space: nowrap;
+    }
+</style>

@@ -1,0 +1,306 @@
+---
+/* A plate drawn in characters, the page's counterpart of the family's halftones.
+
+   The characters are scripts/site_art.py's, drawn by sepia's own code; they are
+   in the markup as a <pre>, so the plate is there without a script. The script
+   (scripts/plates.ts) lays a canvas over it that reveals, ripples and inks.
+
+   `frame` sets it as a specimen plate: two pencil rules with a ring of
+   chromatophores between them (scripts/skin.ts), an arm curling round two
+   corners, and the engraver's line under the picture with the plate's number,
+   its name and the characters it is drawn in. */
+import { plates } from '../data/art.generated';
+
+interface Props {
+    id: string;
+    look?: 'paper' | 'field';
+    frame?: boolean;
+    /** The plate's number in the engraver's line: "Pl. I". */
+    plate?: string;
+    /** The animal's name in the engraver's line. */
+    name?: string;
+    reveal?: boolean;
+    /** Where the reveal starts, as fractions of the plate. */
+    origin?: [number, number];
+    ripples?: boolean;
+    jets?: boolean;
+    clouds?: boolean;
+    class?: string;
+}
+const {
+    id,
+    look = 'paper',
+    frame = false,
+    plate,
+    name,
+    reveal = true,
+    origin = [0.5, 0.45],
+    ripples = true,
+    jets = false,
+    clouds = false,
+    class: className,
+} = Astro.props;
+const art = plates[id];
+if (!art) throw new Error(`Inkprint: no plate "${id}" in art.generated.ts (npm run images)`);
+const cells = (art.cols * art.rows).toLocaleString('en-US');
+---
+
+<div
+    class:list={['inkprint', `inkprint--${look}`, { 'inkprint--framed': frame }, className]}
+    data-ink-plate
+    data-look={look}
+    data-cols={art.cols}
+    data-rows={art.rows}
+    data-origin={origin.join(',')}
+    data-ink-reveal={reveal ? '' : undefined}
+    data-ripples={ripples ? '' : undefined}
+    data-jets={jets ? '' : undefined}
+    data-clouds={clouds ? '' : undefined}
+    style={`--cols: ${art.cols}; --rows: ${art.rows}`}
+>
+    {frame ? (
+        <>
+            <canvas class="inkprint__skin" data-skin aria-hidden="true" />
+            <svg
+                class="inkprint__rule inkprint__rule--outer"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+                data-draw
+                data-draw-ms="1600"
+                style="--draw-duration: 1600ms"
+            >
+                <path d="M0.6 0.9 L99.3 0.5 L99.5 99.3 L0.5 99.5 Z" />
+            </svg>
+            <svg
+                class="inkprint__rule inkprint__rule--inner"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+                data-draw
+                data-draw-ms="1600"
+                style="--draw-duration: 1600ms; --delay: 180ms"
+            >
+                <path d="M0.4 0.6 L99.6 0.9 L99.4 99.6 L0.7 99.4 Z" />
+            </svg>
+            {['tl', 'br'].map((corner) => (
+                <svg
+                    class={`inkprint__arm inkprint__arm--${corner}`}
+                    viewBox="0 0 80 80"
+                    aria-hidden="true"
+                    focusable="false"
+                    data-draw
+                    style="--draw-duration: 1400ms; --delay: 500ms"
+                >
+                    <path
+                        class="inkprint__arm-edge"
+                        d="M79 8 C 60 6.5, 38 5.5, 24 10 C 11 14.5, 5 27, 9 39 C 12.5 49, 25 51, 29.5 43 C 33 36.5, 27.5 29.5, 21 32 C 16.5 34, 17 40, 21.5 40.5"
+                    />
+                    <path
+                        class="inkprint__arm-edge inkprint__arm-edge--inner"
+                        d="M79 13.5 C 61 12, 41 11.5, 28.5 15.5 C 18 19, 13 28.5, 15.5 37 C 17.5 43, 24 44, 25 39.5"
+                    />
+                    <g class="inkprint__suckers">
+                        <circle cx="66" cy="11.4" r="1.5" />
+                        <circle cx="56" cy="10.9" r="1.5" />
+                        <circle cx="46" cy="10.7" r="1.45" />
+                        <circle cx="36.5" cy="11.6" r="1.4" />
+                        <circle cx="27.5" cy="14.1" r="1.3" />
+                        <circle cx="19.5" cy="19.5" r="1.2" />
+                        <circle cx="14" cy="27" r="1.1" />
+                        <circle cx="12.4" cy="35" r="1" />
+                    </g>
+                </svg>
+            ))}
+        </>
+    ) : null}
+    <div class="inkprint__sheet" role="img" aria-label={art.alt}>
+        <pre class="inkprint__text" data-ink-text aria-hidden="true">{art.text}</pre>
+        <canvas class="inkprint__canvas" data-ink-canvas aria-hidden="true"></canvas>
+    </div>
+    {frame && plate ? (
+        <p class="inkprint__line">
+            <span>{plate}</span>
+            {name ? <i>{name}</i> : null}
+            <span>
+                {art.cols} × {art.rows} = {cells} characters
+            </span>
+        </p>
+    ) : null}
+</div>
+
+<style>
+    .inkprint {
+        --ramp-a: var(--ramp-1);
+        --ramp-b: var(--ramp-3);
+        --ramp-c: var(--ramp-5);
+        --rule: var(--pen);
+        --line: var(--ink-mute);
+        position: relative;
+        isolation: isolate;
+    }
+    .inkprint--field {
+        --ramp-a: #f9a8d4;
+        --ramp-b: #e879f9;
+        --ramp-c: #a78bfa;
+        --rule: var(--pink);
+        --line: var(--pink-soft);
+    }
+
+    /* The sheet is exactly cols x rows cells of 1:2, and the <pre> fills it: a
+       Plex Mono character advances 0.6 em, a line is two of those tall. */
+    .inkprint__sheet {
+        position: relative;
+        container-type: inline-size;
+        aspect-ratio: var(--cols) / calc(var(--rows) * 2);
+    }
+    .inkprint__text {
+        margin: 0;
+        overflow: hidden;
+        height: 100%;
+        white-space: pre;
+        font-family: var(--font-mono);
+        font-weight: 500;
+        font-size: calc(100cqi / var(--cols) / 0.6);
+        line-height: 1.2;
+        letter-spacing: 0;
+        /* Without the canvas the characters still run the ramp, as one wash. */
+        background: linear-gradient(118deg, var(--ramp-a), var(--ramp-b) 50%, var(--ramp-c));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        user-select: none;
+    }
+    .inkprint__canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .inkprint.is-live .inkprint__text {
+        visibility: hidden;
+    }
+    /* A plate that will surface waits unseen, so its reveal starts from nothing. */
+    :global(html.motion) .inkprint[data-ink-reveal]:not(.is-live) .inkprint__text {
+        visibility: hidden;
+    }
+
+    /* The specimen frame: two rules, a ring of skin between them, an arm round two
+       corners, and the engraver's line under the picture. */
+    .inkprint--framed {
+        --gap: 14px; /* between the outer and the inner rule; the skin runs down its middle */
+        --pad: clamp(14px, 2.2vw, 26px); /* inner rule to the picture */
+        padding: calc(var(--gap) + var(--pad));
+    }
+    .inkprint__rule {
+        position: absolute;
+        overflow: visible;
+        pointer-events: none;
+        filter: url(#pencil);
+    }
+    .inkprint__rule--outer {
+        inset: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .inkprint__rule--inner {
+        inset: var(--gap);
+        width: calc(100% - 2 * var(--gap));
+        height: calc(100% - 2 * var(--gap));
+    }
+    .inkprint__rule path {
+        fill: none;
+        stroke: var(--rule);
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
+    }
+    .inkprint__rule--outer path {
+        stroke-width: var(--stroke-bold);
+    }
+    .inkprint__rule--inner path {
+        stroke-width: 1px;
+        opacity: 0.75;
+    }
+    .inkprint__skin {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
+    /* Without the script the skin is a plain dotted band between the rules. */
+    .inkprint--framed::before {
+        content: '';
+        position: absolute;
+        inset: calc(var(--gap) / 2);
+        border: 2px dotted color-mix(in srgb, var(--rule) 45%, transparent);
+        pointer-events: none;
+    }
+    .inkprint--framed.is-live::before {
+        display: none;
+    }
+
+    /* An arm reaching round the frame: in from the top edge, curled at the corner;
+       the same arm, turned, at the opposite corner. */
+    .inkprint__arm {
+        position: absolute;
+        width: clamp(52px, 7vw, 76px);
+        height: auto;
+        overflow: visible;
+        pointer-events: none;
+        filter: url(#pencil-soft);
+        z-index: 1;
+    }
+    .inkprint__arm--tl {
+        top: -10px;
+        left: -10px;
+    }
+    .inkprint__arm--br {
+        right: -10px;
+        bottom: -10px;
+        transform: rotate(180deg);
+    }
+    .inkprint__arm-edge {
+        fill: none;
+        stroke: var(--rule);
+        stroke-width: var(--stroke-bold);
+        stroke-linecap: round;
+    }
+    .inkprint__arm-edge--inner {
+        stroke-width: 1.2px;
+        opacity: 0.8;
+    }
+    .inkprint__suckers circle {
+        fill: color-mix(in srgb, var(--rule) 18%, transparent);
+        stroke: var(--rule);
+        stroke-width: 1px;
+    }
+
+    /* The engraver's line, as on the bottom of a nineteenth-century plate. */
+    .inkprint__line {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 0.25em 1.2em;
+        max-width: none;
+        margin: var(--space-3) 0 calc(var(--pad) * -0.4);
+        font-family: var(--font-type);
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--line);
+    }
+    .inkprint__line i {
+        font-family: var(--font-display);
+        font-size: 0.95rem;
+        letter-spacing: 0.01em;
+        text-transform: none;
+    }
+</style>
+
+<script>
+    import { initPlates } from '../scripts/plates';
+    initPlates();
+</script>

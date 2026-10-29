@@ -10,6 +10,16 @@ tag all carry.
 
 ## [Unreleased]
 
+### Added
+
+- A landing page at https://sepia-cli.vercel.app, built from `site/` (Astro).
+  Its pictures are drawn by sepia's own code: public-domain cuttlefish plates
+  and a real run of the prompt window, converted by `scripts/site_art.py`.
+
+### Changed
+
+- The package's homepage link points at the landing page.
+
 ## [0.2.1] - 2026-10-29
 
 ### Added

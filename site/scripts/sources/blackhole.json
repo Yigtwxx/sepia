@@ -1,0 +1,16 @@
+{
+  "request": "pink and purple black hole",
+  "message": "Painting a pink and violet black hole with a glowing lensed ring.",
+  "prompt": "Cinematic astrophotography, wide telescope-style view of a supermassive black hole seen nearly edge-on. A perfectly black void fills the center of the frame, ringed by a blazing accretion disk of hot pink and violet plasma that swirls in bright streaks. Gravitational lensing bends the upper arc of the disk over the top of the shadow. Deep shadows, a few distant stars glinting in indigo space behind it, crisp bright highlights along the plasma edge. Rich saturated magenta, violet and deep navy palette, dramatic high contrast, bold clear silhouette, mysterious and awe-inspiring mood. No text, no logos.",
+  "edit": false,
+  "references": [],
+  "subject": "",
+  "show": false,
+  "likeness": null,
+  "source": "local",
+  "paint_seconds": 4.0,
+  "tokens": [
+    7418,
+    972
+  ]
+}

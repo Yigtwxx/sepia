@@ -29,3 +29,7 @@ spike-output/
 Thumbs.db
 .idea/
 .vscode/
+
+# Design hook: the shared detector config is kept, the cache and personal overrides are not
+.impeccable/*
+!.impeccable/config.json

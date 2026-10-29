@@ -1,0 +1,428 @@
+---
+/* The two windows: the prompt window, where the request is typed, and the viewer,
+   where the picture appears in characters. Both in their own colours, on the paper
+   page. The prompt window's transcript is in the markup for screen readers and for
+   no-JS; the viewer's last picture is there as text. scripts/run.ts replays them. */
+import {
+    WORDMARK_BANDS,
+    WORDMARK_BLOCK,
+    WORDMARK_COLUMNS,
+    WORDMARK_SHADOW,
+    frames,
+    statusBar,
+    welcome,
+    wordmark,
+} from '../data/demo';
+import { pictures } from '../data/art.generated';
+
+// Final state for the static transcript: last frame per id, in first-seen order.
+const finalLines = (() => {
+    const map = new Map<string, (typeof frames)[number]>();
+    frames.forEach((f, i) => map.set(f.id ?? `#${i}`, f));
+    return Array.from(map.values());
+})();
+
+// The mark as shapes: a cell is one unit wide and two tall, as in a terminal. Each
+// run of blocks in one band is one rectangle (a hair taller than its row, so rows
+// do not show a seam); the shadow glyphs are double lines, stroked.
+const CELL_HEIGHT = 2;
+const SEAM = 0.04;
+const viewWidth = WORDMARK_COLUMNS;
+const viewHeight = wordmark.length * CELL_HEIGHT;
+const bandOf = (x: number): number =>
+    Math.min(WORDMARK_BANDS.length - 1, Math.floor((x * WORDMARK_BANDS.length) / WORDMARK_COLUMNS));
+const blocks: string[] = WORDMARK_BANDS.map(() => '');
+wordmark.forEach((line, row) => {
+    const cells = Array.from(line);
+    let x = 0;
+    while (x < cells.length) {
+        if (cells[x] !== WORDMARK_BLOCK) {
+            x += 1;
+            continue;
+        }
+        const band = bandOf(x);
+        let end = x;
+        while (end < cells.length && cells[end] === WORDMARK_BLOCK && bandOf(end) === band)
+            end += 1;
+        blocks[band] += `M${x} ${row * CELL_HEIGHT}h${end - x}v${CELL_HEIGHT + SEAM}h${x - end}z`;
+        x = end;
+    }
+});
+const DX = 0.2;
+const DY = 0.26;
+const shadowCell = (glyph: string, x: number, y: number): string => {
+    const cx = x + 0.5;
+    const cy = y + CELL_HEIGHT / 2;
+    const r = x + 1;
+    const bottom = y + CELL_HEIGHT;
+    switch (glyph) {
+        case '═':
+            return `M${x} ${cy - DY}H${r}M${x} ${cy + DY}H${r}`;
+        case '║':
+            return `M${cx - DX} ${y}V${bottom}M${cx + DX} ${y}V${bottom}`;
+        case '╗':
+            return `M${x} ${cy - DY}H${cx + DX}V${bottom}M${x} ${cy + DY}H${cx - DX}V${bottom}`;
+        case '╔':
+            return `M${r} ${cy - DY}H${cx - DX}V${bottom}M${r} ${cy + DY}H${cx + DX}V${bottom}`;
+        case '╝':
+            return `M${x} ${cy + DY}H${cx + DX}V${y}M${x} ${cy - DY}H${cx - DX}V${y}`;
+        case '╚':
+            return `M${r} ${cy + DY}H${cx - DX}V${y}M${r} ${cy - DY}H${cx + DX}V${y}`;
+        default:
+            return '';
+    }
+};
+const shadow = wordmark
+    .flatMap((line, row) =>
+        Array.from(line).map((glyph, x) => shadowCell(glyph, x, row * CELL_HEIGHT)),
+    )
+    .join('');
+
+// What the replay needs in the browser, without shipping every plate on the page:
+// the frames and the two pictures' characters. Their colours come from public/art/.
+const shown = ['blackhole', 'comet'] as const;
+const viewer = Object.fromEntries(
+    shown.map((id) => {
+        const p = pictures[id]!;
+        return [id, { cols: p.cols, rows: p.rows, classic: p.classic, symbols: p.symbols }];
+    }),
+);
+const last = pictures[shown[shown.length - 1]!]!;
+const runData = JSON.stringify({ frames, pictures: viewer });
+const tones = { shadow: WORDMARK_SHADOW, columns: WORDMARK_COLUMNS };
+---
+
+<div class="windows" data-run-windows>
+    <div class="tui" data-tui>
+        <div class="tui__bar">
+            <span class="tui__dots" aria-hidden="true">
+                <i></i>
+                <i></i>
+                <i></i>
+            </span>
+            <span class="tui__title">sepia — prompt window</span>
+            <button class="tui__replay" type="button" data-run-replay>
+                replay
+            </button>
+        </div>
+        <div class="tui__body">
+            <div class="tui__welcome" aria-hidden="true">
+                <svg class="tui__mark" viewBox={`0 0 ${viewWidth} ${viewHeight}`} focusable="false">
+                    {blocks.map((d, i) => (
+                        <path d={d} fill={WORDMARK_BANDS[i]} />
+                    ))}
+                    <path class="tui__mark-shadow" d={shadow} />
+                </svg>
+                <div class="tui__hello">
+                    <p>
+                        <b>{welcome.title}</b> <span class="t-muted">{welcome.version}</span>{' '}
+                        <span class="t-dim">{welcome.tagline}</span>
+                    </p>
+                    <p class="t-muted">{welcome.window}</p>
+                    <p class="t-dim">{welcome.help}</p>
+                </div>
+            </div>
+            <p class="tui__tip" aria-hidden="true">
+                <span class="t-accent"> ※ </span>
+                <b>{welcome.tip[0]}</b>
+                <span class="t-muted">{welcome.tip[1]}</span>
+            </p>
+            <div class="tui__screen">
+                <div class="tui__out tui__ghost" aria-hidden="true">
+                    {finalLines.map((f) => (
+                        <div class="tui__line">
+                            {f.spans.map((s) => (
+                                <span data-tone={s.tone}>{s.text}</span>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+                <div class="tui__out" data-tui-out aria-hidden="true"></div>
+            </div>
+            <div class="tui__bar-input" aria-hidden="true">
+                <span class="tui__input-rule"></span>
+                <span class="tui__input">
+                    <span class="t-accent"> › </span>
+                    <span class="t-dim">
+                        describe a picture, or paste a picture link · /add to build on
+                    </span>
+                </span>
+                <span class="tui__input-rule"></span>
+                <span class="tui__status t-muted">
+                    {statusBar.replace('● window', '')}
+                    <span data-run-status>○</span> window
+                </span>
+            </div>
+        </div>
+        <pre class="visually-hidden">{finalLines.map((f) => f.spans.map((s) => s.text).join('')).join('\n')}</pre>
+    </div>
+
+    <div class="viewer" data-viewer>
+        <div class="viewer__bar" aria-hidden="true">
+            <span class="viewer__tab">
+                <span class="viewer__tab-mark"></span>
+                sepia
+            </span>
+            <span class="viewer__hint">move over the picture</span>
+        </div>
+        <div
+            class="viewer__screen"
+            style={`--cols: ${last.cols}; --rows: ${last.rows}`}
+            role="img"
+            aria-label="The viewer window: a pink and violet black hole, then the same black hole with a comet plunging into it, drawn in coloured characters."
+        >
+            <pre class="viewer__text" aria-hidden="true">{last.classic}</pre>
+            <canvas class="viewer__canvas" data-viewer-canvas aria-hidden="true"></canvas>
+            <p class="viewer__idle" data-viewer-idle aria-hidden="true">
+                the viewer opens with the first picture
+            </p>
+        </div>
+    </div>
+    <script type="application/json" data-run-data set:html={runData} />
+</div>
+
+<style define:vars={tones}>
+    .windows {
+        display: grid;
+        gap: var(--space-5);
+        min-width: 0;
+    }
+    /* The prompt window: rich's colours on near-black, as src/sepia/ui.py draws them. */
+    .tui {
+        background: var(--tui-bg);
+        color: var(--tui-fg);
+        font-family: var(--font-mono);
+        font-size: clamp(0.62rem, 0.5rem + 0.5vw, 0.86rem);
+        line-height: 1.5;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--pink) 40%, transparent),
+            0 0 0 6px color-mix(in srgb, var(--pink) 16%, transparent),
+            0 26px 60px -32px color-mix(in srgb, var(--orchid) 75%, transparent);
+    }
+    .tui__bar,
+    .viewer__bar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: 0.55em 1em;
+        border-bottom: 1px solid color-mix(in srgb, var(--tui-fg) 12%, transparent);
+        color: color-mix(in srgb, var(--tui-fg) 62%, transparent);
+    }
+    .tui__dots i {
+        display: inline-block;
+        width: 0.7em;
+        height: 0.7em;
+        border-radius: 50%;
+        margin-right: 0.35em;
+        background: color-mix(in srgb, var(--tui-fg) 22%, transparent);
+    }
+    .tui__title {
+        flex: 1;
+    }
+    .tui__replay {
+        background: none;
+        border: 1px solid color-mix(in srgb, var(--tui-fg) 30%, transparent);
+        color: inherit;
+        border-radius: 3px;
+        padding: 0.1em 0.6em;
+        cursor: pointer;
+        font: inherit;
+    }
+    .tui__replay:hover {
+        color: var(--tui-fg);
+        border-color: var(--tui-fg);
+    }
+    .tui__replay:focus-visible {
+        outline-color: var(--tui-accent);
+    }
+    .tui__body {
+        padding: 1em 1.2em 0.8em;
+    }
+    .tui__body p {
+        margin: 0;
+        max-width: none;
+    }
+    /* rich's Panel with a dim border: the mark beside the greeting when it fits,
+       above it otherwise, as ui.welcome lays it out at 90 columns. */
+    .tui__welcome {
+        container-type: inline-size;
+        display: grid;
+        gap: 0.9em;
+        padding: 1em 1.4em;
+        border: 1px solid color-mix(in srgb, var(--tui-fg) 26%, transparent);
+        border-radius: 4px;
+    }
+    .tui__mark {
+        width: min(100%, calc(var(--columns) * 1ch));
+        height: auto;
+    }
+    .tui__mark-shadow {
+        fill: none;
+        stroke: var(--shadow);
+        stroke-width: 0.2;
+    }
+    @container (min-width: 70ch) {
+        .tui__welcome {
+            grid-template-columns: calc(var(--columns) * 1ch) minmax(0, 1fr);
+            column-gap: 3ch;
+            align-items: center;
+        }
+    }
+    .tui__hello p + p {
+        margin-top: 0.15em;
+    }
+    .tui__hello p:first-child {
+        margin-bottom: 0.9em;
+    }
+    .tui__tip {
+        margin: 0.8em 0 0.4em !important;
+    }
+    .tui__screen {
+        display: grid;
+        min-height: 9em;
+    }
+    .tui__screen > .tui__out {
+        grid-area: 1 / 1;
+        min-width: 0;
+    }
+    .tui__ghost {
+        visibility: hidden;
+        pointer-events: none;
+    }
+    .tui__out {
+        padding: 0.4em 0 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+    .tui__out :global(.tui__line) {
+        min-height: 1.5em;
+    }
+    .tui__out :global([data-tone='accent']),
+    .t-accent {
+        color: var(--tui-accent);
+        font-weight: 500;
+    }
+    .tui__out :global([data-tone='muted']),
+    .t-muted {
+        color: var(--tui-muted);
+    }
+    .t-dim {
+        color: color-mix(in srgb, var(--tui-fg) 55%, transparent);
+    }
+    /* The chat bar on the bottom rows, open-ended rules above and below it. */
+    .tui__bar-input {
+        display: grid;
+        margin-top: 0.8em;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+    .tui__input-rule {
+        height: 0;
+        border-top: 1px solid color-mix(in srgb, var(--tui-fg) 26%, transparent);
+        margin-block: 0.35em;
+    }
+    .tui__input {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .tui__status {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* The viewer: Windows Terminal with a purple tab named sepia, black, edge to edge. */
+    .viewer {
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--violet) 45%, transparent),
+            0 0 0 6px color-mix(in srgb, var(--violet) 14%, transparent),
+            0 30px 70px -34px color-mix(in srgb, var(--orchid) 80%, transparent);
+    }
+    .viewer__bar {
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        padding-block: 0.35em 0;
+        border-bottom-color: transparent;
+        background: #141016;
+    }
+    .viewer__tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5em;
+        padding: 0.35em 1.4em 0.45em 0.9em;
+        border-radius: 6px 6px 0 0;
+        background: var(--tui-accent);
+        color: #1a0620;
+        font-weight: 500;
+    }
+    .viewer__tab-mark {
+        width: 0.7em;
+        height: 0.7em;
+        border-radius: 2px;
+        background: #1a0620;
+        opacity: 0.55;
+    }
+    .viewer__hint {
+        margin-left: auto;
+        font-size: 0.85em;
+        color: color-mix(in srgb, var(--tui-fg) 50%, transparent);
+    }
+    @media (hover: none) {
+        .viewer__hint {
+            display: none;
+        }
+    }
+    .viewer__screen {
+        position: relative;
+        container-type: inline-size;
+        aspect-ratio: var(--cols) / calc(var(--rows) * 2);
+        cursor: crosshair;
+    }
+    .viewer__text {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        white-space: pre;
+        font-family: var(--font-mono);
+        font-weight: 500;
+        font-size: calc(100cqi / var(--cols) / 0.6);
+        line-height: 1.2;
+        color: #8fbf9a;
+        user-select: none;
+    }
+    .viewer__canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .viewer.is-live .viewer__text {
+        visibility: hidden;
+    }
+    .viewer__idle {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        margin: 0;
+        max-width: none;
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        color: color-mix(in srgb, var(--tui-fg) 42%, transparent);
+        opacity: 0;
+        transition: opacity 400ms ease;
+        pointer-events: none;
+    }
+    .viewer__idle.is-shown {
+        opacity: 1;
+    }
+</style>
+
+<script>
+    import { initRun } from '../scripts/run';
+    initRun();
+</script>

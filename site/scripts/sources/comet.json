@@ -1,0 +1,16 @@
+{
+  "request": "a comet falling into it",
+  "message": "Adding a comet plunging into the black hole.",
+  "prompt": "Cinematic astrophotography, wide telescope-style view of a supermassive black hole seen nearly edge-on. A perfectly black void fills the center, ringed by a blazing accretion disk of hot pink and violet plasma. A bright comet with a long glowing icy tail dives in from the upper right, its nucleus breaking into fragments as it streams toward the event horizon, its tail bent by the gravity. Deep shadows, distant stars glinting in indigo space. Crisp highlights, rich saturated magenta, violet and deep navy palette, dramatic high contrast, bold clear silhouette, awe-inspiring mood. No text, no logos.",
+  "edit": true,
+  "references": [],
+  "subject": "",
+  "show": false,
+  "likeness": null,
+  "source": "local",
+  "paint_seconds": 5.9,
+  "tokens": [
+    7656,
+    1899
+  ]
+}

@@ -1,0 +1,280 @@
+---
+/* The paper sheet. One animal, one sentence, one command. The cuttlefish is live
+   (scripts/ink-field.ts): the pointer sends the viewer's ripples through it, a
+   click releases ink, and now and then a dark cloud passes over its skin, as a
+   cuttlefish's does, while the frame's chromatophores flush with it. */
+import Inkprint from './Inkprint.astro';
+import InstallBox from './InstallBox.astro';
+import SketchUnderline from './sketch/SketchUnderline.astro';
+import SketchArrow from './sketch/SketchArrow.astro';
+import { version } from '../data/commands';
+---
+
+<section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="page hero__grid">
+        <div class="hero__copy">
+            <p class="hero__kicker">
+                sepia <span class="hero__version">v{version}</span>
+                <span class="hero__tag">text to picture, in the terminal</span>
+            </p>
+            <h1 id="hero-title" class="hero__title">
+                Describe it.
+                <br />
+                Watch it <SketchUnderline draw>ink.</SketchUnderline>
+            </h1>
+            <p class="hero__lede">
+                sepia turns a few words into a picture made of text. You type in one terminal
+                window; <em class="key">Claude directs</em> a photo for it, an image model paints
+                it, and a second window draws it as{' '}
+                <em class="key">thousands of coloured characters</em>, each one picked for the patch
+                of picture under it.
+            </p>
+            <InstallBox id="hero-install" />
+            <a class="hero__cta" href="#watch">
+                <span class="hero__cta-code">
+                    <span class="hero__cta-prompt" aria-hidden="true">
+                        ›&nbsp;
+                    </span>
+                    <SketchUnderline draw>pink and purple black hole</SketchUnderline>
+                </span>
+                <span class="hero__cta-note">
+                    <SketchArrow direction="curve-down" size={40} />
+                    <span class="marginalia">one picture, made right below</span>
+                </span>
+            </a>
+            <p class="hero__fine">
+                Windows 10/11 and macOS, with{' '}
+                <a href="https://docs.astral.sh/uv/" rel="noopener">
+                    uv
+                </a>{' '}
+                and an Anthropic API key. Painting is free from the API, or local on your own GPU.
+            </p>
+        </div>
+        <figure class="hero__figure">
+            <Inkprint
+                id="verany"
+                frame
+                plate="Pl. I"
+                name="Sepia officinalis"
+                origin={[0.5, 0.12]}
+                jets
+                clouds
+                class="hero__plate"
+            />
+            <figcaption class="caption hero__caption">
+                Jean-Baptiste Vérany, <cite>Sepia officinalis</cite>, 1851, drawn by sepia’s own
+                code. <span class="hero__how">Move over it for ripples; click to release ink.</span>
+            </figcaption>
+            <button class="hero__toggle" type="button" data-ink-toggle aria-pressed="false">
+                pause the ink
+            </button>
+        </figure>
+    </div>
+</section>
+
+<script>
+    import { initPlates, plateFor } from '../scripts/plates';
+
+    initPlates();
+    const plate = document.querySelector('.hero__plate');
+    const toggle = document.querySelector<HTMLButtonElement>('[data-ink-toggle]');
+    const live = plate ? plateFor(plate) : undefined;
+    if (!live || !toggle || live.field.reduced) {
+        // Nothing moves on its own under reduced motion: no control is needed.
+        toggle?.setAttribute('hidden', '');
+    } else {
+        toggle.addEventListener('click', () => {
+            const paused = toggle.getAttribute('aria-pressed') !== 'true';
+            toggle.setAttribute('aria-pressed', String(paused));
+            toggle.textContent = paused ? 'let it move' : 'pause the ink';
+            live.field.setPaused(paused);
+        });
+    }
+</script>
+
+<style>
+    .hero {
+        position: relative;
+        isolation: isolate;
+        padding-block: var(--space-7) var(--space-8);
+        overflow: clip;
+    }
+    /* A wash of pink behind the plate, as if the ink had bled into the sheet. */
+    .hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background:
+            radial-gradient(ellipse 42% 55% at 76% 46%, var(--pink-wash), transparent 72%),
+            radial-gradient(ellipse 30% 40% at 88% 70%, rgb(233 213 255 / 0.5), transparent 70%);
+        pointer-events: none;
+    }
+    .hero__grid {
+        display: grid;
+        gap: var(--space-7);
+        align-items: center;
+    }
+    @media (min-width: 64rem) {
+        .hero__grid {
+            grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+            gap: var(--space-8);
+            min-height: calc(100vh - 3.5rem);
+        }
+    }
+    .hero__kicker {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.4em 1.2em;
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        color: var(--ink-soft);
+        margin-bottom: var(--space-5);
+    }
+    .hero__tag {
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0.1em 0.5em;
+        border: 1px dashed currentColor;
+        color: var(--pen);
+    }
+    .hero__title {
+        margin-bottom: var(--space-5);
+        max-width: 12ch;
+    }
+    .hero__lede {
+        font-size: var(--step-1);
+        line-height: 1.45;
+        max-width: 38ch;
+        color: var(--ink-soft);
+        margin-bottom: var(--space-6);
+    }
+    .hero__cta {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-4);
+        margin-top: var(--space-5);
+        color: var(--ink);
+        text-decoration: none;
+    }
+    .hero__cta:hover {
+        color: var(--ink);
+        text-decoration: none;
+    }
+    .hero__cta-code {
+        font-family: var(--font-mono);
+        font-size: var(--step-1);
+        font-weight: 500;
+        white-space: nowrap;
+    }
+    .hero__cta-prompt {
+        color: var(--pen);
+    }
+    .hero__cta-note {
+        display: inline-flex;
+        align-items: flex-start;
+        gap: var(--space-1);
+        color: var(--pen);
+    }
+    .hero__cta-note .marginalia {
+        margin: 0.35em 0 0;
+        transition: transform 320ms var(--ease-silk);
+    }
+    .hero__cta-note :global(.sketch-arrow) {
+        flex: none;
+        transition: transform 320ms var(--ease-silk);
+    }
+    @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+        .hero__cta:hover .hero__cta-note :global(.sketch-arrow) {
+            transform: translateY(4px);
+        }
+        .hero__cta:hover .hero__cta-note .marginalia {
+            transform: translateX(3px);
+        }
+    }
+    .hero__fine {
+        font-size: var(--step--1);
+        color: var(--ink-mute);
+        margin-top: var(--space-4);
+        max-width: 50ch;
+    }
+    .hero__figure {
+        margin: 0;
+        justify-self: center;
+        width: min(100%, 27rem);
+    }
+    .hero__plate {
+        cursor: crosshair;
+    }
+    .hero__caption {
+        margin-top: var(--space-4);
+        max-width: 46ch;
+    }
+    @media (hover: none) {
+        .hero__how {
+            display: none;
+        }
+    }
+    .hero__toggle {
+        margin-top: var(--space-3);
+        background: none;
+        border: 1px dashed color-mix(in srgb, var(--pen) 60%, transparent);
+        color: var(--pen);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        padding: 0.2em 0.7em;
+        border-radius: 2px;
+        cursor: pointer;
+    }
+    .hero__toggle:hover {
+        border-style: solid;
+    }
+    .hero__toggle[hidden] {
+        display: none;
+    }
+    /* The opening: the copy surfaces line by line while the plate resolves from
+       the animal's head outward. */
+    @media (prefers-reduced-motion: no-preference) {
+        :global(.js) .hero__copy > *,
+        :global(.js) .hero__caption,
+        :global(.js) .hero__toggle {
+            animation: hero-rise 1100ms var(--ease-silk) both;
+        }
+        :global(.js) .hero__kicker {
+            animation-delay: 150ms;
+        }
+        :global(.js) .hero__title {
+            animation-delay: 300ms;
+        }
+        :global(.js) .hero__lede {
+            animation-delay: 520ms;
+        }
+        :global(.js) .hero__copy > :global(.install) {
+            animation-delay: 700ms;
+        }
+        :global(.js) .hero__cta {
+            animation-delay: 820ms;
+        }
+        :global(.js) .hero__fine {
+            animation-delay: 940ms;
+        }
+        :global(.js) .hero__caption,
+        :global(.js) .hero__toggle {
+            animation-delay: 1500ms;
+        }
+    }
+    @keyframes hero-rise {
+        from {
+            opacity: 0;
+            transform: translateY(28px);
+            filter: blur(10px);
+        }
+        to {
+            opacity: 1;
+            transform: none;
+            filter: none;
+        }
+    }
+</style>

@@ -1,0 +1,9 @@
+dist
+.astro
+.cache
+node_modules
+public
+src/data/*.generated.ts
+package-lock.json
+scripts/sources
+.impeccable

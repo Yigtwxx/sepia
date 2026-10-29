@@ -1,0 +1,96 @@
+---
+/* The six rules, each with a pencil mark and a note in the margin. A band of the
+   animal from the side closes the list, framed as a plate. */
+import { rules } from '../data/rules';
+import Inkprint from './Inkprint.astro';
+import SketchIcon from './sketch/SketchIcon.astro';
+import { mark } from '../lib/mark';
+---
+
+<div class="rules">
+    <ol class="rules__list">
+        {rules.map((rule, i) => (
+            <li class:list={['rule', `rule--${rule.id}`]}>
+                <div class="rule__top">
+                    <span class="rule__n" aria-hidden="true">
+                        {String(i + 1).padStart(2, '0')}
+                    </span>
+                    <SketchIcon name={rule.icon} tone="pen" size={36} draw />
+                </div>
+                <h3 class="rule__title">{rule.title}</h3>
+                <p class="rule__body" set:html={mark(rule.body)} />
+                <p class="marginalia rule__margin">{rule.margin}</p>
+            </li>
+        ))}
+    </ol>
+    <figure class="rules__plate">
+        <Inkprint
+            id="verany-side"
+            frame
+            plate="Pl. VI"
+            name="Sepia officinalis"
+            origin={[0.85, 0.5]}
+        />
+        <figcaption class="caption rules__caption">
+            Jean-Baptiste Vérany, <cite>Sepia officinalis</cite>, plate 24, 1851. Every stripe where
+            the engraver put it.
+        </figcaption>
+    </figure>
+</div>
+
+<style>
+    .rules {
+        display: grid;
+        gap: var(--space-7) var(--space-8);
+    }
+    @media (min-width: 56rem) {
+        .rules {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+    .rules__list {
+        display: contents;
+        list-style: none;
+    }
+    .rule {
+        display: grid;
+        align-content: start;
+        gap: var(--space-3);
+        padding-top: var(--space-4);
+        border-top: 2px solid var(--ink);
+    }
+    .rule__top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .rule__n {
+        font-family: var(--font-display);
+        font-size: var(--step-4);
+        line-height: 1;
+        color: var(--pen);
+        font-variation-settings:
+            'opsz' 96,
+            'WONK' 1;
+    }
+    .rule__title {
+        font-size: var(--step-2);
+        margin: 0;
+        max-width: 22ch;
+    }
+    .rule__body {
+        margin: 0;
+        color: var(--ink-soft);
+    }
+    .rule__margin {
+        margin: 0;
+        max-width: 40ch;
+    }
+    .rules__plate {
+        grid-column: 1 / -1;
+        margin: var(--space-4) 0 0;
+    }
+    .rules__caption {
+        margin-top: var(--space-3);
+    }
+</style>

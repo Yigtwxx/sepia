@@ -1,0 +1,187 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.astro';
+import Hero from '../components/Hero.astro';
+import Section from '../components/Section.astro';
+import Run from '../components/Run.astro';
+import Chapter from '../components/Chapter.astro';
+import StyleLab from '../components/StyleLab.astro';
+import Rules from '../components/Rules.astro';
+import Measured from '../components/Measured.astro';
+import Limits from '../components/Limits.astro';
+import Cli from '../components/Cli.astro';
+import Footer from '../components/Footer.astro';
+import SketchArrow from '../components/sketch/SketchArrow.astro';
+import { chapters } from '../data/chapters';
+import { notes } from '../data/demo';
+
+const title = 'sepia — Describe it. Watch it ink.';
+const description =
+    'sepia is a command-line tool that turns a few words into a picture made of text. Claude directs a photo for your request, Pollinations or FLUX.2 [klein] on your own GPU paints it, and a second terminal window draws it in thousands of coloured characters. Windows and macOS, no telemetry.';
+---
+
+<Layout title={title} description={description}>
+    <Nav />
+    <div class="hero-shell" data-nav-hero>
+        <Hero />
+    </div>
+    <main id="main">
+        <Section
+            id="watch"
+            field="lilac"
+            exhibit="Plate I"
+            title="A picture, as it surfaces."
+            margin="This page’s own run: scripts/spike.py made the same calls the prompt window makes."
+        >
+            <div class="run" data-run>
+                <Run />
+                <aside class="run__notes" aria-label="What to look at in the run" data-run-notes>
+                    <p class="marginalia run__lede" data-run-lede>
+                        Two windows: you type in the first, and the picture appears in the second.
+                    </p>
+                    {notes.map((n) => (
+                        <div class="run__note" data-note-for={n.id}>
+                            <SketchArrow direction="curve-left" size={56} />
+                            <p class="marginalia">{n.text}</p>
+                        </div>
+                    ))}
+                </aside>
+            </div>
+        </Section>
+
+        <Section
+            id="ink"
+            exhibit="File 01"
+            title="Describe. Direct. Paint. Ink."
+            margin="Four steps, one Claude call, one painter, and a window that draws in type."
+        >
+            {chapters.map((chapter) => (
+                <Chapter chapter={chapter} />
+            ))}
+        </Section>
+
+        <Section
+            id="styles"
+            field="lilac"
+            exhibit="File 02"
+            title="Ink or fill. Letters or symbols."
+            margin="The same picture, four ways. A style change redraws at once, with no new call."
+        >
+            <StyleLab />
+        </Section>
+
+        <Section
+            id="rules"
+            exhibit="File 03"
+            title="Six things it will never do."
+            margin="Written into the README and SECURITY.md, not left to taste."
+        >
+            <Rules />
+        </Section>
+
+        <Section
+            id="measured"
+            exhibit="File 04"
+            field="orchid"
+            title="Measured, not claimed."
+            margin="Each figure says where it comes from: the README, or this page’s own run."
+        >
+            <Measured />
+        </Section>
+
+        <Section
+            id="limits"
+            exhibit="File 05"
+            title="Where the ink runs out."
+            margin="A tool that draws in plain sight should also say what it cannot draw."
+        >
+            <Limits />
+        </Section>
+
+        <Section
+            id="cli"
+            field="lilac"
+            exhibit="File 06"
+            title="Two windows, one command."
+            margin="Install it, type sepia, then a few words. The second window opens itself."
+        >
+            <Cli />
+        </Section>
+    </main>
+    <Footer />
+</Layout>
+
+<script>
+    import { initRunNotes } from '../scripts/run-notes';
+    initRunNotes();
+</script>
+
+<style>
+    main {
+        position: relative;
+    }
+    /* Two columns only from 80rem: narrower, the notes column is too slim for each
+       note to sit beside its own lines, so they go under the windows instead. */
+    .run {
+        display: grid;
+        gap: var(--space-5);
+        align-items: start;
+    }
+    @media (min-width: 80rem) {
+        .run {
+            grid-template-columns: minmax(0, 1fr) var(--margin-col);
+            gap: var(--space-6);
+        }
+    }
+    .run__notes {
+        display: grid;
+        gap: var(--space-5);
+        padding-top: var(--space-6);
+    }
+    .run__note {
+        display: flex;
+        gap: var(--space-2);
+        align-items: flex-start;
+    }
+    .run__note .marginalia,
+    .run__lede {
+        margin: 0;
+    }
+    .run__note :global(.sketch-arrow) {
+        flex: none;
+    }
+    /* scripts/run-notes.ts: each note pinned beside the line it points at, shown
+       once that line has been typed. */
+    @media (min-width: 80rem) {
+        .run--anchored .run__notes {
+            display: block;
+            position: relative;
+            height: auto;
+            padding-top: 0;
+        }
+        .run--anchored .run__note {
+            position: absolute;
+            inset-inline: 0;
+            top: var(--note-top, 0);
+            opacity: 0;
+            transition:
+                opacity 400ms ease,
+                top 300ms ease;
+        }
+        .run--anchored .run__note.is-shown {
+            opacity: 1;
+        }
+        .run--anchored .run__note :global(.sketch-arrow) {
+            width: 2.5rem;
+            height: 2.5rem;
+        }
+        .run--anchored .run__note .marginalia {
+            font-size: var(--step--1);
+        }
+    }
+    @media (min-width: 80rem) and (prefers-reduced-motion: reduce) {
+        .run--anchored .run__note {
+            transition: none;
+        }
+    }
+</style>

@@ -1,0 +1,230 @@
+---
+/* One movement of a request, from a few words to a picture in characters. The
+   plate alternates sides: odd chapters plate-right, even chapters plate-left.
+   Under the plate, the chapter's line of this page's own run, as a ledger card.
+   On wide screens the two columns are the same height, and the room under the
+   shorter one is a marbling bath (scripts/ebru.ts), so neither leaves a bare
+   gap behind it. */
+import type { Chapter } from '../data/chapters';
+import Inkprint from './Inkprint.astro';
+import { mark } from '../lib/mark';
+import { cite } from '../lib/cite';
+
+interface Props {
+    chapter: Chapter;
+}
+const { chapter } = Astro.props;
+const flip = chapter.n % 2 === 0;
+---
+
+<article
+    class:list={['chapter', { 'chapter--flip': flip }]}
+    id={`chapter-${chapter.slug}`}
+    aria-labelledby={`chapter-${chapter.slug}-title`}
+>
+    <div class="chapter__text">
+        <div class="chapter__body">
+            <p class="chapter__n" aria-hidden="true">
+                <span>{String(chapter.n).padStart(2, '0')}</span>
+                <span class="chapter__verb">{chapter.verb}</span>
+            </p>
+            <h3 id={`chapter-${chapter.slug}-title`} class="chapter__title">
+                <span class="visually-hidden">{chapter.verb}: </span>
+                {chapter.question}
+            </h3>
+            <div class="chapter__vignette">
+                <Inkprint id={chapter.vignette} class="chapter__vignette-img" origin={[0.5, 0.5]} />
+                <p class="marginalia">{chapter.vignetteNote}</p>
+            </div>
+            {chapter.body.map((p) => (
+                <p set:html={mark(p)} />
+            ))}
+            <p class="chapter__tags">
+                <span class="chapter__tags-label">{chapter.tagsLabel}</span>
+                {chapter.tags.map((t) => (
+                    <code>{t}</code>
+                ))}
+            </p>
+        </div>
+        <div class="chapter__pool" data-ebru aria-hidden="true">
+            <canvas></canvas>
+        </div>
+    </div>
+    <div class="chapter__side">
+        <div class="chapter__body chapter__body--side">
+            <figure class="chapter__plate">
+                <Inkprint
+                    id={chapter.plate}
+                    frame
+                    plate={chapter.plateNumber}
+                    name="Sepia officinalis"
+                    origin={[0.5, 0.3]}
+                />
+                <figcaption
+                    class="caption chapter__caption"
+                    set:html={cite(chapter.plateCaption)}
+                />
+            </figure>
+            <dl class="ledger" aria-label={`This page's run, ${chapter.verb.toLowerCase()}`}>
+                {chapter.ledger.map((l) => (
+                    <div class="ledger__row">
+                        <dt>{l.key}</dt>
+                        <dd>
+                            <span>{l.text}</span>
+                            {l.note ? <span class="ledger__note">{l.note}</span> : null}
+                        </dd>
+                    </div>
+                ))}
+            </dl>
+        </div>
+        <div class="chapter__pool" data-ebru aria-hidden="true">
+            <canvas></canvas>
+        </div>
+    </div>
+</article>
+
+<style>
+    .chapter {
+        display: grid;
+        gap: var(--space-6);
+        padding-block: var(--space-7);
+        border-top: 1px dashed var(--paper-line);
+    }
+    @media (min-width: 64rem) {
+        .chapter {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: var(--space-8);
+        }
+        .chapter--flip .chapter__text {
+            order: 2;
+        }
+    }
+    .chapter__n {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-3);
+        font-family: var(--font-display);
+        font-size: var(--step-6);
+        line-height: 1;
+        color: var(--pen);
+        margin: 0 0 var(--space-2);
+        font-variation-settings:
+            'opsz' 144,
+            'WONK' 1;
+    }
+    .chapter__verb {
+        font-family: var(--font-type);
+        font-size: var(--step-0);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+    }
+    .chapter__title {
+        font-size: var(--step-4);
+        max-width: 16ch;
+    }
+    .chapter__vignette {
+        display: grid;
+        grid-template-columns: 8rem 1fr;
+        gap: var(--space-4);
+        align-items: center;
+        margin-block: var(--space-4) var(--space-5);
+    }
+    .chapter__vignette :global(.chapter__vignette-img) {
+        width: 8rem;
+    }
+    .chapter__vignette .marginalia {
+        max-width: 28ch;
+        margin: 0;
+    }
+    .chapter__tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        align-items: baseline;
+        font-size: var(--step--1);
+        margin-top: var(--space-5);
+    }
+    .chapter__tags code {
+        white-space: pre;
+    }
+    .chapter__tags-label {
+        font-family: var(--font-type);
+        color: var(--ink-mute);
+        margin-right: var(--space-1);
+    }
+    .chapter__text,
+    .chapter__side {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    .chapter__body--side {
+        display: grid;
+        gap: var(--space-5);
+    }
+    /* Whatever the column has left over: nothing on narrow screens, where the
+       columns stack, and under the longer one; under the shorter one, marbling once
+       there is enough of it to be worth one. */
+    .chapter__pool {
+        position: relative;
+        flex: 1 1 0;
+        min-height: 0;
+    }
+    .chapter__pool canvas {
+        position: absolute;
+        top: var(--space-4);
+        left: 0;
+        width: 100%;
+        height: calc(100% - var(--space-4));
+        visibility: hidden;
+        /* No edge: the ink thins into the paper all round. */
+        mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 72%, transparent 100%);
+    }
+    .chapter__pool:global(.is-live) canvas {
+        visibility: visible;
+    }
+    .chapter__plate {
+        margin: 0;
+    }
+    .chapter__caption {
+        margin-top: var(--space-3);
+    }
+    /* The ledger card: the run's own line, set like a specimen label. */
+    .ledger {
+        margin: 0 var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        border: 1px solid var(--ink);
+        box-shadow: 3px 3px 0 var(--lilac-line);
+        background: var(--lilac);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        display: grid;
+        gap: var(--space-2);
+    }
+    .ledger__row {
+        display: grid;
+        grid-template-columns: 6.5em minmax(0, 1fr);
+        gap: var(--space-3);
+    }
+    .ledger dt {
+        color: var(--pen);
+        font-weight: 500;
+        letter-spacing: 0.04em;
+    }
+    .ledger dd {
+        margin: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.2em 1em;
+    }
+    .ledger__note {
+        color: var(--ink-mute);
+        font-style: italic;
+    }
+</style>
+
+<script>
+    import { initEbru } from '../scripts/ebru';
+    initEbru();
+</script>

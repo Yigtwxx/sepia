@@ -29,7 +29,8 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/mouse.py`: pointer reports from the terminal (SGR mouse mode); `src/sepia/ripple.py`: the rings that spread from the pointer, drawn as ANSI over the changed cells only.
 - `src/sepia/config.py`: settings from env and `.env` files, key storage, config dir.
 - `tests/`: one `test_<module>.py` per module, shared fixtures in `conftest.py`.
-- `scripts/spike.py`: quality spike; `scripts/release_notes.py`: CHANGELOG section for a release.
+- `scripts/spike.py`: quality spike; `scripts/release_notes.py`: CHANGELOG section for a release; `scripts/site_art.py`: draws the landing page's plates and demo pictures with `ascii_art` (writes `site/src/data/art.generated.ts` and `site/public/art/`).
+- `site/`: the landing page (Astro 7, static, deployed on Vercel with `site` as the project root, https://sepia-cli.vercel.app). Design: `docs/superpowers/specs/2026-10-29-landing-page-design.md`. Sources of its pictures: `site/images.manifest.json`, `site/scripts/sources/`.
 - `docs/releasing.md`: release process (tag push, PyPI Trusted Publishing).
 
 ## Commands
@@ -43,6 +44,17 @@ uv run mypy
 uv run pytest
 uv run python scripts/spike.py --chain "waterfall" "mountains"   # judge output by eye
 uv run python scripts/spike.py --show spike-output               # re-render, no API calls
+uv run python scripts/site_art.py                                # redraw the site's plates and pictures
+```
+
+The site (`site/`, Node 22.12+):
+
+```bash
+cd site && npm ci
+npm run dev            # http://localhost:4321
+npm run check && npm run format:check && npm run build
+npm run glyphs         # Plex Mono outlines for the mark (after a font update)
+npm run favicon        # raster favicons, from a fresh build
 ```
 
 All four checks must pass. CI runs them on Windows and macOS without the local extra.

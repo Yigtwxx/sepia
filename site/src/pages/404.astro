@@ -1,0 +1,97 @@
+---
+/* Not found, in the tool's own words: a request for an address with nothing
+   behind it, answered the way the prompt window answers one it cannot paint. */
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.astro';
+import Inkprint from '../components/Inkprint.astro';
+import SketchUnderline from '../components/sketch/SketchUnderline.astro';
+import { withBase } from '../lib/base';
+---
+
+<Layout title="Not found — sepia" description="There is nothing to paint at this address." noindex>
+    <Nav />
+    <main class="lost" id="main" data-nav-hero>
+        <div class="page lost__grid">
+            <div class="lost__copy">
+                <h1 class="lost__title">
+                    Nothing to paint <SketchUnderline draw>here.</SketchUnderline>
+                </h1>
+                <div class="lost__window" aria-label="The prompt window's answer">
+                    <p>
+                        <span class="t-accent">› </span>this address
+                    </p>
+                    <p>
+                        <span class="t-warn"> ⏺ </span>There is no page here to draw.
+                    </p>
+                    <p class="t-muted">it may be mistyped, or the page has moved</p>
+                </div>
+                <p class="lost__back">
+                    <a href={withBase('/')}>Back to the first page</a>
+                </p>
+            </div>
+            <figure class="lost__figure">
+                <Inkprint id="gosse" frame plate="Pl. 404" name="Sepia officinalis" />
+                <figcaption class="caption">
+                    Philip Henry Gosse, <cite>Cuttle</cite>, 1854. It went this way, then the ink
+                    hid it.
+                </figcaption>
+            </figure>
+        </div>
+    </main>
+</Layout>
+
+<style>
+    .lost {
+        padding-block: var(--space-8);
+        min-height: calc(100vh - 3.5rem);
+    }
+    .lost__grid {
+        display: grid;
+        gap: var(--space-7);
+        align-items: center;
+    }
+    @media (min-width: 56rem) {
+        .lost__grid {
+            grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+        }
+    }
+    .lost__title {
+        max-width: 12ch;
+    }
+    .lost__window {
+        margin-top: var(--space-5);
+        padding: var(--space-4) var(--space-5);
+        background: var(--tui-bg);
+        color: var(--tui-fg);
+        border-radius: 8px;
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        white-space: pre-wrap;
+        max-width: 34rem;
+    }
+    .lost__window p {
+        margin: 0;
+    }
+    .t-accent {
+        color: var(--tui-accent);
+        font-weight: 500;
+    }
+    .t-warn {
+        color: #fb7185;
+    }
+    .t-muted {
+        color: var(--tui-muted);
+    }
+    .lost__back {
+        margin-top: var(--space-5);
+        font-family: var(--font-mono);
+    }
+    .lost__figure {
+        margin: 0;
+        width: min(100%, 20rem);
+        justify-self: center;
+    }
+    .lost__figure .caption {
+        margin-top: var(--space-3);
+    }
+</style>
