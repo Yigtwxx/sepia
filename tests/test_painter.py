@@ -1,5 +1,6 @@
 import io
 import sys
+import threading
 import urllib.error
 import urllib.parse
 from contextlib import nullcontext
@@ -91,15 +92,21 @@ def test_api_painter_paint_returns_decoded_image(
     assert painting.image.size == SIZE, f"Got {painting.image.size}"
 
 
-@pytest.mark.parametrize(("code", "limited"), [(429, True), (402, True), (500, False)])
-def test_api_painter_http_error_raises_with_rate_limit_flag(
-    monkeypatch: pytest.MonkeyPatch, code: int, limited: bool
+@pytest.mark.parametrize(
+    ("code", "limited", "empty"),
+    [(429, True, False), (402, False, True), (500, False, False)],
+)
+def test_api_painter_http_error_raises_with_limit_and_credit_flags(
+    monkeypatch: pytest.MonkeyPatch, code: int, limited: bool, empty: bool
 ) -> None:
     error = urllib.error.HTTPError("u", code, "x", {}, None)  # type: ignore[arg-type]
     monkeypatch.setattr(painter.urllib.request, "urlopen", MagicMock(side_effect=error))
     with pytest.raises(PainterError) as exc:
         ApiPainter().paint("apple", SIZE, 1)
-    assert exc.value.rate_limited is limited, f"HTTP {code}: {exc.value.rate_limited}"
+    flags = (exc.value.rate_limited, exc.value.out_of_credit)
+    assert flags == (limited, empty), (
+        f"HTTP {code}: (rate_limited, out_of_credit)={flags}"
+    )
 
 
 def test_api_painter_non_image_reply_raises(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,6 +137,16 @@ def test_fallback_painter_rate_limit_skips_primary_during_cooldown() -> None:
     chain.paint("x", SIZE, 1)
     chain.paint("x", SIZE, 1)
     assert (primary.calls, fallback.calls) == (1, 2), "Primary must rest after 429"
+
+
+def test_fallback_painter_out_of_credit_skips_primary_for_the_session() -> None:
+    primary = _StubPainter(PainterError("no pollen", out_of_credit=True))
+    fallback = _StubPainter()
+    # No cooldown: a rate limit would retry at once, running out of credit must not.
+    chain = FallbackPainter(primary, fallback, cooldown=0)
+    for _ in range(3):
+        chain.paint("x", SIZE, 1)
+    assert (primary.calls, fallback.calls) == (1, 3), "Primary must stay off after 402"
 
 
 @pytest.mark.parametrize("key", [None, "pk-test"])
@@ -176,6 +193,35 @@ def test_local_painter_without_extra_raises_install_hint(
     monkeypatch.setattr(painter, "local_installed", lambda: False)
     with pytest.raises(PainterError, match=r"sepia-cli\[local\]"):
         painter.LocalPainter().paint("x", SIZE, 1)
+
+
+def test_local_painter_load_in_background_builds_on_another_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(painter, "local_installed", lambda: True)
+    local = painter.LocalPainter()
+    builders: list[str] = []
+
+    def build() -> None:
+        builders.append(threading.current_thread().name)
+        local._pipe = MagicMock()
+
+    monkeypatch.setattr(local, "_build", build)
+    local.load_in_background().join(timeout=5)
+    assert local.loaded, "The background load must leave the pipeline loaded"
+    assert builders == ["sepia-load"], f"Built on {builders}, not the load thread"
+
+
+def test_local_painter_load_in_background_failure_is_left_for_paint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(painter, "local_installed", lambda: False)
+    uncaught: list[object] = []
+    monkeypatch.setattr(threading, "excepthook", uncaught.append)
+    local = painter.LocalPainter()
+    local.load_in_background().join(timeout=5)
+    assert not uncaught, f"A failed background load must stay quiet: {uncaught}"
+    assert not local.loaded, "Nothing may be loaded after a failure"
 
 
 def test_api_painter_keyed_request_sends_the_reference_link() -> None:

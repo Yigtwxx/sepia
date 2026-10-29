@@ -125,7 +125,7 @@ The user config folder is `%LOCALAPPDATA%\sepia` on Windows and `~/Library/Appli
 | FLUX.2 [klein] 4B, local | Once downloaded, before the keyless API; without it, last | Needs `sepia-cli[local]` and `sepia --download`. The same model as the keyed API. |
 | Pollinations, keyless (`image.pollinations.ai`) | Last once the local model is downloaded; otherwise right after the keyed API (first without a key) | Free, about one picture per 15 seconds, a weaker model and a small logo. Requests are sent with `private=true`. |
 
-After a rate-limit or out-of-credit answer (HTTP 429 or 402), sepia skips that endpoint for 120 seconds instead of retrying it on every picture.
+After a rate-limit answer (HTTP 429), sepia skips that endpoint for 120 seconds instead of retrying it on every picture. After an out-of-credit answer (HTTP 402) it skips the endpoint until sepia restarts, since waiting does not bring pollen back.
 
 The local model runs on CUDA, then Apple Silicon (MPS), then CPU, whichever is found first:
 
@@ -133,7 +133,7 @@ The local model runs on CUDA, then Apple Silicon (MPS), then CPU, whichever is f
 - **MPS:** bf16 weights without quantization, so it needs more memory than the CUDA path.
 - **CPU:** float32. It works, but slowly.
 
-The model loads on the first local picture, so that picture takes longer. Edits differ by backend: the local model repaints using the previous picture as a reference, while the API cannot see the previous picture and repaints from the full prompt with the scene's fixed seed, which keeps the composition close.
+Once the model is downloaded, it starts loading in the background as soon as sepia opens, so the first local picture rarely waits for it; it holds about 5 GB of VRAM from then on, until sepia closes. Edits differ by backend: the local model repaints using the previous picture as a reference, while the API cannot see the previous picture and repaints from the full prompt with the scene's fixed seed, which keeps the composition close.
 
 ## Cost
 

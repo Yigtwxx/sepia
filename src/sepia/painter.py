@@ -1,6 +1,8 @@
 """Paint pictures: a free web API first, the local GPU model when the API fails."""
 
+import contextlib
 import io
+import math
 import threading
 import time
 import urllib.error
@@ -52,9 +54,13 @@ Source = Literal["api", "keyless", "local"]
 class PainterError(RuntimeError):
     """A picture could not be painted."""
 
-    def __init__(self, message: str, *, rate_limited: bool = False) -> None:
+    def __init__(
+        self, message: str, *, rate_limited: bool = False, out_of_credit: bool = False
+    ) -> None:
         super().__init__(message)
         self.rate_limited = rate_limited
+        self.out_of_credit = out_of_credit
+        """The account has no credit left, which waiting does not change."""
 
 
 @dataclass(frozen=True)
@@ -116,9 +122,10 @@ class ApiPainter:
                 kind = reply.headers.get_content_type()
                 data = reply.read()
         except urllib.error.HTTPError as exc:
-            limited = exc.code in (402, 429)
             message = f"image API: HTTP {exc.code}"
-            raise PainterError(message, rate_limited=limited) from exc
+            raise PainterError(
+                message, rate_limited=exc.code == 429, out_of_credit=exc.code == 402
+            ) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise PainterError(f"image API unreachable: {exc}") from exc
         if not kind.startswith("image/"):
@@ -220,6 +227,18 @@ class LocalPainter:
             if self._pipe is None:
                 self._build()
 
+    def load_in_background(self) -> threading.Thread:
+        """Start loading on a background thread, so the first picture does not
+        wait for it. A failure is left for `paint` to report."""
+
+        def load() -> None:
+            with contextlib.suppress(PainterError):
+                self.load()
+
+        thread = threading.Thread(target=load, name="sepia-load", daemon=True)
+        thread.start()
+        return thread
+
     def paint(
         self,
         prompt: str,
@@ -259,6 +278,7 @@ class LocalPainter:
         return Painting(image, "local", time.perf_counter() - started)
 
     def _build(self) -> None:
+        _quiet_libraries()  # first: torch logs a warning while it loads
         import torch
         from diffusers import Flux2KleinPipeline, PipelineQuantizationConfig
         from huggingface_hub import snapshot_download
@@ -273,7 +293,7 @@ class LocalPainter:
         except LocalEntryNotFoundError as exc:
             message = "local model not downloaded; run `sepia --download`"
             raise PainterError(message) from exc
-        options: dict[str, Any] = {"torch_dtype": dtype}
+        options: dict[str, Any] = {"dtype": dtype}
         if device == "cuda":
             # 4-bit weights keep the transformer and text encoder inside 8 GB.
             options["quantization_config"] = PipelineQuantizationConfig(
@@ -295,11 +315,31 @@ class LocalPainter:
         self._pipe = pipe
 
 
+def _quiet_libraries() -> None:
+    """Keep the model libraries' progress bars and notes out of the prompt window.
+
+    Errors still raise; only their progress output and warnings are dropped.
+    """
+    import logging
+
+    # Without triton (not built for Windows) torch warns that its flop counter,
+    # which sepia never uses, cannot count triton kernels.
+    logging.getLogger("torch.utils.flop_counter").setLevel(logging.ERROR)
+    from diffusers.utils import logging as diffusers_logging
+    from transformers.utils import logging as transformers_logging
+
+    for library in (diffusers_logging, transformers_logging):
+        library.set_verbosity_error()
+        library.disable_progress_bar()
+
+
 class FallbackPainter:
     """Tries `primary` first and falls back to `fallback` when it fails.
 
     After a rate-limit answer the primary is skipped for `cooldown` seconds, so a
-    busy API does not add a failed round trip to every picture.
+    busy API does not add a failed round trip to every picture. After an
+    out-of-credit answer it is skipped for the rest of the session, since waiting
+    does not bring credit back.
     """
 
     def __init__(
@@ -324,7 +364,9 @@ class FallbackPainter:
                 painting = self._primary.paint(prompt, size, seed, reference, likeness)
             except PainterError as exc:
                 self.last_error = exc
-                if exc.rate_limited:
+                if exc.out_of_credit:
+                    self._skip_until = math.inf
+                elif exc.rate_limited:
                     self._skip_until = time.monotonic() + self._cooldown
             else:
                 self.last_error = None

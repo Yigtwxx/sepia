@@ -97,7 +97,14 @@ ignore_missing_imports = true
 
 # The local extra may not be installed (CI type-checks without it).
 [[tool.mypy.overrides]]
-module = ["torch", "torch.*", "huggingface_hub", "huggingface_hub.*"]
+module = [
+    "torch",
+    "torch.*",
+    "huggingface_hub",
+    "huggingface_hub.*",
+    "transformers",
+    "transformers.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

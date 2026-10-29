@@ -44,6 +44,9 @@ tag all carry.
   the same, about $0.001 a request.
 - `/usage` session bars are drawn against the all-time totals on a gray track,
   so the empty part of a bar reads as empty.
+- A downloaded local model starts loading in the background when sepia
+  opens, so the first local picture no longer waits about 12 seconds for it.
+  It holds about 5 GB of VRAM from then on.
 
 ### Fixed
 
@@ -54,6 +57,10 @@ tag all carry.
   reference.
 - `/usage` bars no longer leave a stray empty cell when the parts round down.
 - Web searches are priced even when the model has no known price.
+- Loading the local model no longer fills the prompt window with progress
+  bars, library warnings and a deprecation note.
+- Once Pollinations answers that the key is out of pollen (HTTP 402), sepia
+  stops asking it until it restarts, instead of every two minutes.
 
 ## [0.2.0] - 2026-10-29
 

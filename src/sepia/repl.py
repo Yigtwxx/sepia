@@ -35,7 +35,13 @@ from sepia.config import (
 from sepia.director import Direction, Director, DirectorError, create_client
 from sepia.ipc import Host, Message
 from sepia.launcher import VIEWER_COLS, VIEWER_ROWS, LaunchError, open_viewer
-from sepia.painter import FallbackPainter, PainterError, Painting, build_painter
+from sepia.painter import (
+    FallbackPainter,
+    PainterError,
+    Painting,
+    build_painter,
+    local_model_ready,
+)
 from sepia.painter import image_size as paint_size
 from sepia.picker import choose
 from sepia.raster import letterbox
@@ -452,7 +458,10 @@ def run_repl() -> int:
     director = Director(
         create_client(key), settings.model, settings.effort, settings.mature
     )
-    painter, _ = build_painter(pollinations_key(), settings.image_model)
+    painter, local = build_painter(pollinations_key(), settings.image_model)
+    if local_model_ready(settings.image_model):
+        # About 5 GB of VRAM from now on, but no wait on the first local picture.
+        local.load_in_background()
     ledger = Ledger(
         config_dir() / "usage.json",
         lambda: estimate_earlier(
