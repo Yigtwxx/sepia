@@ -1,12 +1,13 @@
 import re
 
 import pytest
+from prompt_toolkit.data_structures import Size
 from prompt_toolkit.formatted_text import fragment_list_to_text
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.styles import default_ui_style, merge_styles
 
 from sepia import ui
-from sepia.chatbar import STYLE, BottomBar, ChatBar, CommandMenu
+from sepia.chatbar import STYLE, BottomBar, ChatBar, CommandMenu, Resized
 from sepia.ui import POINTER, PROMPT
 
 COMMANDS = (("/new", "start a fresh picture"), ("/help", "show this list"))
@@ -28,6 +29,29 @@ def test_chatbar_read_ctrl_c_raises_keyboard_interrupt(terminal) -> None:
     keys.send_text("half typed\x03")
     with pytest.raises(KeyboardInterrupt):
         _bar().read()
+
+
+def test_chatbar_read_draft_is_kept_in_the_bar(terminal) -> None:
+    keys, _ = terminal
+    keys.send_text("fall\r")
+    line = _bar().read(draft="water")
+    assert line == "waterfall", f"Typing must continue the draft, got {line!r}"
+
+
+def test_chatbar_read_window_resize_raises_resized_with_the_draft(
+    resizable_terminal,
+) -> None:
+    keys, sizes = resizable_terminal
+    keys.send_text("half typed")
+
+    def status() -> str:
+        sizes[0] = Size(rows=30, columns=60)  # the window changes after the first draw
+        return "status"
+
+    bar = ChatBar(InMemoryHistory(), COMMANDS, "describe a picture", status)
+    with pytest.raises(Resized) as raised:
+        bar.read()
+    assert raised.value.draft == "half typed", f"Got {raised.value.draft!r}"
 
 
 def test_chatbar_read_ctrl_d_on_empty_bar_raises_eof(terminal) -> None:

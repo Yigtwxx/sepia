@@ -48,6 +48,9 @@ from sepia import ui
 
 BAR_ROWS = 4
 """Top rule, input line, bottom rule, status line."""
+REFRESH_SECONDS = 0.5
+"""How often the bar redraws on its own: the status line follows the picture window
+and the Ctrl+C hint, and a resized window is noticed."""
 
 STYLE = Style.from_dict(
     {
@@ -124,6 +127,18 @@ class BottomBar:
         return f"\x1b[1;{max(self._rows() - BAR_ROWS - self._extra, 1)}r"
 
 
+class Resized(Exception):
+    """The window changed size while the bar was reading; `draft` is what was typed.
+
+    The terminal reflows the lines above the bar to the new width, which breaks
+    boxes and rules apart, so the prompt window draws itself anew and reads again.
+    """
+
+    def __init__(self, draft: str) -> None:
+        super().__init__(draft)
+        self.draft = draft
+
+
 class CommandMenu:
     """The slash commands that start with what is typed, listed above the bar.
 
@@ -192,11 +207,12 @@ class ChatBar:
         """Asks for rows above the bar for the menu: `BottomBar.make_room`."""
         self._menu_rows = 0
 
-    def read(self) -> str:
-        """The submitted line. Raises KeyboardInterrupt on Ctrl+C and EOFError on
-        Ctrl+D in an empty bar, like `input()`."""
+    def read(self, draft: str = "") -> str:
+        """The submitted line, typed after `draft`. Raises KeyboardInterrupt on
+        Ctrl+C and EOFError on Ctrl+D in an empty bar, like `input()`, and Resized
+        when the window changes size."""
         try:
-            result: str = self._application().run()
+            result: str = self._application(draft).run()
         finally:
             if self._menu_rows:
                 self._menu_rows = self._make_room(0)
@@ -220,10 +236,11 @@ class ChatBar:
         ]
         return [_escaped(row) for row in rows]
 
-    def _application(self) -> Application[str]:
+    def _application(self, draft: str) -> Application[str]:
         buffer = Buffer(
             history=self._history,
             multiline=False,
+            document=Document(draft),
             accept_handler=lambda buf: _accept(buf),
         )
         empty = Condition(lambda: not buffer.text)
@@ -310,6 +327,12 @@ class ChatBar:
             if choice is not None:
                 buffer.document = Document(choice)
 
+        size = get_app_session().output.get_size()
+
+        def _resized(app: Application[str]) -> None:
+            if not app.is_done and app.output.get_size() != size:
+                app.exit(exception=Resized(buffer.text))
+
         app: Application[str] = Application(
             layout=Layout(body, focused_element=field),
             key_bindings=keys,
@@ -317,6 +340,8 @@ class ChatBar:
             full_screen=False,
             erase_when_done=True,
             mouse_support=False,
+            refresh_interval=REFRESH_SECONDS,
+            before_render=_resized,
         )
         return app
 

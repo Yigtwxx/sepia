@@ -113,3 +113,13 @@ def terminal() -> Iterator[tuple[PipeInput, io.StringIO]]:
         output = Vt100_Output(screen, lambda: Size(rows=24, columns=80), term="xterm")
         with create_app_session(input=keys, output=output):
             yield keys, screen
+
+
+@pytest.fixture
+def resizable_terminal() -> Iterator[tuple[PipeInput, list[Size]]]:
+    """Like `terminal`, but a test resizes it by replacing `sizes[0]`."""
+    sizes = [Size(rows=24, columns=80)]
+    with create_pipe_input() as keys:
+        output = Vt100_Output(io.StringIO(), lambda: sizes[0], term="xterm")
+        with create_app_session(input=keys, output=output):
+            yield keys, sizes

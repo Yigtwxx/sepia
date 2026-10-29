@@ -60,7 +60,7 @@ On the first run sepia asks for your Anthropic API key (hidden input) and saves 
 uv tool install sepia-cli
 ```
 
-**With the local fallback model.** About 3 GB of packages plus a 16 GB model download:
+**With the local fallback model.** About 3 GB of packages; the 16 GB model comes later, only if you ask for it:
 
 ```bash
 # macOS (Apple Silicon)
@@ -70,11 +70,7 @@ uv tool install "sepia-cli[local]"
 uv tool install "sepia-cli[local]" --index https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match
 ```
 
-Then download the model once:
-
-```bash
-sepia --download
-```
+Nothing is downloaded at install. The first `/local` names the model and its size (FLUX.2 [klein] 4B, about 16 GB from Hugging Face) and downloads it once you say yes. `sepia --download` fetches it ahead of time instead.
 
 ## Usage
 
@@ -92,10 +88,10 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. |
 | `/mature [on\|off]` | Mature pictures; see [Mature mode](#mature-mode). Off by default. |
 | `/api` | Paint with Cloudflare Workers AI, and with the local model when it fails. Also makes sepia try Cloudflare again after a rate-limit pause or a used-up day; see [Painting backends](#painting-backends). |
-| `/local` | Paint only on this machine's GPU. Refused, with a hint, while the local model is not ready. |
+| `/local` | Paint only on this machine's GPU. The first time, it names the model and its size and downloads it once you say yes. Needs `sepia-cli[local]`. |
 | `/usage` | What Claude used in this session and in all sessions: tokens, web searches and estimated cost. Esc closes it. |
 | `/help` | List the commands. |
-| `/exit` | Close sepia and the viewer window. `/quit`, `/q` and Ctrl+D do the same. |
+| `/exit` | Close sepia and the viewer window. `/quit`, `/q`, Ctrl+D and Ctrl+C twice do the same. |
 
 `/style`, `/charset`, `/model`, `/effort` and `/mature` without an argument open a menu: the arrow keys and Enter (or the option's number) pick, Esc cancels. `/usage` opens a panel that Esc (or Enter) closes without leaving it in the transcript. Its session bar is drawn against the all-time total, so its gray rest is earlier use; use from before tracking began is estimated once from the prompt history and the saved sessions.
 
@@ -191,7 +187,7 @@ The two windows are two processes that talk over an authenticated loopback socke
 | Backend | When it runs | Notes |
 | --- | --- | --- |
 | Cloudflare Workers AI (`@cf/black-forest-labs/flux-2-klein-4b`) | First, when `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are set; never under `/local` | FLUX.2 [klein] 4B. Free up to 10,000 neurons a day, about 100 pictures. Takes the previous picture and reference pictures as input images, at most 512 px a side. |
-| FLUX.2 [klein] 4B, local | When Cloudflare fails or rate limits; the only painter without the Cloudflare settings or under `/local` | Needs `sepia-cli[local]` and `sepia --download`. The same model as on Cloudflare. |
+| FLUX.2 [klein] 4B, local | When Cloudflare fails or rate limits; the only painter without the Cloudflare settings or under `/local` | Needs `sepia-cli[local]`; the first `/local` offers to download the model. The same model as on Cloudflare. |
 
 After a rate-limit answer (HTTP 429), sepia skips Cloudflare for 120 seconds and paints locally instead of retrying it on every picture. Once the day's free allocation is used up (Cloudflare error 4006), it skips Cloudflare for the rest of the session, since a short wait does not bring it back. `/api` or a restart makes sepia try Cloudflare again after either. A rejected token (HTTP 401 or 403) gets a message that says so. Cloudflare's safety filter sometimes flags a harmless picture, and not every time for the same prompt; that picture is painted locally and the next one goes to Cloudflare again. Whenever the local model paints because Cloudflare failed, the reply's detail line says why.
 
@@ -234,7 +230,7 @@ What leaves your machine:
 - **To Brave Search:** a short image search query for a named subject, written by Claude, only when `BRAVE_SEARCH_API_KEY` is set.
 - **To the site of a reference picture:** a plain download of the linked page or picture, when a request names a subject or contains a link.
 - **To Cloudflare:** the generated English prompt, the picture size, the seed and, as input pictures of at most 512 px a side, the reference picture and, for `/add`, the previous picture. Your original request is not sent. Nothing goes to Cloudflare when the picture is painted locally.
-- **To Hugging Face:** only the model download when you run `sepia --download`.
+- **To Hugging Face:** only the model download, after you say yes to it under `/local` or run `sepia --download`.
 
 Pictures, the request history and the API key file stay in the user config folder on your machine. sepia has no telemetry of its own.
 

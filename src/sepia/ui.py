@@ -95,8 +95,15 @@ STRINGS: dict[str, str] = {
     "api_missing": "Cloudflare is not set up: put CLOUDFLARE_ACCOUNT_ID and "
     "CLOUDFLARE_API_TOKEN in .env (Workers AI → Use REST API: "
     "https://dash.cloudflare.com/?to=/:account/ai/workers-ai)",
-    "local_missing": "The local model is not ready: install sepia-cli[local], then "
-    "run sepia --download",
+    "local_missing": "Painting on this machine needs the local extra: install "
+    "sepia-cli[local], then type /local again",
+    "pick_download": "Painting on this machine needs the local model {model}, "
+    "about 16 GB from Hugging Face. Download it now?",
+    "download.yes": "download it, then paint on this machine",
+    "download.no": "not now; keep painting as before",
+    "downloading": "Downloading the local model, about 16 GB… ({elapsed})",
+    "download_declined": "Not downloaded; painting stays as it was",
+    "download_failed": "Could not download the local model: {error}",
     "no_window": "Could not open the picture window: {error}",
     "unknown": "No such command {command}",
     "help_title": "commands",
@@ -119,6 +126,7 @@ STRINGS: dict[str, str] = {
     "pick_effort": "How long should Claude think about each picture?",
     "pick_model": "Which Claude should write the prompts?",
     "close_hint": "Esc to close",
+    "exit_hint": "Press Ctrl+C again to exit",
     "pick_mature": "Should Claude paint mature pictures?",
     "style.ink": "colored symbols on the terminal's background, made for dark themes",
     "style.fill": "also paints each cell's background, so it shows on any theme",
@@ -163,7 +171,7 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/local", "paint only on this machine's GPU"),
     ("/usage", "show what Claude used and cost, now and in all"),
     ("/help", "show this list"),
-    ("/exit", "close sepia and its window (also Ctrl+D)"),
+    ("/exit", "close sepia and its window (also Ctrl+D, or Ctrl+C twice)"),
 )
 
 

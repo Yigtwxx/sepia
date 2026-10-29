@@ -274,6 +274,19 @@ def test_local_painter_without_extra_raises_install_hint(
         painter.LocalPainter().paint("x", SIZE, 1)
 
 
+def test_download_local_model_failed_download_raises_painter_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refuse(*args: object, **kwargs: object) -> str:
+        raise OSError("connection reset")
+
+    monkeypatch.setattr(painter, "local_installed", lambda: True)
+    hub = SimpleNamespace(snapshot_download=refuse)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    with pytest.raises(PainterError, match="could not download"):
+        painter.download_local_model()
+
+
 def test_local_painter_load_in_background_builds_on_another_thread(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

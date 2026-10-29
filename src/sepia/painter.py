@@ -280,7 +280,11 @@ def download_local_model(model_id: str = DEFAULT_IMAGE_MODEL) -> str:
         raise PainterError(LOCAL_MISSING)
     from huggingface_hub import snapshot_download
 
-    return str(snapshot_download(model_id, allow_patterns=MODEL_FILES))
+    try:
+        return str(snapshot_download(model_id, allow_patterns=MODEL_FILES))
+    except Exception as exc:  # the Hub's network, disk and HTTP errors alike
+        name = type(exc).__name__
+        raise PainterError(f"could not download {model_id} ({name})") from exc
 
 
 class LocalPainter:
@@ -367,7 +371,7 @@ class LocalPainter:
                 self.model_id, allow_patterns=MODEL_FILES, local_files_only=True
             )
         except LocalEntryNotFoundError as exc:
-            message = "local model not downloaded; run `sepia --download`"
+            message = "local model not downloaded; type /local to download it"
             raise PainterError(message) from exc
         options: dict[str, Any] = {"dtype": dtype}
         if device == "cuda":

@@ -12,13 +12,13 @@ from typing import TypeVar, cast, get_args
 
 from PIL import Image
 from prompt_toolkit.history import FileHistory
-from rich.console import Console
+from rich.console import Console, RenderableType
 from rich.live import Live
 from rich.text import Text
 
 from sepia import ui
 from sepia.ascii_art import ArtStyle, Charset
-from sepia.chatbar import BottomBar, ChatBar
+from sepia.chatbar import BottomBar, ChatBar, Resized
 from sepia.config import (
     MODELS,
     ConfigError,
@@ -47,6 +47,8 @@ from sepia.painter import (
     Painting,
     Source,
     build_painter,
+    download_local_model,
+    local_installed,
     local_model_ready,
 )
 from sepia.painter import image_size as paint_size
@@ -65,6 +67,57 @@ RELAUNCH_GAP_SECONDS = 10
 KEEP_SESSIONS = 10
 """Picture folders from older sessions are deleted beyond this many."""
 FRAME_SECONDS = 0.1
+EXIT_SECONDS = 2.0
+"""A second Ctrl+C within this long of the first closes sepia."""
+RESIZE_SETTLE_SECONDS = 0.15
+"""A resize drag fires many sizes; redraw once the window has stopped changing."""
+
+
+class Interrupts:
+    """Ctrl+C in the chat bar: the first clears the line, a second one soon after
+    closes sepia, as in Claude Code."""
+
+    def __init__(
+        self, window: float = EXIT_SECONDS, clock: Callable[[], float] = time.monotonic
+    ) -> None:
+        self._window = window
+        self._clock = clock
+        self._last = float("-inf")
+
+    def press(self) -> bool:
+        """Count one Ctrl+C; True when it is the second within the window."""
+        leave = self.armed
+        self._last = self._clock()
+        return leave
+
+    @property
+    def armed(self) -> bool:
+        """Whether a Ctrl+C now would close sepia."""
+        return self._clock() - self._last < self._window
+
+
+class Transcript:
+    """What the prompt window printed under the welcome box.
+
+    A terminal reflows its old lines when the window changes size, which breaks
+    boxes and rules apart; so the window is cleared and all of it printed again.
+    """
+
+    def __init__(self, console: Console) -> None:
+        self._console = console
+        self._said: list[RenderableType] = []
+
+    def say(self, renderable: RenderableType = "") -> None:
+        self._said.append(renderable)
+        self._console.print(renderable)
+
+    def clear(self) -> None:
+        self._said.clear()
+
+    def replay(self) -> None:
+        """Print everything said again, at the console's current width."""
+        for renderable in self._said:
+            self._console.print(renderable)
 
 
 @dataclass(frozen=True)
@@ -147,6 +200,10 @@ class Repl:
         self._count = 0
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sepia-work")
         self.bar = BottomBar(self._write, lambda: shutil.get_terminal_size().lines)
+        self.transcript = Transcript(console)
+        self.interrupts = Interrupts()
+        self._drawn_size = shutil.get_terminal_size()
+        """The window's size when the screen was last drawn."""
 
     def run(self) -> int:
         self._open_screen()
@@ -157,12 +214,20 @@ class Repl:
             status=self._status,
             make_room=self.bar.make_room,
         )
+        draft = ""
         try:
             while True:
+                if shutil.get_terminal_size() != self._drawn_size:
+                    self._redraw()
                 self.bar.to_bar()
                 try:
-                    line = bar.read().strip()
+                    line, draft = bar.read(draft).strip(), ""
+                except Resized as resized:
+                    draft = resized.draft
+                    continue
                 except KeyboardInterrupt:
+                    if self.interrupts.press():
+                        return 0
                     continue
                 finally:
                     # The live bar erased itself; a still copy keeps it in view.
@@ -170,12 +235,13 @@ class Repl:
                     self.bar.to_transcript()
                 if not line:
                     continue
-                self.console.print(ui.echo(line))
+                self.transcript.say(ui.echo(line))
                 if not self._handle(line):
                     return 0
                 if parse_command(line) != Command("clear", ""):
-                    self.console.print()
-        except EOFError:
+                    self.transcript.say()
+        except (EOFError, KeyboardInterrupt):
+            # Ctrl+D, or Ctrl+C while a request is being worked on.
             return 0
         finally:
             self.bar.stop()
@@ -192,7 +258,7 @@ class Repl:
         if command.name in ("exit", "quit", "q"):
             return False
         if command.name == "help":
-            self.console.print(ui.help_table(self.words))
+            self.transcript.say(ui.help_table(self.words))
         elif command.name == "usage":
             all_time = self.ledger.read()
             view = ui.usage_view(
@@ -215,7 +281,7 @@ class Repl:
                 self.director.model = MODELS[cast(ModelName, picked)]
                 remember(model=self.director.model)
                 model = self.director.model.removeprefix("claude-")
-                self.console.print(ui.reply(self.words("model_set", model=model)))
+                self.transcript.say(ui.reply(self.words("model_set", model=model)))
         elif command.name == "clear":
             self.scene.reset()
             self.host.send({"type": "clear"})
@@ -224,7 +290,7 @@ class Repl:
             if command.argument:
                 self._draw(command.argument, add=True)
             else:
-                self.console.print(ui.reply(self.words("add_usage"), failed=True))
+                self.transcript.say(ui.reply(self.words("add_usage"), failed=True))
         elif command.name == "effort":
             levels = cast(tuple[str, ...], get_args(Effort))
             effort = self.director.effort
@@ -232,7 +298,7 @@ class Repl:
             if picked is not None:
                 self.director.effort = cast(Effort, picked)
                 remember(effort=picked)
-                self.console.print(ui.reply(self.words("effort_set", effort=picked)))
+                self.transcript.say(ui.reply(self.words("effort_set", effort=picked)))
         elif command.name == "mature":
             switches = cast(tuple[str, ...], get_args(Switch))
             current = "on" if self.director.mature else "off"
@@ -240,7 +306,7 @@ class Repl:
             if picked is not None:
                 self.director.mature = picked == "on"
                 remember(mature=self.director.mature)
-                self.console.print(ui.reply(self.words(f"mature_{picked}")))
+                self.transcript.say(ui.reply(self.words(f"mature_{picked}")))
         elif command.name in ("api", "local"):
             self._switch_painter(cast(Source, command.name))
         elif command.name in ("style", "charset"):
@@ -262,10 +328,10 @@ class Repl:
                 {"type": "style", "style": self.style, "charset": self.charset}
             )
             message = self.words("style_set", style=self.style, charset=self.charset)
-            self.console.print(ui.reply(message))
+            self.transcript.say(ui.reply(message))
         else:
             unknown = self.words("unknown", command=f"/{command.name}")
-            self.console.print(ui.reply(unknown, failed=True))
+            self.transcript.say(ui.reply(unknown, failed=True))
         return True
 
     def _switch_painter(self, source: Source) -> None:
@@ -274,17 +340,42 @@ class Repl:
         a cooldown or a used-up day."""
         if source == "api":
             if self.api is None:
-                self.console.print(ui.reply(self.words("api_missing"), failed=True))
+                self.transcript.say(ui.reply(self.words("api_missing"), failed=True))
                 return
             self.api.retry_primary()
         elif local_model_ready(self.settings.image_model):
             self.local.load_in_background()
-        else:
-            self.console.print(ui.reply(self.words("local_missing"), failed=True))
+        elif not local_installed():
+            self.transcript.say(ui.reply(self.words("local_missing"), failed=True))
+            return
+        elif not self._download_local():
             return
         self.paint_with = source
         remember(painter=source)
-        self.console.print(ui.reply(self.words(f"painter_{source}")))
+        self.transcript.say(ui.reply(self.words(f"painter_{source}")))
+
+    def _download_local(self) -> bool:
+        """Ask before downloading the local model, then download it and start
+        loading it; False, after saying why, when declined or failed."""
+        model = self.settings.image_model
+        picked = choose(
+            self.words("pick_download", model=model),
+            [(answer, self.words(f"download.{answer}")) for answer in ("yes", "no")],
+            "yes",
+            self.words("pick_hint"),
+        )
+        if picked != "yes":
+            self.transcript.say(ui.reply(self.words("download_declined")))
+            return False
+        self._started = time.monotonic()
+        try:
+            self._wait(lambda: download_local_model(model), "downloading")
+        except PainterError as exc:
+            message = self.words("download_failed", error=exc)
+            self.transcript.say(ui.reply(message, failed=True))
+            return False
+        self.local.load_in_background()
+        return True
 
     @property
     def painter(self) -> Painter:
@@ -330,7 +421,7 @@ class Repl:
         if links:
             found = self._wait(lambda: find_reference(links), "looking")
             if found is None:
-                self.console.print(ui.reply(self.words("link_unusable"), failed=True))
+                self.transcript.say(ui.reply(self.words("link_unusable"), failed=True))
                 if not words:
                     return
             elif not words and not add:
@@ -365,7 +456,7 @@ class Repl:
             message = self.words("failure.paint", error=error)
             # Without Cloudflare only the local model paints; say how to add it.
             hint = self.words("api_missing") if self.api is None else ""
-            self.console.print(ui.reply(message, hint, failed=True))
+            self.transcript.say(ui.reply(message, hint, failed=True))
             return
         self.scene.record(words or request, direction.prompt, painting.image, likeness)
         self._tally(
@@ -378,7 +469,7 @@ class Repl:
             detail += f" · {failure}"
         if likeness is not None:
             detail += f" · {self.words('reference', host=_host(likeness.url))}"
-        self.console.print(ui.reply(direction.message, detail))
+        self.transcript.say(ui.reply(direction.message, detail))
 
     def _direct(self, words: str, found: Reference | None) -> Direction | None:
         """Claude's direction for `words`, shown `found` when there is one; None
@@ -390,7 +481,7 @@ class Repl:
                 "directing",
             )
         except DirectorError as exc:
-            self.console.print(
+            self.transcript.say(
                 ui.reply(self.words(f"failure.{exc.failure}"), failed=True)
             )
             return None
@@ -411,7 +502,7 @@ class Repl:
         if found is None:
             subject = direction.subject or self.words("the_subject")
             message = self.words("no_reference", subject=subject)
-            self.console.print(ui.reply(message, failed=True))
+            self.transcript.say(ui.reply(message, failed=True))
         return found
 
     def _present(self, request: str, found: Reference, message: str) -> None:
@@ -423,7 +514,7 @@ class Repl:
         self.scene.record(request, "", image, found)
         self._keep(image)
         detail = self.words("shown", host=_host(found.url))
-        self.console.print(ui.reply(message, detail))
+        self.transcript.say(ui.reply(message, detail))
 
     def _keep(self, image: Image.Image) -> None:
         """Save the scene's new picture to the session folder and show it."""
@@ -460,7 +551,7 @@ class Repl:
         try:
             open_viewer(self.session_file)
         except LaunchError as exc:
-            self.console.print(
+            self.transcript.say(
                 ui.reply(self.words("no_window", error=exc), failed=True)
             )
             return
@@ -495,18 +586,38 @@ class Repl:
         The transcript starts under the welcome box and scrolls it away once it
         reaches the bar, which never moves.
         """
+        self.transcript.clear()
+        self._draw_screen()
+
+    def _redraw(self) -> None:
+        """Draw the window anew at its new size, once it has stopped changing."""
+        size = shutil.get_terminal_size()
+        while True:
+            time.sleep(RESIZE_SETTLE_SECONDS)
+            settled = shutil.get_terminal_size()
+            if settled == size:
+                break
+            size = settled
+        self._draw_screen()
+
+    def _draw_screen(self) -> None:
+        """Welcome box, tip and transcript on a cleared window, at its width."""
+        self._drawn_size = shutil.get_terminal_size()
         if self.console.is_terminal:
             self._write(ui.CLEAR)
         self.bar.start()
         self.console.print(ui.welcome(self.words, self.console.width))
         self.console.print(ui.tip(self.words))
         self.console.print()
+        self.transcript.replay()
 
     def _write(self, sequence: str) -> None:
         self.console.file.write(sequence)
         self.console.file.flush()
 
     def _status(self) -> str:
+        if self.interrupts.armed:
+            return f"  {self.words('exit_hint')}"
         window = "●" if self.host.connected else "○"
         model = (
             f"{self.director.model.removeprefix('claude-')} ({self.director.effort})"
