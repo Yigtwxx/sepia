@@ -13,7 +13,7 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.input.base import PipeInput
 from prompt_toolkit.output.vt100 import Vt100_Output
 
-from sepia import config
+from sepia import config, repl
 from sepia.ascii_art import CELL_HEIGHT, CELL_WIDTH
 
 Canvas = Callable[..., np.ndarray]
@@ -28,17 +28,27 @@ KEY_VARIABLES = (
 @pytest.fixture(autouse=True)
 def private_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Every test gets its own config folder: keys, choices and history written by
-    the code under test never reach the real one."""
+    the code under test never reach the real one. `repl` imports `config_dir` by
+    name, so its copy is replaced too."""
     folder = tmp_path / "config"
     monkeypatch.setattr(config, "config_dir", lambda: folder)
+    monkeypatch.setattr(repl, "config_dir", lambda: folder)
     return folder
 
 
-@pytest.fixture
-def env_file(monkeypatch: pytest.MonkeyPatch) -> Path:
-    """The user config `.env`, in the test's own folder, with no key set."""
+@pytest.fixture(autouse=True)
+def private_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test sees the shell's keys, and a key the code under test sets (the first
+    run, `/keys`) is gone again after the test."""
     for variable in KEY_VARIABLES:
-        monkeypatch.delenv(variable, raising=False)
+        # setenv first: delenv alone on a missing variable records nothing to undo.
+        monkeypatch.setenv(variable, "")
+        monkeypatch.delenv(variable)
+
+
+@pytest.fixture
+def env_file() -> Path:
+    """The user config `.env`, in the test's own folder, with no key set."""
     return config.user_env_file()
 
 
