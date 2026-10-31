@@ -10,6 +10,8 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-31
+
 ### Added
 
 - Clarifying questions: when a request could mean very different pictures ("universe", "something cool"), Claude first asks one to three short questions, as Claude Code does. Each takes one option or several, and the last row takes your own words; Esc paints Claude's guess instead, Ctrl+C cancels. Off with `/config` or `SEPIA_ASK=off`.
@@ -315,7 +317,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Yigtwxx/sepia/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/Yigtwxx/sepia/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/Yigtwxx/sepia/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/Yigtwxx/sepia/compare/v0.3.1...v0.3.2

@@ -76,7 +76,7 @@ export const settings: readonly { name: string; value: string; what: string }[] 
     { name: 'SEPIA_ASK', value: 'on', what: 'let Claude ask about a vague request first' },
 ];
 
-export const version = '0.3.4';
+export const version = '0.4.0';
 export const repo = 'https://github.com/Yigtwxx/sepia';
 export const pypi = 'https://pypi.org/project/sepia-cli/';
 
