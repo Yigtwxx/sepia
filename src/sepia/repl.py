@@ -1,5 +1,6 @@
 """The prompt window: read requests, direct them, paint them, show them."""
 
+import contextlib
 import os
 import queue
 import shutil
@@ -1052,13 +1053,14 @@ def run_repl() -> int:
     release_file = config_dir() / "update.json"
     latest = update.notice(release_file) if settings.update_check else ""
     if settings.update_check:
+
+        def refresh() -> None:
+            # A convenience must not draw a traceback over the prompt window.
+            with contextlib.suppress(Exception):
+                update.refresh_release(release_file)
+
         # The answer shows on the next start; this one never waits for PyPI.
-        threading.Thread(
-            target=update.refresh_release,
-            args=(release_file,),
-            name="sepia-release",
-            daemon=True,
-        ).start()
+        threading.Thread(target=refresh, name="sepia-release", daemon=True).start()
     repl = Repl(
         console,
         words,

@@ -728,7 +728,7 @@ def test_repl_config_turns_update_notices_off_and_remembers_it(
     rig: Rig, terminal
 ) -> None:
     keys, _ = terminal
-    keys.send_text(f"{DOWN}{DOWN} ")
+    keys.send_text(f"{DOWN}{DOWN} \x1b")
     rig.say("/config")
     assert rig.repl.update_check is False, "Update notices must be off"
     assert _choices()["update_check"] is False, f"Kept {_choices()}"
