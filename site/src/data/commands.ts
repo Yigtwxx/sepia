@@ -73,6 +73,7 @@ export const settings: readonly { name: string; value: string; what: string }[] 
     { name: 'SEPIA_STYLE', value: 'ink', what: 'ink or fill' },
     { name: 'SEPIA_CHARSET', value: 'classic', what: 'classic or symbols' },
     { name: 'SEPIA_MATURE', value: 'off', what: 'start with mature pictures on or off' },
+    { name: 'SEPIA_ASK', value: 'on', what: 'let Claude ask about a vague request first' },
 ];
 
 export const version = '0.3.4';

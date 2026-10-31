@@ -160,7 +160,7 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | `SEPIA_ASK` | `on` | Let Claude ask about a vague request before painting (`on` or `off`). `/config` changes it while sepia runs. |
 | `SEPIA_IMAGE_MODEL` | `black-forest-labs/FLUX.2-klein-4B` | Hugging Face id of the local model. |
 
-An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE`, `SEPIA_CHARSET` or `SEPIA_MATURE` stops sepia at startup. So does setting only one of `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
+An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE`, `SEPIA_CHARSET`, `SEPIA_MATURE` or `SEPIA_ASK` stops sepia at startup. So does setting only one of `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
 
 What you pick with `/model`, `/effort`, `/style`, `/charset`, `/mature`, `/config`, `/api` or `/local` is kept in `choices.json` in the user config folder, and the next sepia starts with it. A kept choice wins over its `SEPIA_*` variable, which only sets what you have never picked; delete the file to start from the variables again. sepia starts with Cloudflare until you pick `/local`.
 
