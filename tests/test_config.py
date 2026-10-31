@@ -50,7 +50,8 @@ def test_load_settings_mature_switch_sets_mature(value: str, expected: bool) -> 
 
 
 @pytest.mark.parametrize(
-    "name", ["SEPIA_EFFORT", "SEPIA_STYLE", "SEPIA_CHARSET", "SEPIA_MATURE"]
+    "name",
+    ["SEPIA_EFFORT", "SEPIA_STYLE", "SEPIA_CHARSET", "SEPIA_MATURE", "SEPIA_ASK"],
 )
 def test_load_settings_unknown_choice_raises_config_error(name: str) -> None:
     with pytest.raises(ConfigError, match=name):
@@ -171,3 +172,19 @@ def test_load_settings_without_choices_paints_with_the_api() -> None:
 )
 def test_search_key_is_optional(environ: dict[str, str], expected) -> None:
     assert search_key(environ) == expected, f"Expected {expected!r}"
+
+
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [({}, True), ({"SEPIA_ASK": " OFF "}, False), ({"SEPIA_ASK": "on"}, True)],
+)
+def test_load_settings_ask_switch_sets_clarifying_questions(
+    environ: dict[str, str], expected: bool
+) -> None:
+    settings = load_settings(environ)
+    assert settings.ask is expected, f"{environ}: got {settings}"
+
+
+def test_load_settings_kept_ask_choice_wins_over_the_environment() -> None:
+    settings = load_settings({"SEPIA_ASK": "on"}, Choices(ask=False))
+    assert settings.ask is False, f"The kept choice must win, got {settings}"
