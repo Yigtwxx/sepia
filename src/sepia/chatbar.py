@@ -75,6 +75,7 @@ class BottomBar:
         self._rows = rows
         self._extra = 0
         """Rows above the bar lent to the command menu."""
+        self._held: Sequence[str] | None = None
 
     def start(self) -> None:
         """Set the region; this also homes the cursor, where the transcript begins."""
@@ -89,9 +90,19 @@ class BottomBar:
 
     def hold(self, rows: Sequence[str]) -> None:
         """Draw a still copy of the bar on its rows, one finished row at a time."""
+        self._held = list(rows)
         top = self._top()
         for offset, row in enumerate(rows):
             self._write(f"\x1b[{top + offset};1H\x1b[2K{row}")
+
+    def redraw(self) -> None:
+        """Draw the rows last given to `hold` again, leaving the transcript
+        cursor where it was; for after something erased the screen below it."""
+        if self._held is None:
+            return
+        self._write(self.SAVE)
+        self.hold(self._held)
+        self._write(self.RESTORE)
 
     def to_transcript(self) -> None:
         self._write(self.RESTORE)

@@ -66,7 +66,7 @@ All four checks must pass. CI runs them on Windows and macOS without the local e
 
 ## Conventions
 
-- Code, identifiers and comments in English. User-facing strings go in `ui.STRINGS` for both `en` and `tr`.
+- Code, identifiers and comments in English. User-facing strings go in `ui.STRINGS` (English only).
 - Full type annotations; mypy strict on `src/`. ruff formats at 88 columns.
 - Prompts for Claude live in `src/sepia/prompts/`, never inline in code.
 - Secrets only from the environment or `.env` files. Never hardcode, print or log a key. Never open or read `.env`.

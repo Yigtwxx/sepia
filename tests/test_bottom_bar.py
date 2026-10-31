@@ -48,3 +48,20 @@ def test_bottom_bar_hold_draws_each_row_on_the_bar_rows() -> None:
     top = 30 - BAR_ROWS + 1
     expected = [f"\x1b[{top + i};1H\x1b[2K{row}" for i, row in enumerate("abcd")]
     assert written == expected, f"Expected {expected}, got {written}"
+
+
+def test_bottom_bar_redraw_repeats_the_held_rows_around_a_cursor_save() -> None:
+    bar, written = _bar(rows=30)
+    bar.hold(["a", "b"])
+    written.clear()
+    bar.redraw()
+    top = 30 - BAR_ROWS + 1
+    expected = ["7"] + [f"[{top + i};1H[2K{row}" for i, row in enumerate("ab")]
+    expected.append("8")
+    assert written == expected, f"Expected {expected}, got {written}"
+
+
+def test_bottom_bar_redraw_before_any_hold_writes_nothing() -> None:
+    bar, written = _bar()
+    bar.redraw()
+    assert written == [], f"Nothing was held, yet wrote {written}"

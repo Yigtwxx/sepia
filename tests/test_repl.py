@@ -687,6 +687,23 @@ def test_repl_cancelled_questions_paint_nothing_and_keep_the_scene(
     assert "Cancelled, nothing painted" in rig.printed(), rig.printed()
 
 
+def test_repl_failed_second_call_shows_the_error_and_paints_nothing(
+    rig: Rig, terminal
+) -> None:
+    keys, _ = terminal
+    rig.repl.director.ask = True
+    stream = rig.client.beta.messages.stream.return_value.__enter__.return_value
+    stream.get_final_message.side_effect = [
+        rig.make_message({**PLAIN_REPLY, **VAGUE}),
+        rig.make_message({}, stop_reason="refusal"),
+    ]
+    keys.send_text("2")
+    rig.say("universe")
+    assert rig.local.calls == [], "Nothing may be painted after the failure"
+    assert rig.repl.scene.is_empty, "The scene must stay empty"
+    assert "declined" in rig.printed(), rig.printed()
+
+
 def test_repl_config_flips_both_switches_and_remembers_them(rig: Rig, terminal) -> None:
     keys, _ = terminal
     keys.send_text(f"\r{DOWN} \x1b")
@@ -1363,10 +1380,12 @@ def test_repl_keys_anthropic_replaces_the_director_and_keeps_its_settings(
     keys.send_text("sk-new\r")
     old = rig.repl.director
     old.model, old.effort, old.mature = "claude-opus-5-5", "low", True
+    old.ask = True
     rig.say("/keys anthropic")
     new = rig.repl.director
     assert new is not old, "The director needs the new key's client"
     assert (new.model, new.effort, new.mature) == ("claude-opus-5-5", "low", True)
+    assert new.ask is True, "Clarifying questions must survive /keys"
     assert "ANTHROPIC_API_KEY=sk-new" in env_file.read_text(encoding="utf-8")
 
 

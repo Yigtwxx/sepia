@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from rich.cells import cell_len
 from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
@@ -309,12 +310,12 @@ def reply(message: str, detail: str = "", *, failed: bool = False) -> Text:
 def answers(rows: Sequence[tuple[str, str]]) -> Text:
     """The answers to Claude's questions, kept under the request: a muted line per
     question, headers padded to one width."""
-    width = max(len(header) for header, _ in rows)
+    width = max(cell_len(header) for header, _ in rows)
     text = Text(style=MUTED)
     for index, (header, answer) in enumerate(rows):
         if index:
             text.append("\n")
-        text.append(f"   · {header.ljust(width)}  {answer}")
+        text.append(f"   · {header}{' ' * (width - cell_len(header))}  {answer}")
     return text
 
 

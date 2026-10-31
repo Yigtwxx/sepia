@@ -477,7 +477,11 @@ class Repl:
         if key is not None:
             director = self.director
             self.director = Director(
-                create_client(key), director.model, director.effort, director.mature
+                create_client(key),
+                director.model,
+                director.effort,
+                mature=director.mature,
+                ask=director.ask,
             )
         try:
             cloudflare = cloudflare_key()
@@ -808,6 +812,7 @@ class Repl:
         them (Claude's guess paints), None when they cancelled the request. The
         spinner's clock starts again once they are done."""
         asked = ask_questions(direction.questions, self.words)
+        self.bar.redraw()  # the menu erased the bar below it
         if asked.cancelled:
             self.transcript.say(ui.reply(self.words("questions_cancelled")))
             return None
