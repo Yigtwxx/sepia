@@ -23,6 +23,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="download the local image model (about 16 GB) used when the API fails",
     )
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=["update"],
+        help="update: upgrade sepia to the latest release",
+    )
     # Internal: the picture window runs `sepia --viewer <session file>`.
     parser.add_argument("--viewer", type=Path, help=argparse.SUPPRESS)
     return parser
@@ -31,10 +37,20 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     _use_utf8()
     args = build_parser().parse_args(argv)
+    from sepia.update import clear_old_launcher
+
+    clear_old_launcher()
     if args.viewer is not None:
         from sepia.viewer import run_viewer
 
         return run_viewer(args.viewer)
+    if args.command == "update":
+        from rich.console import Console
+
+        from sepia import ui
+        from sepia.update import run_update
+
+        return run_update(Console(highlight=False), ui.Words())
     if args.download:
         from sepia.painter import PainterError, download_local_model
 

@@ -65,6 +65,18 @@ def wordmark() -> Text:
 
 
 STRINGS: dict[str, str] = {
+    "update_found": "sepia {latest} is out (you have {current})",
+    "update_latest": "sepia {version} is the latest version",
+    "update_offline": "Could not reach PyPI; trying the update anyway",
+    "update_source": "sepia is installed from {source}, not PyPI: update it there "
+    "(git pull)",
+    "update_close": "Close the other sepia windows first ({count} still open), then "
+    "run sepia update again",
+    "update_missing": "{tool} is not on PATH; run this yourself: {command}",
+    "update_failed": "The update failed; the message above says why. Try again with: "
+    "{command}",
+    "update_done": "Updated to sepia {version}",
+    "update_done_unknown": "Updated to the latest sepia",
     "welcome": "Welcome to sepia",
     "tagline": "draw with words",
     "window": "pictures open in a second window",

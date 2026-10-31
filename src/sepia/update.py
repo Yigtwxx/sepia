@@ -3,14 +3,18 @@
 It finds how sepia was installed, asks that installer to upgrade it, and checks
 PyPI for a newer version. On Windows a running program locks the compiled
 modules it has loaded while an upgrade replaces them, so this module imports
-only the standard library and `sepia` itself.
+only the standard library, rich and `sepia` (`__version__`, `ui`), never
+`sepia.config`, pydantic, numpy or Pillow.
 """
 
 import contextlib
+import http.client
 import importlib.metadata
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tomllib
 import urllib.request
@@ -20,7 +24,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-from sepia import __version__
+from rich.console import Console
+from rich.text import Text
+
+from sepia import __version__, ui
 
 PACKAGE = "sepia-cli"
 PYPI_URL = f"https://pypi.org/pypi/{PACKAGE}/json"
@@ -32,6 +39,8 @@ MAX_ANSWER = 2_000_000
 """Bytes read from PyPI's answer, which lists every release."""
 OLD = ".old"
 """Added to the running launcher's name while an upgrade replaces it."""
+PROCESS_SECONDS = 20.0
+"""How long counting the other sepia processes may take."""
 SOURCE_KEYS = ("editable", "directory", "path", "git", "url")
 """Keys of a uv requirement that comes from somewhere other than PyPI."""
 
@@ -83,7 +92,8 @@ def _uv_install(receipt: Path, launcher: Path | None) -> Install:
         data = tomllib.loads(receipt.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
         data = {}
-    tool: dict[str, Any] = data.get("tool", {})
+    found = data.get("tool")
+    tool: dict[str, Any] = found if isinstance(found, dict) else {}
     requirement = _named(tool.get("requirements", []), PACKAGE)
     for key in SOURCE_KEYS:
         if requirement.get(key):
@@ -156,7 +166,7 @@ def latest_release(timeout: float = CHECK_SECONDS) -> str | None:
     try:
         with urllib.request.build_opener().open(request, timeout=timeout) as reply:
             data = json.loads(reply.read(MAX_ANSWER))
-    except (OSError, ValueError):
+    except (OSError, ValueError, http.client.HTTPException):
         return None
     info = data.get("info") if isinstance(data, dict) else None
     version = info.get("version") if isinstance(info, dict) else None
@@ -167,9 +177,12 @@ def cached_release(path: Path) -> Release | None:
     """The last answer kept in `path`; None when there is none or it is unreadable."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return Release(str(data["latest"]), datetime.fromisoformat(data["checked"]))
+        checked = datetime.fromisoformat(data["checked"])
+        latest = str(data["latest"])
     except (OSError, ValueError, KeyError, TypeError):
         return None
+    # An aware time cannot be compared with the naive local one.
+    return Release(latest, checked) if checked.tzinfo is None else None
 
 
 def refresh_release(
@@ -206,3 +219,96 @@ def clear_old_launcher(argv0: str | None = None) -> None:
     if launcher is not None:
         with contextlib.suppress(OSError):
             launcher.with_name(launcher.name + OLD).unlink(missing_ok=True)
+
+
+def run_update(
+    console: Console, words: ui.Words, install: Install | None = None
+) -> int:
+    """`sepia update`: upgrade with the installer that installed sepia, in this
+    terminal. Returns the exit code to leave with."""
+    found = install if install is not None else find_install()
+    if found.method == "source":
+        console.print(ui.reply(words("update_source", source=found.source)))
+        return 0
+    latest = latest_release()
+    if latest is None:
+        console.print(ui.reply(words("update_offline")))
+    elif not is_newer(latest):
+        console.print(ui.reply(words("update_latest", version=__version__)))
+        return 0
+    else:
+        found_text = words("update_found", latest=latest, current=__version__)
+        console.print(ui.reply(found_text))
+    command = " ".join(found.command)
+    others = others_running()
+    if others:
+        console.print(ui.reply(words("update_close", count=others), failed=True))
+        return 1
+    tool = shutil.which(found.command[0])
+    if tool is None:
+        missing = words("update_missing", tool=found.command[0], command=command)
+        console.print(ui.reply(missing, failed=True))
+        return 1
+    console.print(Text(f"   {command}", style=ui.MUTED))
+    code = _upgrade([tool, *found.command[1:]], found.launcher)
+    if code:
+        console.print(ui.reply(words("update_failed", command=command), failed=True))
+        return code
+    done = (
+        words("update_done", version=latest) if latest else words("update_done_unknown")
+    )
+    console.print(ui.reply(done))
+    return 0
+
+
+def others_running(python: str | None = None) -> int:
+    """How many other sepia processes run from this install (prompt or picture
+    windows), whose loaded modules would block an upgrade. Windows only; 0 when
+    they cannot be counted."""
+    if sys.platform != "win32":
+        return 0
+    exe = (python or sys.executable).replace("'", "''")
+    script = (
+        "Get-CimInstance Win32_Process | "
+        f"Where-Object {{ $_.ExecutablePath -eq '{exe}' }} | "
+        "ForEach-Object { $_.ProcessId }"
+    )
+    try:
+        found = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=PROCESS_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    ids = {int(word) for word in found.stdout.split() if word.isdigit()}
+    # This sepia shows up as itself and, in a venv, as the launcher that started it.
+    return len(ids - {os.getpid(), os.getppid()})
+
+
+def _upgrade(command: list[str], launcher: Path | None) -> int:
+    """Run the installer. On Windows the running launcher is moved aside first,
+    so the installer can write a new one; it comes back if none was written."""
+    moving = launcher if sys.platform == "win32" else None
+    aside = _move_aside(moving) if moving is not None else None
+    try:
+        code = subprocess.run(command, check=False).returncode
+    except OSError:
+        code = 1
+    if aside is not None and moving is not None and not moving.exists():
+        with contextlib.suppress(OSError):
+            aside.replace(moving)
+    return code
+
+
+def _move_aside(launcher: Path) -> Path | None:
+    """Rename the running `launcher`, which Windows allows; None when it cannot."""
+    aside = launcher.with_name(launcher.name + OLD)
+    try:
+        aside.unlink(missing_ok=True)
+        launcher.replace(aside)
+    except OSError:
+        return None
+    return aside

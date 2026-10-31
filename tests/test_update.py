@@ -1,11 +1,16 @@
+import http.client
+import io
 import json
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from rich.console import Console
 
-from sepia import __version__, update
+from sepia import __version__, ui, update
 from sepia.update import (
     PACKAGE,
     PYPI_URL,
@@ -17,7 +22,9 @@ from sepia.update import (
     is_newer,
     latest_release,
     notice,
+    others_running,
     refresh_release,
+    run_update,
 )
 
 UV_COMMAND = ("uv", "tool", "upgrade", PACKAGE)
@@ -198,3 +205,211 @@ def test_clear_old_launcher_deletes_the_moved_launcher_only(tmp_path: Path) -> N
     clear_old_launcher(str(exe))
     assert not old.exists(), "The old launcher must be deleted"
     assert exe.read_bytes() == b"new", "The launcher itself must stay"
+
+
+def test_latest_release_incomplete_read_is_none(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    import urllib.request
+    from unittest.mock import MagicMock
+
+    reply = MagicMock()
+    reply.__enter__.return_value = reply
+    reply.read.side_effect = http.client.IncompleteRead(b"")
+    opener = MagicMock()
+    opener.open.return_value = reply
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *handlers: opener)
+    assert latest_release() is None, "A cut-off answer must read as no answer"
+
+
+def test_find_install_uv_receipt_with_a_non_table_tool_still_upgrades_with_uv(
+    tmp_path: Path,
+) -> None:
+    found = _find(_receipt(tmp_path, 'tool = "x"\n'))
+    assert found.method == "uv", f"Got {found}"
+    assert found.command == UV_COMMAND, f"Got {found}"
+
+
+def test_cached_release_timezone_aware_timestamp_is_none(tmp_path: Path) -> None:
+    path = tmp_path / "update.json"
+    record = {"latest": "99.0.0", "checked": "2026-10-31T12:00:00+00:00"}
+    path.write_text(json.dumps(record), encoding="utf-8")
+    assert cached_release(path) is None, "An aware time cannot be compared"
+
+
+class Runner:
+    """Stands in for `subprocess.run`: records each command, answers PowerShell's
+    process list with `pids` and the installer with `code`, and can write a new
+    launcher as an installer would."""
+
+    def __init__(self, code: int = 0, pids: str = "", writes: Path | None = None):
+        self.code, self.pids, self.writes = code, pids, writes
+        self.calls: list[list[str]] = []
+
+    def __call__(self, command: list[str], **kwargs: object) -> SimpleNamespace:
+        self.calls.append(list(command))
+        if command[0] == "powershell":
+            return SimpleNamespace(returncode=0, stdout=self.pids)
+        if self.writes is not None:
+            self.writes.write_bytes(b"new launcher")
+        return SimpleNamespace(returncode=self.code, stdout="")
+
+
+def _rig(
+    monkeypatch: pytest.MonkeyPatch,
+    web,
+    runner: Runner,
+    platform: str = "darwin",
+    latest: str | None = "99.0.0",
+    tools: bool = True,
+) -> io.StringIO:
+    """PyPI naming `latest`, `runner` as subprocess, uv on PATH unless not
+    `tools`, and `platform` as the system; returns what is printed."""
+    if latest is not None:
+        body = json.dumps({"info": {"version": latest}}).encode()
+        web[PYPI_URL] = (body, "application/json")
+    monkeypatch.setattr(update.subprocess, "run", runner)
+    monkeypatch.setattr(
+        update.shutil, "which", lambda name: f"/bin/{name}" if tools else None
+    )
+    monkeypatch.setattr(update.sys, "platform", platform)
+    return io.StringIO()
+
+
+def _update(out: io.StringIO, install: Install) -> int:
+    console = Console(file=out, width=200, color_system=None)
+    return run_update(console, ui.Words(), install)
+
+
+UV = Install("uv", UV_COMMAND)
+
+
+def test_run_update_already_latest_says_so_and_runs_nothing(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    runner = Runner()
+    out = _rig(monkeypatch, web, runner, latest=__version__)
+    code = _update(out, UV)
+    assert code == 0, f"Exit code {code}"
+    assert f"sepia {__version__} is the latest version" in out.getvalue(), (
+        out.getvalue()
+    )
+    assert runner.calls == [], f"Nothing may run, ran {runner.calls}"
+
+
+def test_run_update_newer_release_runs_the_installer(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    runner = Runner()
+    out = _rig(monkeypatch, web, runner)
+    code = _update(out, UV)
+    printed = out.getvalue()
+    assert code == 0, f"Exit code {code}"
+    assert runner.calls == [["/bin/uv", "tool", "upgrade", PACKAGE]], runner.calls
+    for piece in (
+        "sepia 99.0.0 is out",
+        "uv tool upgrade sepia-cli",
+        "Updated to sepia 99.0.0",
+    ):
+        assert piece in printed, f"{piece!r} missing from {printed!r}"
+
+
+def test_run_update_source_install_says_where_and_runs_nothing(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    runner = Runner()
+    out = _rig(monkeypatch, web, runner)
+    code = _update(out, Install("source", source="C:/src/sepia"))
+    assert code == 0, f"Exit code {code}"
+    assert "installed from C:/src/sepia, not PyPI" in out.getvalue(), out.getvalue()
+    assert runner.calls == [], f"Nothing may run, ran {runner.calls}"
+
+
+def test_run_update_pypi_unreachable_still_runs_the_installer(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    runner = Runner()
+    out = _rig(monkeypatch, web, runner, latest=None)
+    code = _update(out, UV)
+    printed = out.getvalue()
+    assert code == 0, f"Exit code {code}"
+    assert "Could not reach PyPI" in printed, printed
+    assert "Updated to the latest sepia" in printed, printed
+
+
+def test_run_update_other_windows_open_refuses_on_windows(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    runner = Runner(pids="111\n222\n")
+    out = _rig(monkeypatch, web, runner, platform="win32")
+    code = _update(out, UV)
+    assert code == 1, f"Exit code {code}"
+    assert "2 still open" in out.getvalue(), out.getvalue()
+    assert all(call[0] == "powershell" for call in runner.calls), runner.calls
+
+
+def test_run_update_installer_missing_names_the_command(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    runner = Runner()
+    out = _rig(monkeypatch, web, runner, tools=False)
+    code = _update(out, UV)
+    assert code == 1, f"Exit code {code}"
+    expected = "uv is not on PATH; run this yourself: uv tool upgrade sepia-cli"
+    assert expected in out.getvalue(), out.getvalue()
+    assert runner.calls == [], f"Nothing may run, ran {runner.calls}"
+
+
+def test_run_update_installer_failure_returns_its_code(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    runner = Runner(code=2)
+    out = _rig(monkeypatch, web, runner)
+    code = _update(out, UV)
+    assert code == 2, f"The installer's code must come back, got {code}"
+    assert "The update failed" in out.getvalue(), out.getvalue()
+
+
+def test_run_update_on_windows_moves_the_running_launcher_aside(
+    monkeypatch: pytest.MonkeyPatch, web, tmp_path: Path
+) -> None:
+    exe = tmp_path / "sepia.exe"
+    exe.write_bytes(b"old launcher")
+    runner = Runner(writes=exe)
+    out = _rig(monkeypatch, web, runner, platform="win32")
+    code = _update(out, Install("uv", UV_COMMAND, exe))
+    assert code == 0, f"Exit code {code}"
+    assert exe.read_bytes() == b"new launcher", "The installer's launcher must stay"
+    old = tmp_path / "sepia.exe.old"
+    assert old.read_bytes() == b"old launcher", "The running one waits beside it"
+
+
+def test_run_update_on_windows_puts_the_launcher_back_when_none_was_written(
+    monkeypatch: pytest.MonkeyPatch, web, tmp_path: Path
+) -> None:
+    exe = tmp_path / "sepia.exe"
+    exe.write_bytes(b"old launcher")
+    runner = Runner(code=1)
+    out = _rig(monkeypatch, web, runner, platform="win32")
+    _update(out, Install("uv", UV_COMMAND, exe))
+    assert exe.read_bytes() == b"old launcher", "The launcher must come back"
+    assert not (tmp_path / "sepia.exe.old").exists(), "Nothing may be left aside"
+
+
+def test_others_running_off_windows_asks_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = Runner(pids="111")
+    monkeypatch.setattr(update.subprocess, "run", runner)
+    monkeypatch.setattr(update.sys, "platform", "darwin")
+    assert others_running() == 0, "Only Windows locks running files"
+    assert runner.calls == [], f"Nothing may run, ran {runner.calls}"
+
+
+def test_others_running_leaves_out_this_process_and_its_parent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = Runner(pids=f"{os.getpid()}\n{os.getppid()}\n999\n")
+    monkeypatch.setattr(update.subprocess, "run", runner)
+    monkeypatch.setattr(update.sys, "platform", "win32")
+    assert others_running("C:/tools/python.exe") == 1, "Only process 999 is another"

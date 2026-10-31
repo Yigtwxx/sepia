@@ -120,3 +120,19 @@ def test_main_stream_that_refuses_utf8_does_not_stop_startup(
     monkeypatch.setattr("sepia.repl.run_repl", lambda: 5)
     assert main([]) == 5, "A failing reconfigure must be ignored"
     assert err.encodings == ["utf-8"], "The other stream must still be switched"
+
+
+def test_main_update_command_runs_the_update(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sepia.update.run_update", lambda console, words: 5)
+    monkeypatch.setattr("sepia.repl.run_repl", lambda: pytest.fail("prompt ran"))
+    assert main(["update"]) == 5, "The update's exit code must come back"
+
+
+def test_main_clears_an_old_launcher_on_every_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cleared: list[bool] = []
+    monkeypatch.setattr("sepia.update.clear_old_launcher", lambda: cleared.append(True))
+    monkeypatch.setattr("sepia.repl.run_repl", lambda: 0)
+    main([])
+    assert cleared == [True], "The old launcher must be cleared at start"
