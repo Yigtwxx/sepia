@@ -13,12 +13,13 @@ import importlib.metadata
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tomllib
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -239,7 +240,7 @@ def run_update(
     else:
         found_text = words("update_found", latest=latest, current=__version__)
         console.print(ui.reply(found_text))
-    command = " ".join(found.command)
+    command = _shown(found.command)
     others = others_running()
     if others:
         console.print(ui.reply(words("update_close", count=others), failed=True))
@@ -250,7 +251,10 @@ def run_update(
         console.print(ui.reply(missing, failed=True))
         return 1
     console.print(Text(f"   {command}", style=ui.MUTED))
-    code = _upgrade([tool, *found.command[1:]], found.launcher)
+    code, error = _upgrade([tool, *found.command[1:]], found.launcher)
+    if error:
+        started = words("update_not_started", tool=found.command[0], error=error)
+        console.print(ui.reply(started, failed=True))
     if code:
         console.print(ui.reply(words("update_failed", command=command), failed=True))
         return code
@@ -288,19 +292,27 @@ def others_running(python: str | None = None) -> int:
     return len(ids - {os.getpid(), os.getppid()})
 
 
-def _upgrade(command: list[str], launcher: Path | None) -> int:
-    """Run the installer. On Windows the running launcher is moved aside first,
-    so the installer can write a new one; it comes back if none was written."""
+def _upgrade(command: list[str], launcher: Path | None) -> tuple[int, str]:
+    """Run the installer; returns its exit code and, when it could not start, why.
+    On Windows the running launcher is moved aside first, so the installer can
+    write a new one; it comes back if none was written, even on Ctrl+C."""
     moving = launcher if sys.platform == "win32" else None
     aside = _move_aside(moving) if moving is not None else None
     try:
-        code = subprocess.run(command, check=False).returncode
-    except OSError:
-        code = 1
-    if aside is not None and moving is not None and not moving.exists():
-        with contextlib.suppress(OSError):
-            aside.replace(moving)
-    return code
+        return subprocess.run(command, check=False).returncode, ""
+    except OSError as exc:
+        return 1, str(exc)
+    finally:
+        if aside is not None and moving is not None and not moving.exists():
+            with contextlib.suppress(OSError):
+                aside.replace(moving)
+
+
+def _shown(command: Sequence[str]) -> str:
+    """`command` as one line that can be pasted into this system's shell."""
+    if sys.platform == "win32":
+        return subprocess.list2cmdline(list(command))
+    return shlex.join(command)
 
 
 def _move_aside(launcher: Path) -> Path | None:

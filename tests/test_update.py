@@ -413,3 +413,60 @@ def test_others_running_leaves_out_this_process_and_its_parent(
     monkeypatch.setattr(update.subprocess, "run", runner)
     monkeypatch.setattr(update.sys, "platform", "win32")
     assert others_running("C:/tools/python.exe") == 1, "Only process 999 is another"
+
+
+class Interrupted(Runner):
+    """An installer that Ctrl+C stops."""
+
+    def __call__(self, command: list[str], **kwargs: object) -> SimpleNamespace:
+        if command[0] != "powershell":
+            raise KeyboardInterrupt
+        return super().__call__(command, **kwargs)
+
+
+class Unstartable(Runner):
+    """An installer that cannot be started."""
+
+    def __call__(self, command: list[str], **kwargs: object) -> SimpleNamespace:
+        raise OSError("access denied")
+
+
+def test_run_update_interrupted_on_windows_puts_the_launcher_back(
+    monkeypatch: pytest.MonkeyPatch, web, tmp_path: Path
+) -> None:
+    exe = tmp_path / "sepia.exe"
+    exe.write_bytes(b"old launcher")
+    out = _rig(monkeypatch, web, Interrupted(), platform="win32")
+    with pytest.raises(KeyboardInterrupt):
+        _update(out, Install("uv", UV_COMMAND, exe))
+    assert exe.read_bytes() == b"old launcher", "The launcher must come back"
+    assert not (tmp_path / "sepia.exe.old").exists(), "Nothing may be left aside"
+
+
+def test_run_update_installer_that_cannot_start_says_why(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    out = _rig(monkeypatch, web, Unstartable())
+    code = _update(out, UV)
+    assert code == 1, f"Exit code {code}"
+    assert "Could not start uv: access denied" in out.getvalue(), out.getvalue()
+
+
+def test_run_update_pip_command_with_spaces_is_quoted_for_pasting(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    runner = Runner(code=1)
+    out = _rig(monkeypatch, web, runner, platform="win32")
+    pip = Install("pip", ("C:/My Tools/python.exe", "-m", "pip"))
+    _update(out, pip)
+    assert '"C:/My Tools/python.exe" -m pip' in out.getvalue(), out.getvalue()
+
+
+def test_others_running_quotes_a_python_path_with_an_apostrophe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = Runner()
+    monkeypatch.setattr(update.subprocess, "run", runner)
+    monkeypatch.setattr(update.sys, "platform", "win32")
+    others_running("C:/o'brien/python.exe")
+    assert "'C:/o''brien/python.exe'" in runner.calls[0][-1], runner.calls

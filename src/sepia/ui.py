@@ -75,6 +75,7 @@ STRINGS: dict[str, str] = {
     "update_missing": "{tool} is not on PATH; run this yourself: {command}",
     "update_failed": "The update failed; the message above says why. Try again with: "
     "{command}",
+    "update_not_started": "Could not start {tool}: {error}",
     "update_done": "Updated to sepia {version}",
     "update_done_unknown": "Updated to the latest sepia",
     "welcome": "Welcome to sepia",
