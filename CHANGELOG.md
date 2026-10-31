@@ -10,9 +10,11 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-31
+
 ### Added
 
-- `sepia update` upgrades sepia with the installer that installed it (uv, pipx or pip), keeping extras such as `[local]`. On Windows it renames the running `sepia.exe` first, since an installer cannot overwrite a running program, and asks to close sepia's other windows.
+- `sepia update` upgrades sepia with the installer that installed it (uv, pipx or pip); uv keeps extras such as `[local]` and the CUDA index. On Windows it renames the running `sepia.exe` first, since an installer cannot overwrite a running program, and asks to close sepia's other windows.
 - On start sepia says when a newer release is out; it checks PyPI at most once a day in the background. Off with `/config` (Update notices) or `SEPIA_UPDATE_CHECK=off`.
 
 ## [0.4.0] - 2026-10-31
@@ -322,7 +324,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Yigtwxx/sepia/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Yigtwxx/sepia/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/Yigtwxx/sepia/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/Yigtwxx/sepia/compare/v0.3.2...v0.3.3
