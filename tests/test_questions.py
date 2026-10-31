@@ -141,8 +141,8 @@ def test_ask_several_choices_keep_typed_words_beside_the_options(terminal) -> No
 
 def test_ask_escape_skips_with_no_answers(terminal) -> None:
     pipe, _ = terminal
-    pipe.send_text(f"{DOWN}\x1b")
-    assert _ask(SUBJECT, MOOD) == Asked(), "Esc must paint the guess"
+    pipe.send_text("2\x1b")  # picks "A black hole", moves to Mood, then Esc
+    assert _ask(SUBJECT, MOOD) == Asked(), "Esc discards the answers given"
 
 
 def test_ask_ctrl_c_cancels(terminal) -> None:
