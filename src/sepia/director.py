@@ -2,6 +2,7 @@
 
 import base64
 import io
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import cache
@@ -44,6 +45,12 @@ MAX_REFERENCES = 3
 """Links tried for a reference picture; the first usable one wins."""
 LINKED_SIDE = 1024
 """Longest side of a linked picture shown to Claude; more detail only costs tokens."""
+MAX_QUESTIONS = 3
+"""Questions asked about one request; more would feel like a form."""
+MAX_OPTIONS = 4
+"""Options per question, besides the person's own answer."""
+MAX_HEADER = 12
+"""Characters in a question's tab."""
 
 REPLY_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -77,6 +84,56 @@ REPLY_SCHEMA: dict[str, Any] = {
     "required": ["message", "prompt", "edit", "references", "subject", "show"],
     "additionalProperties": False,
 }
+_OPTION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "label": {"type": "string", "description": "One to five words."},
+        "description": {
+            "type": "string",
+            "description": "At most eight words on what the picture would show.",
+        },
+    },
+    "required": ["label", "description"],
+    "additionalProperties": False,
+}
+_QUESTION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "header": {
+            "type": "string",
+            "description": "One or two words, at most 12 characters.",
+        },
+        "question": {
+            "type": "string",
+            "description": "One short sentence ending in a question mark.",
+        },
+        "multi": {
+            "type": "boolean",
+            "description": "True when several answers combine well.",
+        },
+        "options": {
+            "type": "array",
+            "items": _OPTION_SCHEMA,
+            "description": "Two to four clearly different options.",
+        },
+    },
+    "required": ["header", "question", "multi", "options"],
+    "additionalProperties": False,
+}
+ASK_SCHEMA: dict[str, Any] = {
+    **REPLY_SCHEMA,
+    "properties": {
+        **REPLY_SCHEMA["properties"],
+        "questions": {
+            "type": "array",
+            "items": _QUESTION_SCHEMA,
+            "description": "One to three questions about a vague request; empty "
+            "when the request says what to paint.",
+        },
+    },
+    "required": [*REPLY_SCHEMA["required"], "questions"],
+}
+"""The reply while clarifying questions are on."""
 
 
 class Failure(StrEnum):
@@ -100,6 +157,18 @@ class DirectorError(Exception):
         self.failure = failure
 
 
+class _Option(BaseModel):
+    label: str = ""
+    description: str = ""
+
+
+class _Question(BaseModel):
+    header: str = ""
+    question: str = ""
+    multi: bool = False
+    options: list[_Option] = Field(default_factory=list)
+
+
 class _Reply(BaseModel):
     message: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
@@ -107,6 +176,33 @@ class _Reply(BaseModel):
     references: list[str] = Field(default_factory=list)
     subject: str = ""
     show: bool = False
+    questions: list[_Question] = Field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Option:
+    label: str
+    description: str
+
+
+@dataclass(frozen=True)
+class Question:
+    """One of Claude's questions about a vague request."""
+
+    header: str
+    """The question's tab: one or two words."""
+    text: str
+    multi: bool
+    """Several options can be picked together."""
+    options: tuple[Option, ...]
+
+
+@dataclass(frozen=True)
+class Answer:
+    header: str
+    question: str
+    choices: tuple[str, ...]
+    """Option labels and the person's own words, in the order shown."""
 
 
 @dataclass(frozen=True)
@@ -125,6 +221,8 @@ class Direction:
     """An image search query for the named subject, for `reference.find_subject`."""
     show: bool = False
     """Show the subject's picture as it is: the request was only its name."""
+    questions: tuple[Question, ...] = ()
+    """Asked before painting a vague new picture; `prompt` is the guess meanwhile."""
 
 
 def create_client(api_key: str) -> anthropic.Anthropic:
@@ -138,11 +236,13 @@ class Director:
         model: str,
         effort: Effort,
         mature: bool = False,
+        ask: bool = False,
     ) -> None:
         self._client = client
         self._model = model
         self._effort = effort
         self._mature = mature
+        self._ask = ask
 
     @property
     def model(self) -> str:
@@ -171,21 +271,39 @@ class Director:
         """Takes effect from the next request; /mature sets it while sepia waits."""
         self._mature = mature
 
+    @property
+    def ask(self) -> bool:
+        return self._ask
+
+    @ask.setter
+    def ask(self, ask: bool) -> None:
+        """Takes effect from the next request; /config sets it while sepia waits."""
+        self._ask = ask
+
     def direct(
-        self, request: str, scene: Scene, linked: Image.Image | None = None
+        self,
+        request: str,
+        scene: Scene,
+        linked: Image.Image | None = None,
+        answers: Sequence[Answer] = (),
     ) -> Direction:
         """Turn `request`, in the context of `scene`, into an image prompt.
 
         `linked` is a picture of the subject, linked by the person or found by
         sepia; Claude sees it, so it can write the subject's look into the prompt
-        without searching.
+        without searching. `answers` are the person's answers to Claude's
+        questions about this request. Questions come back only for a vague new
+        picture: never for /add, a reference picture, answers or a named subject.
         """
         output_config: BetaOutputConfigParam = {
             "effort": self._effort,
-            "format": {"type": "json_schema", "schema": REPLY_SCHEMA},
+            "format": {
+                "type": "json_schema",
+                "schema": ASK_SCHEMA if self._ask else REPLY_SCHEMA,
+            },
         }
         fallback = self._model in FALLBACK_MODELS
-        text = build_request(request, scene, linked=linked is not None)
+        text = build_request(request, scene, linked=linked is not None, answers=answers)
         content: str | list[BetaContentBlockParam] = text
         if linked is not None:
             content = [_image_block(linked), {"type": "text", "text": text}]
@@ -195,7 +313,7 @@ class Director:
                 max_tokens=MAX_TOKENS,
                 betas=[FALLBACK_BETA] if fallback else anthropic.omit,
                 fallbacks="default" if fallback else anthropic.omit,
-                system=system_prompt(self._mature),
+                system=system_prompt(self._mature, self._ask),
                 tools=[WEB_SEARCH],
                 output_config=output_config,
                 messages=[{"role": "user", "content": content}],
@@ -224,17 +342,28 @@ class Director:
         except ValidationError as exc:
             raise DirectorError(Failure.INVALID) from exc
         edit = reply.edit and not scene.is_empty
+        references = _links(reply.references)
+        subject = reply.subject.strip()
+        asks = (
+            self._ask
+            and scene.is_empty
+            and linked is None
+            and not answers
+            and not subject
+            and not references
+        )
         return Direction(
             message=reply.message.strip(),
             prompt=reply.prompt.strip(),
             edit=edit,
-            references=_links(reply.references),
+            references=references,
             model=message.model,
             searches=_searches(message.usage),
             input_tokens=message.usage.input_tokens,
             output_tokens=message.usage.output_tokens,
-            subject=reply.subject.strip(),
+            subject=subject,
             show=reply.show and not edit,
+            questions=_questions(reply.questions) if asks else (),
         )
 
 
@@ -263,15 +392,41 @@ def _links(raw: list[str]) -> tuple[str, ...]:
     return tuple(web[:MAX_REFERENCES])
 
 
+def _questions(raw: list[_Question]) -> tuple[Question, ...]:
+    """Claude's questions within sepia's limits; one that cannot be asked (no
+    text, fewer than two options) is dropped."""
+    kept: list[Question] = []
+    for item in raw:
+        options = tuple(
+            Option(option.label.strip(), option.description.strip())
+            for option in item.options
+            if option.label.strip()
+        )[:MAX_OPTIONS]
+        text = item.question.strip()
+        if not text or len(options) < 2:
+            continue
+        header = item.header.strip()[:MAX_HEADER].rstrip()
+        kept.append(
+            Question(header or f"Question {len(kept) + 1}", text, item.multi, options)
+        )
+    return tuple(kept[:MAX_QUESTIONS])
+
+
 @cache
-def system_prompt(mature: bool = False) -> str:
+def system_prompt(mature: bool = False, ask: bool = False) -> str:
     """The art director's instructions; `mature` adds the rules for grown-up
-    pictures."""
-    base = _prompt("director.md")
-    return f"{base}\n\n{_prompt('mature.md')}" if mature else base
+    pictures and `ask` the rules for clarifying questions."""
+    parts = [_prompt("director.md")]
+    if mature:
+        parts.append(_prompt("mature.md"))
+    if ask:
+        parts.append(_prompt("ask.md"))
+    return "\n\n".join(parts)
 
 
-def build_request(request: str, scene: Scene, linked: bool = False) -> str:
+def build_request(
+    request: str, scene: Scene, linked: bool = False, answers: Sequence[Answer] = ()
+) -> str:
     if scene.is_empty:
         history = (
             "<previous_requests>none: this is the first picture</previous_requests>"
@@ -287,8 +442,15 @@ def build_request(request: str, scene: Scene, linked: bool = False) -> str:
         if linked
         else ""
     )
+    given = ""
+    if answers:
+        lines = "\n".join(
+            f"{answer.header}: {answer.question} {'; '.join(answer.choices)}"
+            for answer in answers
+        )
+        given = f"\n<answers>\n{lines}\n</answers>"
     return Template(_prompt("request.md")).substitute(
-        history=history, linked=picture, request=request.strip()
+        history=history, linked=picture, request=request.strip(), answers=given
     )
 
 

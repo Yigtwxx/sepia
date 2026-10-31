@@ -9,12 +9,16 @@ import pytest
 from PIL import Image
 
 from sepia.director import (
+    ASK_SCHEMA,
     FALLBACK_BETA,
     LINKED_SIDE,
     REPLY_SCHEMA,
+    Answer,
     Director,
     DirectorError,
     Failure,
+    Option,
+    Question,
     build_request,
     system_prompt,
 )
@@ -306,3 +310,128 @@ def test_director_direct_never_shows_when_adding_to_a_picture(
     set_final_message(make_message(reply))
     direction = Director(fake_client, "m", "low").direct("yunara", _painted_scene())
     assert direction.show is False, "An addition must be painted, not shown"
+
+
+QUESTION = {
+    "header": "Subject",
+    "question": "What should it show?",
+    "multi": False,
+    "options": [
+        {"label": "A galaxy", "description": "spiral arms"},
+        {"label": "A black hole", "description": "a bright disk"},
+    ],
+}
+
+
+@pytest.mark.parametrize("ask", [False, True])
+def test_director_direct_sends_questions_schema_and_rules_only_when_asking(
+    fake_client: MagicMock, make_message, set_final_message, ask: bool
+) -> None:
+    set_final_message(make_message({**REPLY, "questions": []}))
+    Director(fake_client, "claude-haiku-5-5", "low", ask=ask).direct("evren", Scene())
+    kwargs = fake_client.beta.messages.stream.call_args.kwargs
+    schema = kwargs["output_config"]["format"]["schema"]
+    assert (schema is ASK_SCHEMA) is ask, f"ask={ask}: wrong schema"
+    has_rules = "Clarifying questions:" in kwargs["system"]
+    assert has_rules is ask, f"ask={ask}: rules in system prompt = {has_rules}"
+
+
+def test_ask_schema_requires_questions_on_top_of_the_reply() -> None:
+    assert "questions" in ASK_SCHEMA["required"], "questions must be required"
+    assert set(REPLY_SCHEMA["required"]) < set(ASK_SCHEMA["required"]), (
+        "Every reply field must stay required"
+    )
+    assert "questions" not in REPLY_SCHEMA["properties"], "The plain schema is today's"
+
+
+def test_director_direct_vague_request_returns_its_questions(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    set_final_message(make_message({**REPLY, "questions": [QUESTION]}))
+    director = Director(fake_client, "claude-haiku-5-5", "low", ask=True)
+    direction = director.direct("evren", Scene())
+    expected = (
+        Question(
+            "Subject",
+            "What should it show?",
+            False,
+            (
+                Option("A galaxy", "spiral arms"),
+                Option("A black hole", "a bright disk"),
+            ),
+        ),
+    )
+    assert direction.questions == expected, f"Got {direction.questions}"
+
+
+def test_director_direct_keeps_questions_within_the_limits(
+    fake_client: MagicMock, make_message, set_final_message
+) -> None:
+    six = [{"label": f" Option {i} ", "description": " d "} for i in range(6)]
+    long = {
+        "header": "  A very long header ",
+        "question": " Which one? ",
+        "multi": True,
+        "options": [{"label": "  ", "description": "no label"}, *six],
+    }
+    no_text = {**QUESTION, "question": "  "}
+    one_option = {**QUESTION, "options": QUESTION["options"][:1]}
+    no_header = {**QUESTION, "header": ""}
+    questions = [no_text, one_option, long, no_header, QUESTION, QUESTION]
+    set_final_message(make_message({**REPLY, "questions": questions}))
+    director = Director(fake_client, "claude-haiku-5-5", "low", ask=True)
+    asked = director.direct("evren", Scene()).questions
+    assert len(asked) == 3, f"At most three questions, got {len(asked)}"
+    first = asked[0]
+    assert first.header == "A very long", f"Header cut to 12, got {first.header!r}"
+    assert first.text == "Which one?", f"Text stripped, got {first.text!r}"
+    labels = [option.label for option in first.options]
+    assert labels == ["Option 0", "Option 1", "Option 2", "Option 3"], f"Got {labels}"
+    assert asked[1].header == "Question 2", f"Empty header, got {asked[1].header!r}"
+
+
+@pytest.mark.parametrize(
+    "case", ["off", "add", "linked", "answers", "subject", "references"]
+)
+def test_director_direct_drops_questions_when_it_should_not_ask(
+    fake_client: MagicMock, make_message, set_final_message, case: str
+) -> None:
+    reply: dict[str, object] = {**REPLY, "questions": [QUESTION]}
+    if case == "subject":
+        reply["subject"] = "Yunara League of Legends"
+    if case == "references":
+        reply["references"] = ["https://example.com/yunara"]
+    set_final_message(make_message(reply))
+    director = Director(fake_client, "claude-haiku-5-5", "low", ask=case != "off")
+    scene = _painted_scene() if case == "add" else Scene()
+    linked = Image.new("RGB", (4, 4)) if case == "linked" else None
+    answers = (Answer("Mood", "Which mood?", ("Calm",)),) if case == "answers" else ()
+    direction = director.direct("evren", scene, linked, answers)
+    assert direction.questions == (), f"{case}: questions must be dropped"
+
+
+def test_build_request_lists_the_answers_after_the_request() -> None:
+    answers = (
+        Answer("Subject", "What should it show?", ("A black hole",)),
+        Answer("Mood", "Which moods fit?", ("Calm", "a dying red star")),
+    )
+    text = build_request("universe", Scene(), answers=answers)
+    expected = (
+        "<request>universe</request>\n<answers>\n"
+        "Subject: What should it show? A black hole\n"
+        "Mood: Which moods fit? Calm; a dying red star\n</answers>"
+    )
+    assert expected in text, f"Answers missing from {text!r}"
+
+
+def test_build_request_without_answers_ends_with_the_request() -> None:
+    text = build_request("universe", Scene())
+    assert text.rstrip().endswith("<request>universe</request>"), f"Got {text!r}"
+
+
+def test_system_prompt_adds_mature_then_question_rules() -> None:
+    both = system_prompt(True, True)
+    mature_rules = system_prompt(True).removeprefix(system_prompt()).strip()
+    assert both.startswith(system_prompt()), "The base prompt comes first"
+    mature_at, ask_at = both.index(mature_rules), both.index("Clarifying questions:")
+    assert mature_at < ask_at, "mature.md comes before ask.md"
