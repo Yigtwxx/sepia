@@ -79,6 +79,8 @@ uv tool install "sepia-cli[cam]"
 
 Extras combine: `"sepia-cli[local,cam]"`.
 
+**Update.** `sepia update` upgrades sepia with the installer that installed it (`uv tool upgrade sepia-cli`, `pipx upgrade sepia-cli`, or `python -m pip install --upgrade sepia-cli`), keeping extras such as `[local]` and the CUDA index. It asks PyPI first and says so when sepia is already the latest. On Windows, close sepia's other windows first; `sepia update` says so if one is open. An install from a folder or a git checkout is updated there (`git pull`).
+
 Nothing is downloaded at install. The first `/local` names the model and its size (FLUX.2 [klein] 4B, about 16 GB from Hugging Face) and downloads it once you say yes. `sepia --download` fetches it ahead of time instead.
 
 ## Usage
@@ -99,7 +101,7 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/save` | Save the picture in the viewer window as a PNG in the `sepia` folder of your Pictures folder: its colored characters as the window shows them, without the tab bar or frame, named after the time. |
 | `/model [haiku\|sonnet\|opus\|fable]` | Which Claude writes the prompts, from the next request on: Haiku 5.5 (the default), Sonnet 5.5, Opus 5.5 or Fable 5.1. |
 | `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. |
-| `/config` | Turn clarifying questions and mature pictures on or off in one list. |
+| `/config` | Turn clarifying questions, mature pictures and update notices on or off in one list. |
 | `/mature [on\|off]` | Mature pictures; see [Mature mode](#mature-mode). Off by default. |
 | `/api` | Paint with Cloudflare Workers AI, and with the local model when it fails. Also makes sepia try Cloudflare again after a rate-limit pause or a used-up day; see [Painting backends](#painting-backends). |
 | `/local` | Paint only on this machine's GPU. The first time, it names the model and its size and downloads it once you say yes. Needs `sepia-cli[local]`. |
@@ -109,6 +111,10 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/exit` | Close sepia and the viewer window. `/quit`, `/q`, Ctrl+D and Ctrl+C twice do the same. |
 
 `/style`, `/charset`, `/model`, `/effort`, `/mature` and `/keys` without an argument open a menu: the arrow keys and Enter (or the option's number) pick, Esc cancels. `/config` lists the on/off settings: the arrow keys move, Enter or Space switches one, Esc closes. `/usage` opens a panel that Esc (or Enter) closes without leaving it in the transcript. Its session bar is drawn against the all-time total, so its gray rest is earlier use; use from before tracking began is estimated once from the prompt history and the saved sessions.
+
+### Update notice
+
+On start sepia says when a newer release is out, under the tip. It never waits for PyPI: it shows the answer kept from an earlier check, and checks again at most once a day in the background, so a new answer shows on the next start. `/config` → Update notices, or `SEPIA_UPDATE_CHECK=off`, turns it off.
 
 ### Clarifying questions
 
@@ -158,11 +164,12 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | `SEPIA_CHARSET` | `classic` | Starting character set: `classic` or `symbols`. |
 | `SEPIA_MATURE` | `off` | Start with mature pictures `on` or `off`. `/mature` changes it while sepia runs. |
 | `SEPIA_ASK` | `on` | Let Claude ask about a vague request before painting (`on` or `off`). `/config` changes it while sepia runs. |
+| `SEPIA_UPDATE_CHECK` | `on` | Say on start when a newer sepia is out (`on` or `off`). `/config` changes it. |
 | `SEPIA_IMAGE_MODEL` | `black-forest-labs/FLUX.2-klein-4B` | Hugging Face id of the local model. |
 
-An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE`, `SEPIA_CHARSET`, `SEPIA_MATURE` or `SEPIA_ASK` stops sepia at startup. So does setting only one of `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
+An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE`, `SEPIA_CHARSET`, `SEPIA_MATURE`, `SEPIA_ASK` or `SEPIA_UPDATE_CHECK` stops sepia at startup. So does setting only one of `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
 
-What you pick with `/model`, `/effort`, `/style`, `/charset`, `/mature`, `/config`, `/api` or `/local` is kept in `choices.json` in the user config folder, and the next sepia starts with it. A kept choice wins over its `SEPIA_*` variable, which only sets what you have never picked; delete the file to start from the variables again. sepia starts with Cloudflare until you pick `/local`.
+What you pick with `/model`, `/effort`, `/style`, `/charset`, `/mature`, `/config`, `/api` or `/local` (update notices included) is kept in `choices.json` in the user config folder, and the next sepia starts with it. A kept choice wins over its `SEPIA_*` variable, which only sets what you have never picked; delete the file to start from the variables again. sepia starts with Cloudflare until you pick `/local`.
 
 The user config folder is `%LOCALAPPDATA%\sepia` on Windows and `~/Library/Application Support/sepia` on macOS. It holds the key file, the request history, the all-time usage totals (`usage.json`), the choices kept between sessions (`choices.json`), and one folder per session with that session's pictures (`01.png`, `02.png`, ...). The newest 10 session folders are kept.
 

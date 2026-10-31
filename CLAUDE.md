@@ -11,7 +11,7 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 
 ## Layout
 
-- `src/sepia/cli.py`: argparse entry point; `--download`, `--version`, hidden `--viewer <session file>`.
+- `src/sepia/cli.py`: argparse entry point; `--download`, `--version`, `update`, hidden `--viewer <session file>`.
 - `src/sepia/repl.py`: the prompt window loop, slash commands, spinner, session folders, viewer relaunch.
 - `src/sepia/chatbar.py`: the chat bar pinned to the bottom rows, with the slash-command menu above it.
 - `src/sepia/ui.py`: wordmark, palette, spinner frames, replies, interface strings (English only).
@@ -26,6 +26,7 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/scene.py`: `Scene` (requests, prompts, latest image and its file, fixed seed), `History` (earlier scenes for `/undo`) and `Canvas` (viewer size in cells).
 - `src/sepia/raster.py`: autocontrast, saturation boost, cover-crop to the grid, letterbox for pictures shown as they are.
 - `src/sepia/ascii_art.py`: pixels to `SymbolArt` (density ramps, Bayer dither, ink/fill colors, optional Sobel outlines) and to rich `Text`.
+- `src/sepia/update.py`: `sepia update` (finds the installer from `sys.prefix`, renames the running `sepia.exe` on Windows) and the release notice (`update.json`); imports nothing with compiled modules.
 - `src/sepia/ipc.py`: HMAC-authenticated loopback channel, JSON messages only, session file.
 - `src/sepia/launcher.py`: opens the viewer (Windows Terminal window with a purple "sepia" tab and a fragment profile, conhost fallback, Terminal.app via osascript).
 - `src/sepia/viewer.py`: full-screen picture window; redraws on resize and on messages; `LiveView` draws the camera as raw ANSI for `/cam`.

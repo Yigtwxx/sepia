@@ -22,7 +22,10 @@ export const slashCommands: readonly Command[] = [
     { cmd: '/save', comment: 'save the picture in the window to Pictures/sepia' },
     { cmd: '/model [haiku|sonnet|opus|fable]', comment: 'choose which Claude writes the prompts' },
     { cmd: '/effort [low|medium|high|xhigh|max]', comment: 'choose how long Claude thinks' },
-    { cmd: '/config', comment: 'turn clarifying questions and mature pictures on or off' },
+    {
+        cmd: '/config',
+        comment: 'turn clarifying questions, mature pictures and update notices on or off',
+    },
     { cmd: '/mature [on|off]', comment: 'allow sexy and dark pictures, never explicit' },
     { cmd: '/api', comment: 'paint with Cloudflare, on this machine when it fails' },
     { cmd: '/local', comment: 'paint only on this machine’s GPU' },
@@ -74,6 +77,7 @@ export const settings: readonly { name: string; value: string; what: string }[] 
     { name: 'SEPIA_CHARSET', value: 'classic', what: 'classic or symbols' },
     { name: 'SEPIA_MATURE', value: 'off', what: 'start with mature pictures on or off' },
     { name: 'SEPIA_ASK', value: 'on', what: 'let Claude ask about a vague request first' },
+    { name: 'SEPIA_UPDATE_CHECK', value: 'on', what: 'say when a new sepia is out' },
 ];
 
 export const version = '0.4.0';
