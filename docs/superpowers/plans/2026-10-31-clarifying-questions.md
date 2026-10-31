@@ -393,16 +393,15 @@ In `Direction`, after `show`:
 
 `Director.__init__` gains `ask: bool = False` after `mature` and stores `self._ask = ask`. Add after the `mature` setter:
 
-```python
-@property
-def ask(self) -> bool:
-    return self._ask
+```text
+    @property
+    def ask(self) -> bool:
+        return self._ask
 
-
-@ask.setter
-def ask(self, ask: bool) -> None:
-    """Takes effect from the next request; /config sets it while sepia waits."""
-    self._ask = ask
+    @ask.setter
+    def ask(self, ask: bool) -> None:
+        """Takes effect from the next request; /config sets it while sepia waits."""
+        self._ask = ask
 ```
 
 `direct` becomes (docstring gains the `answers` sentence; changed lines marked by context):
@@ -923,7 +922,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'sepia.questions'`.
 
 - [ ] **Step 4: Implement** — create `src/sepia/questions.py`:
 
-```python
+```text
 """Claude's questions about a vague request, answered in a menu as in Claude Code:
 one option, several, or the person's own words.
 
@@ -1073,9 +1072,7 @@ def ask(questions: Sequence[Question], words: ui.Words) -> Asked:
         here = page.on_other
         style = "class:chosen" if here else ""
         number = page.other_row + 1
-        row: StyleAndTextTuples = [
-            (style, f" {ui.POINTER if here else ' '} {number}. ")
-        ]
+        row: StyleAndTextTuples = [(style, f" {ui.POINTER if here else ' '} {number}. ")]
         if page.question.multi:
             row.append(box(bool(page.other.strip())))
         typed = words("questions_other_typed")
@@ -1090,9 +1087,7 @@ def ask(questions: Sequence[Question], words: ui.Words) -> Asked:
         return row
 
     def box(checked: bool) -> tuple[str, str]:
-        return (
-            ("class:mark", f"[{ui.CHECK}] ") if checked else ("class:summary", "[ ] ")
-        )
+        return ("class:mark", f"[{ui.CHECK}] ") if checked else ("class:summary", "[ ] ")
 
     def paint_page() -> list[StyleAndTextTuples]:
         rows: list[StyleAndTextTuples] = [
@@ -1318,8 +1313,8 @@ Add to `STRINGS`:
 
 In `COMMANDS`, before the `/mature` row:
 
-```python
-(("/config", "turn clarifying questions and mature pictures on or off"),)
+```text
+    ("/config", "turn clarifying questions and mature pictures on or off"),
 ```
 
 After `reply`:
@@ -1371,24 +1366,23 @@ PLAIN_REPLY: dict[str, object] = {
 }
 ```
 
-```python
-def direct(self, **fields: object) -> None:
-    """What Claude answers from now on; `fields` override a plain reply."""
-    self.set_message(self.make_message({**PLAIN_REPLY, **fields}))
+```text
+    def direct(self, **fields: object) -> None:
+        """What Claude answers from now on; `fields` override a plain reply."""
+        self.set_message(self.make_message({**PLAIN_REPLY, **fields}))
 
-
-def direct_each(self, *replies: dict[str, object]) -> None:
-    """Claude's answers to the next calls, in order; each overrides a plain
-    reply."""
-    stream = self.client.beta.messages.stream.return_value.__enter__.return_value
-    stream.get_final_message.side_effect = [
-        self.make_message({**PLAIN_REPLY, **fields}) for fields in replies
-    ]
+    def direct_each(self, *replies: dict[str, object]) -> None:
+        """Claude's answers to the next calls, in order; each overrides a plain
+        reply."""
+        stream = self.client.beta.messages.stream.return_value.__enter__.return_value
+        stream.get_final_message.side_effect = [
+            self.make_message({**PLAIN_REPLY, **fields}) for fields in replies
+        ]
 ```
 
 Add a section after the picture-request tests:
 
-```python
+```text
 # --- clarifying questions ----------------------------------------------------------
 
 VAGUE = {
@@ -1459,7 +1453,9 @@ def test_repl_cancelled_questions_paint_nothing_and_keep_the_scene(
     assert "Cancelled, nothing painted" in rig.printed(), rig.printed()
 
 
-def test_repl_config_flips_both_switches_and_remembers_them(rig: Rig, terminal) -> None:
+def test_repl_config_flips_both_switches_and_remembers_them(
+    rig: Rig, terminal
+) -> None:
     keys, _ = terminal
     keys.send_text(f"\r{DOWN} \x1b")
     rig.say("/config")
