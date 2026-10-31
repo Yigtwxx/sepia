@@ -5,6 +5,7 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -1717,6 +1718,59 @@ def started(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(Repl, "run", loop)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     return seen
+
+
+def _record_release_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[dict[str, Any]]:
+    """Replace the thread `run_repl` starts for the release check with a recorder
+    that runs its target at once; `update.refresh_release` is a recorder too."""
+    started: list[dict[str, Any]] = []
+
+    class Recorder:
+        def __init__(self, target: Any, name: str = "", daemon: bool = False):
+            self.target = target
+            started.append({"name": name, "daemon": daemon})
+
+        def start(self) -> None:
+            self.target()
+
+    monkeypatch.setattr(repl.threading, "Thread", Recorder)
+    return started
+
+
+def test_run_repl_starts_the_release_check_and_shows_the_kept_answer(
+    started: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = config.config_dir() / "update.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"latest": "99.0.0", "checked": datetime.now().isoformat()}),
+        encoding="utf-8",
+    )
+    threads = _record_release_thread(monkeypatch)
+    asked: list[Path] = []
+    monkeypatch.setattr(repl.update, "refresh_release", asked.append)
+    repl.run_repl()
+    assert asked == [path], f"The check must use {path}, used {asked}"
+    assert len(threads) == 1 and threads[0]["daemon"], f"Got {threads}"
+    assert started["repl"].update_notice == "99.0.0", "A kept newer answer shows"
+
+
+def test_run_repl_update_check_off_starts_no_thread_and_no_notice(
+    started: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SEPIA_UPDATE_CHECK", "off")
+    path = config.config_dir() / "update.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"latest": "99.0.0", "checked": datetime.now().isoformat()}),
+        encoding="utf-8",
+    )
+    threads = _record_release_thread(monkeypatch)
+    repl.run_repl()
+    assert threads == [], f"No thread may start, got {threads}"
+    assert started["repl"].update_notice == "", "No notice with the check off"
 
 
 def test_run_repl_builds_the_window_from_settings_and_choices(

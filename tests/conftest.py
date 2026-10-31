@@ -46,6 +46,18 @@ def private_keys(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(variable)
 
 
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reaches the internet: opening a url fails unless the `web` fixture
+    (which replaces this) is used."""
+    import urllib.request
+
+    def refuse(*handlers: object) -> None:
+        raise OSError("the network is off in tests")
+
+    monkeypatch.setattr(urllib.request, "build_opener", refuse)
+
+
 @pytest.fixture
 def env_file() -> Path:
     """The user config `.env`, in the test's own folder, with no key set."""

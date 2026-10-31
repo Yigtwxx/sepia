@@ -70,6 +70,9 @@ STRINGS: dict[str, str] = {
     "update_offline": "Could not reach PyPI; trying the update anyway",
     "update_source": "sepia is installed from {source}, not PyPI: update it there "
     "(git pull)",
+    "update_source_remote": "sepia is installed from {source}, not PyPI: install it "
+    "again from there",
+    "update_interrupted": "Update stopped",
     "update_close": "Close the other sepia windows first ({count} still open), then "
     "run sepia update again",
     "update_missing": "{tool} is not on PATH; run this yourself: {command}",

@@ -45,6 +45,9 @@ PROCESS_SECONDS = 20.0
 SOURCE_KEYS = ("editable", "directory", "path", "git", "url")
 """Keys of a uv requirement that comes from somewhere other than PyPI."""
 
+FOLDER_KEYS = ("editable", "directory", "path")
+"""The requirement keys that name a folder on disk, which can be updated there."""
+
 Method = Literal["uv", "pipx", "pip", "source"]
 
 
@@ -59,6 +62,8 @@ class Install:
     """The `sepia.exe` that starts sepia, moved aside before upgrading on Windows."""
     source: str = ""
     """Where a source install comes from: a folder or a URL."""
+    folder: bool = True
+    """The source is a folder on disk; False for a git or web address."""
 
 
 @dataclass(frozen=True)
@@ -81,7 +86,7 @@ def find_install(prefix: Path | None = None, argv0: str | None = None) -> Instal
         return Install("pipx", ("pipx", "upgrade", PACKAGE), launcher)
     source = _direct_url()
     if source:
-        return Install("source", source=source)
+        return Install("source", source=source, folder=source.startswith("file://"))
     command = (sys.executable, "-m", "pip", "install", "--upgrade", PACKAGE)
     return Install("pip", command, launcher)
 
@@ -98,7 +103,8 @@ def _uv_install(receipt: Path, launcher: Path | None) -> Install:
     requirement = _named(tool.get("requirements", []), PACKAGE)
     for key in SOURCE_KEYS:
         if requirement.get(key):
-            return Install("source", source=str(requirement[key]))
+            where = str(requirement[key])
+            return Install("source", source=where, folder=key in FOLDER_KEYS)
     path = _named(tool.get("entrypoints", []), "sepia").get("install-path")
     written = Path(path) if isinstance(path, str) and path else launcher
     return Install("uv", ("uv", "tool", "upgrade", PACKAGE), written)
@@ -116,6 +122,8 @@ def _named(items: object, name: str) -> dict[str, Any]:
 def _launcher(argv0: str) -> Path | None:
     """The `.exe` this sepia was started from; None when it was not one."""
     path = Path(argv0)
+    if not path.name:
+        return None
     if path.suffix.lower() != ".exe":
         path = path.with_name(f"{path.name}.exe")
     return path if path.is_file() else None
@@ -189,7 +197,7 @@ def cached_release(path: Path) -> Release | None:
 def refresh_release(
     path: Path,
     now: datetime | None = None,
-    fetch: Callable[[], str | None] = latest_release,
+    fetch: Callable[[], str | None] | None = None,
 ) -> None:
     """Ask PyPI again when the answer in `path` is a day old or missing, and keep
     the new one; a failed check leaves the file as it was."""
@@ -197,7 +205,7 @@ def refresh_release(
     kept = cached_release(path)
     if kept is not None and moment - kept.checked < CHECK_EVERY:
         return
-    latest = fetch()
+    latest = (fetch or latest_release)()
     if latest is None:
         return
     record = json.dumps({"latest": latest, "checked": moment.isoformat()})
@@ -229,7 +237,8 @@ def run_update(
     terminal. Returns the exit code to leave with."""
     found = install if install is not None else find_install()
     if found.method == "source":
-        console.print(ui.reply(words("update_source", source=found.source)))
+        key = "update_source" if found.folder else "update_source_remote"
+        console.print(ui.reply(words(key, source=found.source)))
         return 0
     latest = latest_release()
     if latest is None:
@@ -251,7 +260,11 @@ def run_update(
         console.print(ui.reply(missing, failed=True))
         return 1
     console.print(Text(f"   {command}", style=ui.MUTED))
-    code, error = _upgrade([tool, *found.command[1:]], found.launcher)
+    try:
+        code, error = _upgrade([tool, *found.command[1:]], found.launcher)
+    except KeyboardInterrupt:
+        console.print(ui.reply(words("update_interrupted"), failed=True))
+        return 130
     if error:
         started = words("update_not_started", tool=found.command[0], error=error)
         console.print(ui.reply(started, failed=True))
@@ -271,19 +284,23 @@ def others_running(python: str | None = None) -> int:
     they cannot be counted."""
     if sys.platform != "win32":
         return 0
-    exe = (python or sys.executable).replace("'", "''")
+    root = os.environ.get("SYSTEMROOT", r"C:\Windows")
+    shell = Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    # The path goes in through the environment, never into the script's text.
     script = (
         "Get-CimInstance Win32_Process | "
-        f"Where-Object {{ $_.ExecutablePath -eq '{exe}' }} | "
+        "Where-Object { $_.ExecutablePath -eq $env:SEPIA_PYTHON "
+        "-and $_.CommandLine -like '*sepia*' } | "
         "ForEach-Object { $_.ProcessId }"
     )
     try:
         found = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            [str(shell), "-NoProfile", "-NonInteractive", "-Command", script],
             capture_output=True,
             text=True,
             timeout=PROCESS_SECONDS,
             check=False,
+            env={**os.environ, "SEPIA_PYTHON": python or sys.executable},
         )
     except (OSError, subprocess.SubprocessError):
         return 0

@@ -61,7 +61,8 @@ def test_find_install_uv_tool_from_a_source_has_no_command(
 ) -> None:
     text = f'[tool]\nrequirements = [{{ name = "sepia-cli", {key} = "{value}" }}]\n'
     found = _find(_receipt(tmp_path, text))
-    assert found == Install("source", source=value), f"Got {found}"
+    expected = Install("source", source=value, folder=key == "editable")
+    assert found == expected, f"Got {found}"
 
 
 def test_find_install_uv_receipt_without_entrypoint_uses_the_running_exe(
@@ -245,10 +246,12 @@ class Runner:
     def __init__(self, code: int = 0, pids: str = "", writes: Path | None = None):
         self.code, self.pids, self.writes = code, pids, writes
         self.calls: list[list[str]] = []
+        self.kwargs: list[dict[str, object]] = []
 
     def __call__(self, command: list[str], **kwargs: object) -> SimpleNamespace:
         self.calls.append(list(command))
-        if command[0] == "powershell":
+        self.kwargs.append(kwargs)
+        if command[0].endswith("powershell.exe"):
             return SimpleNamespace(returncode=0, stdout=self.pids)
         if self.writes is not None:
             self.writes.write_bytes(b"new launcher")
@@ -345,7 +348,9 @@ def test_run_update_other_windows_open_refuses_on_windows(
     code = _update(out, UV)
     assert code == 1, f"Exit code {code}"
     assert "2 still open" in out.getvalue(), out.getvalue()
-    assert all(call[0] == "powershell" for call in runner.calls), runner.calls
+    assert all(call[0].endswith("powershell.exe") for call in runner.calls), (
+        runner.calls
+    )
 
 
 def test_run_update_installer_missing_names_the_command(
@@ -419,7 +424,7 @@ class Interrupted(Runner):
     """An installer that Ctrl+C stops."""
 
     def __call__(self, command: list[str], **kwargs: object) -> SimpleNamespace:
-        if command[0] != "powershell":
+        if not command[0].endswith("powershell.exe"):
             raise KeyboardInterrupt
         return super().__call__(command, **kwargs)
 
@@ -437,8 +442,9 @@ def test_run_update_interrupted_on_windows_puts_the_launcher_back(
     exe = tmp_path / "sepia.exe"
     exe.write_bytes(b"old launcher")
     out = _rig(monkeypatch, web, Interrupted(), platform="win32")
-    with pytest.raises(KeyboardInterrupt):
-        _update(out, Install("uv", UV_COMMAND, exe))
+    code = _update(out, Install("uv", UV_COMMAND, exe))
+    assert code == 130, f"Ctrl+C must leave with 130, got {code}"
+    assert "Update stopped" in out.getvalue(), out.getvalue()
     assert exe.read_bytes() == b"old launcher", "The launcher must come back"
     assert not (tmp_path / "sepia.exe.old").exists(), "Nothing may be left aside"
 
@@ -462,11 +468,69 @@ def test_run_update_pip_command_with_spaces_is_quoted_for_pasting(
     assert '"C:/My Tools/python.exe" -m pip' in out.getvalue(), out.getvalue()
 
 
-def test_others_running_quotes_a_python_path_with_an_apostrophe(
+def test_others_running_passes_the_python_path_in_the_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runner = Runner()
     monkeypatch.setattr(update.subprocess, "run", runner)
     monkeypatch.setattr(update.sys, "platform", "win32")
     others_running("C:/o'brien/python.exe")
-    assert "'C:/o''brien/python.exe'" in runner.calls[0][-1], runner.calls
+    script = runner.calls[0][-1]
+    env = runner.kwargs[0]["env"]
+    assert isinstance(env, dict), f"Got {env!r}"
+    assert env["SEPIA_PYTHON"] == "C:/o'brien/python.exe", "Path must be in the env"
+    assert "brien" not in script, f"The path must not be in the script: {script}"
+    assert "*sepia*" in script, "Only processes that mention sepia count"
+
+
+def test_others_running_calls_powershell_by_its_full_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = Runner()
+    monkeypatch.setattr(update.subprocess, "run", runner)
+    monkeypatch.setattr(update.sys, "platform", "win32")
+    monkeypatch.setenv("SYSTEMROOT", "C:/Win")
+    others_running()
+    shell = Path(runner.calls[0][0])
+    assert shell.is_absolute() or shell.parts[0] == "C:", f"Got {shell}"
+    assert shell.name == "powershell.exe", f"Got {shell}"
+    assert "System32" in shell.parts, f"Got {shell}"
+
+
+def test_find_install_empty_argv0_has_no_launcher(tmp_path: Path) -> None:
+    found = find_install(_receipt(tmp_path), argv0="")
+    assert found.launcher is None or found.launcher.name, f"Got {found}"
+    clear_old_launcher("")
+
+
+def test_find_install_uv_git_source_is_remote(tmp_path: Path) -> None:
+    text = '[tool]\nrequirements = [{ name = "sepia-cli", git = "https://x/y.git" }]\n'
+    found = _find(_receipt(tmp_path, text))
+    assert found.method == "source" and not found.folder, f"Got {found}"
+
+
+def test_find_install_pip_from_a_url_is_remote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(update, "_direct_url", lambda: "https://x/y.zip")
+    found = _find(tmp_path)
+    assert found.method == "source" and not found.folder, f"Got {found}"
+
+
+def test_run_update_remote_source_says_to_install_again(
+    monkeypatch: pytest.MonkeyPatch, web
+) -> None:
+    out = _rig(monkeypatch, web, Runner())
+    code = _update(out, Install("source", source="https://x/y.git", folder=False))
+    assert code == 0, f"Exit code {code}"
+    assert "install it again from there" in out.getvalue(), out.getvalue()
+    assert "git pull" not in out.getvalue(), out.getvalue()
+
+
+def test_refresh_release_default_fetch_is_the_module_latest_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(update, "latest_release", lambda: "7.7.7")
+    path = tmp_path / "update.json"
+    refresh_release(path, now=NOW)
+    assert cached_release(path) == Release("7.7.7", NOW), "Default fetch is used"
