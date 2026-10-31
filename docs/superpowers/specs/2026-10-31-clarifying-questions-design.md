@@ -54,12 +54,14 @@ class Option:
     label: str
     description: str
 
+
 @dataclass(frozen=True)
 class Question:
     header: str
     text: str
     multi: bool
     options: tuple[Option, ...]
+
 
 @dataclass(frozen=True)
 class Answer:

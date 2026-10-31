@@ -161,7 +161,10 @@ def test_director_direct_vague_request_returns_its_questions(
             "Subject",
             "What should it show?",
             False,
-            (Option("A galaxy", "spiral arms"), Option("A black hole", "a bright disk")),
+            (
+                Option("A galaxy", "spiral arms"),
+                Option("A black hole", "a bright disk"),
+            ),
         ),
     )
     assert direction.questions == expected, f"Got {direction.questions}"
@@ -391,14 +394,15 @@ In `Direction`, after `show`:
 `Director.__init__` gains `ask: bool = False` after `mature` and stores `self._ask = ask`. Add after the `mature` setter:
 
 ```python
-    @property
-    def ask(self) -> bool:
-        return self._ask
+@property
+def ask(self) -> bool:
+    return self._ask
 
-    @ask.setter
-    def ask(self, ask: bool) -> None:
-        """Takes effect from the next request; /config sets it while sepia waits."""
-        self._ask = ask
+
+@ask.setter
+def ask(self, ask: bool) -> None:
+    """Takes effect from the next request; /config sets it while sepia waits."""
+    self._ask = ask
 ```
 
 `direct` becomes (docstring gains the `answers` sentence; changed lines marked by context):
@@ -611,8 +615,12 @@ def toggles(
             here = number - 1 == index
             pointer = ui.POINTER if here else " "
             on = values[key]
-            lines.append(("class:chosen" if here else "", f" {pointer} {label.ljust(width)}"))
-            lines.append(("class:on" if on else "class:off", "   on " if on else "   off"))
+            lines.append(
+                ("class:chosen" if here else "", f" {pointer} {label.ljust(width)}")
+            )
+            lines.append(
+                ("class:on" if on else "class:off", "   on " if on else "   off")
+            )
             lines.append(("class:summary", f"  {summary}"))
             lines.append(("", "\n"))
         lines.append(("", "\n"))
@@ -771,7 +779,9 @@ def _drawn(screen) -> str:
     ("keys", "choice"),
     [("\r", "A galaxy"), (f"{DOWN}\r", "A black hole"), ("3", "A nebula")],
 )
-def test_ask_single_question_picks_and_finishes(terminal, keys: str, choice: str) -> None:
+def test_ask_single_question_picks_and_finishes(
+    terminal, keys: str, choice: str
+) -> None:
     pipe, _ = terminal
     pipe.send_text(keys)
     asked = _ask(SUBJECT)
@@ -787,7 +797,9 @@ def test_ask_several_choices_toggle_with_space_and_finish_with_enter(terminal) -
     assert asked == expected, f"Got {asked}"
 
 
-def test_ask_several_choices_toggled_off_leave_the_question_unanswered(terminal) -> None:
+def test_ask_several_choices_toggled_off_leave_the_question_unanswered(
+    terminal,
+) -> None:
     pipe, _ = terminal
     pipe.send_text("11\r")
     assert _ask(MOOD) == Asked(), "Nothing chosen is the same as skipping"
@@ -895,7 +907,9 @@ def test_ask_draws_the_paint_page_with_unanswered_dashes(terminal) -> None:
 def test_ask_cuts_long_lines_to_the_terminal_width(terminal) -> None:
     pipe, screen = terminal
     pipe.send_text("\x1b")
-    long = Question("Size", "How big?", False, (Option("Huge", "x" * 200), Option("Tiny", "y")))
+    long = Question(
+        "Size", "How big?", False, (Option("Huge", "x" * 200), Option("Tiny", "y"))
+    )
     _ask(long)
     drawn = _drawn(screen)
     assert "x" * 100 not in drawn, "A long description must be cut"
@@ -1059,7 +1073,9 @@ def ask(questions: Sequence[Question], words: ui.Words) -> Asked:
         here = page.on_other
         style = "class:chosen" if here else ""
         number = page.other_row + 1
-        row: StyleAndTextTuples = [(style, f" {ui.POINTER if here else ' '} {number}. ")]
+        row: StyleAndTextTuples = [
+            (style, f" {ui.POINTER if here else ' '} {number}. ")
+        ]
         if page.question.multi:
             row.append(box(bool(page.other.strip())))
         typed = words("questions_other_typed")
@@ -1074,7 +1090,9 @@ def ask(questions: Sequence[Question], words: ui.Words) -> Asked:
         return row
 
     def box(checked: bool) -> tuple[str, str]:
-        return ("class:mark", f"[{ui.CHECK}] ") if checked else ("class:summary", "[ ] ")
+        return (
+            ("class:mark", f"[{ui.CHECK}] ") if checked else ("class:summary", "[ ] ")
+        )
 
     def paint_page() -> list[StyleAndTextTuples]:
         rows: list[StyleAndTextTuples] = [
@@ -1301,7 +1319,7 @@ Add to `STRINGS`:
 In `COMMANDS`, before the `/mature` row:
 
 ```python
-    ("/config", "turn clarifying questions and mature pictures on or off"),
+(("/config", "turn clarifying questions and mature pictures on or off"),)
 ```
 
 After `reply`:
@@ -1354,17 +1372,18 @@ PLAIN_REPLY: dict[str, object] = {
 ```
 
 ```python
-    def direct(self, **fields: object) -> None:
-        """What Claude answers from now on; `fields` override a plain reply."""
-        self.set_message(self.make_message({**PLAIN_REPLY, **fields}))
+def direct(self, **fields: object) -> None:
+    """What Claude answers from now on; `fields` override a plain reply."""
+    self.set_message(self.make_message({**PLAIN_REPLY, **fields}))
 
-    def direct_each(self, *replies: dict[str, object]) -> None:
-        """Claude's answers to the next calls, in order; each overrides a plain
-        reply."""
-        stream = self.client.beta.messages.stream.return_value.__enter__.return_value
-        stream.get_final_message.side_effect = [
-            self.make_message({**PLAIN_REPLY, **fields}) for fields in replies
-        ]
+
+def direct_each(self, *replies: dict[str, object]) -> None:
+    """Claude's answers to the next calls, in order; each overrides a plain
+    reply."""
+    stream = self.client.beta.messages.stream.return_value.__enter__.return_value
+    stream.get_final_message.side_effect = [
+        self.make_message({**PLAIN_REPLY, **fields}) for fields in replies
+    ]
 ```
 
 Add a section after the picture-request tests:
@@ -1440,9 +1459,7 @@ def test_repl_cancelled_questions_paint_nothing_and_keep_the_scene(
     assert "Cancelled, nothing painted" in rig.printed(), rig.printed()
 
 
-def test_repl_config_flips_both_switches_and_remembers_them(
-    rig: Rig, terminal
-) -> None:
+def test_repl_config_flips_both_switches_and_remembers_them(rig: Rig, terminal) -> None:
     keys, _ = terminal
     keys.send_text(f"\r{DOWN} \x1b")
     rig.say("/config")
@@ -1475,8 +1492,10 @@ Imports:
 
 ```python
 from collections.abc import Callable, Sequence
+
 ...
 from sepia.director import Answer, Direction, Director, DirectorError, create_client
+
 ...
 from sepia.picker import choose, show, toggles
 from sepia.questions import ask as ask_questions
