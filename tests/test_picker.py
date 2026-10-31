@@ -2,11 +2,19 @@ import re
 
 import pytest
 
-from sepia.picker import choose, show
+from sepia.picker import choose, show, toggles
 from sepia.ui import POINTER
 
 OPTIONS = (("ink", "colored symbols"), ("fill", "painted cells"), ("both", "x"))
+ROWS = (
+    ("ask", "Clarifying questions", "ask before painting", True),
+    ("mature", "Mature pictures", "sexy and dark", False),
+)
 DOWN, UP = "\x1b[B", "\x1b[A"
+
+
+def _toggles() -> dict[str, bool]:
+    return toggles("Settings", ROWS, "Esc to close")
 
 
 def _choose(current: str = "fill") -> str | None:
@@ -66,5 +74,40 @@ def test_choose_draws_title_options_summaries_and_hint(terminal) -> None:
     _choose()
     drawn = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|[\r\n]", "", screen.getvalue())
     pieces = ["Picture style", f"{POINTER} 2. fill", "painted cells", "Enter to choose"]
+    missing = [piece for piece in pieces if piece not in drawn]
+    assert not missing, f"{missing} missing from {drawn!r}"
+
+
+@pytest.mark.parametrize(
+    ("keys", "expected"),
+    [
+        ("\x1b", {"ask": True, "mature": False}),
+        ("\r\x1b", {"ask": False, "mature": False}),
+        (f"{DOWN} \x1b", {"ask": True, "mature": True}),
+        ("2\x1b", {"ask": True, "mature": True}),
+        (f"\r\r{UP}{UP} q", {"ask": False, "mature": False}),
+        (f"{UP}\r\x03", {"ask": True, "mature": True}),
+    ],
+)
+def test_toggles_flips_values_and_returns_them_when_closed(
+    terminal, keys: str, expected: dict[str, bool]
+) -> None:
+    pipe, _ = terminal
+    pipe.send_text(keys)
+    values = _toggles()
+    assert values == expected, f"{keys!r}: expected {expected}, got {values}"
+
+
+def test_toggles_draws_labels_values_summaries_and_hint(terminal) -> None:
+    pipe, screen = terminal
+    pipe.send_text("\x1b")
+    _toggles()
+    drawn = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|[\r\n]", "", screen.getvalue())
+    pieces = [
+        "Settings",
+        f"{POINTER} Clarifying questions   on   ask before painting",
+        "Mature pictures        off  sexy and dark",
+        "Esc to close",
+    ]
     missing = [piece for piece in pieces if piece not in drawn]
     assert not missing, f"{missing} missing from {drawn!r}"
