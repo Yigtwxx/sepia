@@ -231,6 +231,16 @@ class FakeHost:
         self.closed = True
 
 
+PLAIN_REPLY: dict[str, object] = {
+    "message": "A calm lake.",
+    "prompt": "a lake at dawn",
+    "edit": False,
+    "references": [],
+    "subject": "",
+    "show": False,
+}
+
+
 @dataclass
 class Rig:
     """A prompt window wired to fakes for its painters, viewer and window launch."""
@@ -257,15 +267,15 @@ class Rig:
 
     def direct(self, **fields: object) -> None:
         """What Claude answers from now on; `fields` override a plain reply."""
-        reply = {
-            "message": "A calm lake.",
-            "prompt": "a lake at dawn",
-            "edit": False,
-            "references": [],
-            "subject": "",
-            "show": False,
-        }
-        self.set_message(self.make_message({**reply, **fields}))
+        self.set_message(self.make_message({**PLAIN_REPLY, **fields}))
+
+    def direct_each(self, *replies: dict[str, object]) -> None:
+        """Claude's answers to the next calls, in order; each overrides a plain
+        reply."""
+        stream = self.client.beta.messages.stream.return_value.__enter__.return_value
+        stream.get_final_message.side_effect = [
+            self.make_message({**PLAIN_REPLY, **fields}) for fields in replies
+        ]
 
 
 def _reference(url: str = "https://example.com/a.png") -> Reference:
@@ -605,6 +615,96 @@ def test_repl_request_painter_choice_local_skips_cloudflare(rig: Rig) -> None:
     rig.say("a lake")
     assert primary.calls == [], "/local means Cloudflare is not used"
     assert len(rig.local.calls) == 1, "The local painter must paint"
+
+
+# --- clarifying questions ----------------------------------------------------------
+
+VAGUE = {
+    "message": "A spiral galaxy.",
+    "prompt": "a galaxy guess",
+    "questions": [
+        {
+            "header": "Subject",
+            "question": "What should it show?",
+            "multi": False,
+            "options": [
+                {"label": "A galaxy", "description": "spiral arms"},
+                {"label": "A black hole", "description": "a bright disk"},
+            ],
+        }
+    ],
+}
+CLEAR = {"message": "A black hole.", "prompt": "a black hole", "questions": []}
+
+
+def test_repl_vague_request_asks_then_paints_from_the_answers(
+    rig: Rig, terminal
+) -> None:
+    keys, _ = terminal
+    rig.repl.director.ask = True
+    rig.direct_each(VAGUE, CLEAR)
+    keys.send_text("2")
+    rig.say("universe")
+    painted = [call[0] for call in rig.local.calls]
+    assert painted == ["a black hole"], f"The answered direction must paint: {painted}"
+    calls = rig.client.beta.messages.stream.call_args_list
+    second = calls[1].kwargs["messages"][0]["content"]
+    assert "Subject: What should it show? A black hole" in second, second
+    requests = rig.repl.scene.requests
+    assert requests == ["universe (Subject: A black hole)"], f"Kept {requests}"
+    assert "· Subject  A black hole" in rig.printed(), rig.printed()
+    assert "A black hole." in rig.printed(), "The second message must be shown"
+
+
+def test_repl_skipped_questions_paint_the_guess_with_one_call(
+    rig: Rig, terminal
+) -> None:
+    keys, _ = terminal
+    rig.repl.director.ask = True
+    rig.direct_each(VAGUE, CLEAR)
+    keys.send_text("\x1b")
+    rig.say("universe")
+    painted = [call[0] for call in rig.local.calls]
+    assert painted == ["a galaxy guess"], f"The guess must paint: {painted}"
+    count = rig.client.beta.messages.stream.call_count
+    assert count == 1, f"Skipping must not ask Claude again, asked {count} times"
+    assert "Skipped the questions" in rig.printed(), rig.printed()
+
+
+def test_repl_cancelled_questions_paint_nothing_and_keep_the_scene(
+    rig: Rig, terminal
+) -> None:
+    keys, _ = terminal
+    rig.say("a lake")
+    before = rig.repl.scene
+    rig.repl.director.ask = True
+    rig.direct_each(VAGUE, CLEAR)
+    keys.send_text("\x03")
+    keep_going = rig.say("universe")
+    assert keep_going, "Ctrl+C in the questions must not close sepia"
+    assert len(rig.local.calls) == 1, "Nothing new may be painted"
+    assert rig.repl.scene is before, "The scene must stay as it was"
+    assert "Cancelled, nothing painted" in rig.printed(), rig.printed()
+
+
+def test_repl_config_flips_both_switches_and_remembers_them(rig: Rig, terminal) -> None:
+    keys, _ = terminal
+    keys.send_text(f"\r{DOWN} \x1b")
+    rig.say("/config")
+    assert rig.repl.director.ask is True, "Clarifying questions must be on"
+    assert rig.repl.director.mature is True, "Mature pictures must be on"
+    kept = _choices()
+    assert kept["ask"] is True and kept["mature"] is True, f"Kept {kept}"
+    assert "Clarifying questions on" in rig.printed(), rig.printed()
+    assert "Mature pictures on" in rig.printed(), rig.printed()
+
+
+def test_repl_config_closed_unchanged_says_nothing(rig: Rig, terminal) -> None:
+    keys, _ = terminal
+    keys.send_text("\x1b")
+    rig.say("/config")
+    assert not config.choices_file().exists(), "Nothing may be remembered"
+    assert "Clarifying questions" not in rig.printed(), rig.printed()
 
 
 # --- references --------------------------------------------------------------------

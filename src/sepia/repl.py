@@ -6,7 +6,7 @@ import shutil
 import sys
 import time
 import urllib.parse
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
@@ -41,7 +41,7 @@ from sepia.config import (
     search_key,
     user_env_file,
 )
-from sepia.director import Direction, Director, DirectorError, create_client
+from sepia.director import Answer, Direction, Director, DirectorError, create_client
 from sepia.ipc import Host, Message
 from sepia.keys import KEYS, Key, ask_secret, ask_values, is_set, key_named
 from sepia.launcher import VIEWER_COLS, VIEWER_ROWS, LaunchError, open_viewer
@@ -58,7 +58,8 @@ from sepia.painter import (
     local_model_ready,
 )
 from sepia.painter import image_size as paint_size
-from sepia.picker import choose, show
+from sepia.picker import choose, show, toggles
+from sepia.questions import ask as ask_questions
 from sepia.raster import letterbox
 from sepia.reference import Reference, find_reference, find_subject, split_links
 from sepia.scene import Canvas, History, Scene, new_seed
@@ -158,6 +159,19 @@ def named_option(options: tuple[str, ...], argument: str) -> str | None:
 def _host(url: str) -> str:
     """The site a picture came from, for the reply under it."""
     return urllib.parse.urlsplit(url).hostname or url
+
+
+def _switch(on: bool) -> str:
+    return "on" if on else "off"
+
+
+def _clarified(request: str, answers: Sequence[Answer]) -> str:
+    """`request` with the answers to Claude's questions, as the scene keeps it for
+    a later /add: "universe (Subject: A black hole; Mood: Calm)"."""
+    if not answers:
+        return request
+    given = "; ".join(f"{a.header}: {', '.join(a.choices)}" for a in answers)
+    return f"{request} ({given})"
 
 
 def new_session_dir(root: Path, keep: int = KEEP_SESSIONS) -> Path:
@@ -325,6 +339,8 @@ class Repl:
                 self.director.effort = cast(Effort, picked)
                 remember(effort=picked)
                 self.transcript.say(ui.reply(self.words("effort_set", effort=picked)))
+        elif command.name == "config":
+            self._configure()
         elif command.name == "mature":
             switches = cast(tuple[str, ...], get_args(Switch))
             current = "on" if self.director.mature else "off"
@@ -505,12 +521,45 @@ class Repl:
             self.words("pick_hint"),
         )
 
+    def _configure(self) -> None:
+        """/config: the on/off settings in one list. Each one changed is applied,
+        kept for the next session and confirmed; /mature is a shortcut to one."""
+        values = toggles(
+            self.words("config_title"),
+            [
+                (
+                    "ask",
+                    self.words("config.ask"),
+                    self.words("config.ask_summary"),
+                    self.director.ask,
+                ),
+                (
+                    "mature",
+                    self.words("config.mature"),
+                    self.words("config.mature_summary"),
+                    self.director.mature,
+                ),
+            ],
+            self.words("config_hint"),
+        )
+        if values["ask"] != self.director.ask:
+            self.director.ask = values["ask"]
+            remember(ask=values["ask"])
+            self.transcript.say(ui.reply(self.words(f"ask_{_switch(values['ask'])}")))
+        if values["mature"] != self.director.mature:
+            self.director.mature = values["mature"]
+            remember(mature=values["mature"])
+            state = _switch(values["mature"])
+            self.transcript.say(ui.reply(self.words(f"mature_{state}")))
+
     def _draw(self, request: str, add: bool) -> None:
         """Paint `request`: a new picture, or with `add` an addition to this one.
 
         /add on an empty scene simply paints a new picture. A bare name ("yunara
         lol") or a bare picture link shows the subject's picture as it is. The
-        current scene stays until the new picture is there.
+        current scene stays until the new picture is there. A vague new picture may
+        first get Claude's questions; the answers go back to Claude before anything
+        is painted.
         """
         self._started = time.monotonic()
         self._stop_camera()
@@ -531,14 +580,25 @@ class Repl:
         direction = self._direct(words, found, scene)
         if direction is None:
             return
+        answers: tuple[Answer, ...] = ()
+        if direction.questions:
+            asked = self._ask(direction)
+            if asked is None:
+                return
+            answers = asked
+            if answers:
+                direction = self._direct(words, found, scene, answers)
+                if direction is None:
+                    return
+        told = _clarified(words or request, answers)
         if found is None and (direction.subject or direction.references):
             found = self._find_subject(direction)
             if found is not None and direction.show:
-                self._present(words, found, direction.message, scene)
+                self._present(told, found, direction.message, scene)
                 return
             if found is not None:
                 # Claude now sees the picture, so the prompt describes the real look.
-                direction = self._direct(words, found, scene) or direction
+                direction = self._direct(words, found, scene, answers) or direction
         # A new picture starts from an empty scene; /add keeps the last reference.
         likeness = found or scene.likeness
         base = scene.image
@@ -547,7 +607,7 @@ class Repl:
             return
         path = self._keep(painting.image)
         scene.record(
-            words or request,
+            told,
             direction.prompt,
             painting.image,
             likeness,
@@ -721,14 +781,18 @@ class Repl:
         return detail
 
     def _direct(
-        self, words: str, found: Reference | None, scene: Scene
+        self,
+        words: str,
+        found: Reference | None,
+        scene: Scene,
+        answers: Sequence[Answer] = (),
     ) -> Direction | None:
         """Claude's direction for `words` in `scene`, shown `found` when there is
-        one; None after saying why it failed."""
+        one and told the person's `answers`; None after saying why it failed."""
         picture = found.image if found is not None else None
         try:
             direction = self._wait(
-                lambda: self.director.direct(words, scene, picture),
+                lambda: self.director.direct(words, scene, picture, answers),
                 "directing",
             )
         except DirectorError as exc:
@@ -738,6 +802,22 @@ class Repl:
             return None
         self._tally(lambda usage: usage.add_direction(direction))
         return direction
+
+    def _ask(self, direction: Direction) -> tuple[Answer, ...] | None:
+        """The person's answers to Claude's questions: empty when they skipped
+        them (Claude's guess paints), None when they cancelled the request. The
+        spinner's clock starts again once they are done."""
+        asked = ask_questions(direction.questions, self.words)
+        if asked.cancelled:
+            self.transcript.say(ui.reply(self.words("questions_cancelled")))
+            return None
+        if asked.answers:
+            rows = [(a.header, ", ".join(a.choices)) for a in asked.answers]
+            self.transcript.say(ui.answers(rows))
+        else:
+            self.transcript.say(ui.note(self.words("questions_skipped")))
+        self._started = time.monotonic()
+        return asked.answers
 
     def _find_subject(self, direction: Direction) -> Reference | None:
         """The picture of the subject Claude named: an image search first, with a
@@ -927,7 +1007,11 @@ def run_repl() -> int:
     if key is None:
         return 1
     director = Director(
-        create_client(key), settings.model, settings.effort, settings.mature
+        create_client(key),
+        settings.model,
+        settings.effort,
+        settings.mature,
+        settings.ask,
     )
     api, local = build_painter(cloudflare, settings.image_model)
     if local_model_ready(settings.image_model):

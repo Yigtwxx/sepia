@@ -221,3 +221,14 @@ def test_words_save_replies_fill_in_the_path_and_the_error() -> None:
     assert saved == "Saved to C:/Pictures/sepia/a.png", f"Got {saved!r}"
     assert failed == "Could not save the picture: disk full", f"Got {failed!r}"
     assert words("save_empty"), "The empty-scene reply must say something"
+
+
+def test_words_commands_include_config() -> None:
+    names = [usage.split()[0] for usage, _ in ui.Words().commands]
+    assert "/config" in names, f"Got {names}"
+
+
+def test_answers_pads_headers_to_one_width() -> None:
+    text = ui.answers([("Subject", "A black hole"), ("Mood", "Calm")]).plain
+    expected = "   · Subject  A black hole\n   · Mood     Calm"
+    assert text == expected, f"Got {text!r}"

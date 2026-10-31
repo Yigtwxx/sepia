@@ -111,6 +111,16 @@ STRINGS: dict[str, str] = {
     "mature_on": "Mature pictures on, from the next picture on: sexy and dark "
     "scenes are painted as asked, never explicit",
     "mature_off": "Mature pictures off, from the next picture on",
+    "questions_skipped": "Skipped the questions, painting Claude's guess",
+    "questions_cancelled": "Cancelled, nothing painted",
+    "config_title": "Settings",
+    "config_hint": "↑↓ to move · Enter or Space to switch · Esc to close",
+    "config.ask": "Clarifying questions",
+    "config.ask_summary": "ask before painting a vague idea",
+    "config.mature": "Mature pictures",
+    "config.mature_summary": "sexy and dark pictures, never explicit",
+    "ask_on": "Clarifying questions on, from the next picture on",
+    "ask_off": "Clarifying questions off: sepia paints its best guess",
     "painter_api": "Painting with Cloudflare, on this machine when it fails, from "
     "the next picture on",
     "painter_local": "Painting on this machine only, from the next picture on",
@@ -222,6 +232,7 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/save", "save the picture in the window to Pictures/sepia"),
     ("/model [haiku|sonnet|opus|fable]", "choose which Claude writes the prompts"),
     ("/effort [low|medium|high|xhigh|max]", "choose how long Claude thinks"),
+    ("/config", "turn clarifying questions and mature pictures on or off"),
     ("/mature [on|off]", "allow sexy and dark pictures, never explicit"),
     ("/api", "paint with Cloudflare, on this machine when it fails"),
     ("/local", "paint only on this machine's GPU"),
@@ -293,6 +304,23 @@ def reply(message: str, detail: str = "", *, failed: bool = False) -> Text:
     if detail:
         text.append(f"\n   {detail}", style=MUTED)
     return text
+
+
+def answers(rows: Sequence[tuple[str, str]]) -> Text:
+    """The answers to Claude's questions, kept under the request: a muted line per
+    question, headers padded to one width."""
+    width = max(len(header) for header, _ in rows)
+    text = Text(style=MUTED)
+    for index, (header, answer) in enumerate(rows):
+        if index:
+            text.append("\n")
+        text.append(f"   · {header.ljust(width)}  {answer}")
+    return text
+
+
+def note(message: str) -> Text:
+    """A muted aside under the request."""
+    return Text(f"   · {message}", style=MUTED)
 
 
 def help_table(words: Words) -> Table:
