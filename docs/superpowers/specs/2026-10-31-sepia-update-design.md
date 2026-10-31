@@ -84,7 +84,7 @@ Versions compare by their numbers; a pre-release of the same numbers
   the running version.
 - A daemon thread then asks PyPI again when the last check is a day old or
   missing and writes the file; a failed check changes nothing. The answer shows
-  on the next start (or after `/clear` redraws the screen).
+  on the next start.
 - Setting `update_check` (default on): `Settings.update_check`,
   `Choices.update_check`, `SEPIA_UPDATE_CHECK` (`on`/`off`), and a third
   `/config` row "Update notices · say when a new sepia is out". Off: no request

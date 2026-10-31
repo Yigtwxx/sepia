@@ -79,7 +79,7 @@ uv tool install "sepia-cli[cam]"
 
 Extras combine: `"sepia-cli[local,cam]"`.
 
-**Update.** `sepia update` upgrades sepia with the installer that installed it (`uv tool upgrade sepia-cli`, `pipx upgrade sepia-cli`, or `python -m pip install --upgrade sepia-cli`), keeping extras such as `[local]` and the CUDA index. It asks PyPI first and says so when sepia is already the latest. On Windows, close sepia's other windows first; `sepia update` says so if one is open. An install from a folder or a git checkout is updated there (`git pull`).
+**Update.** `sepia update` upgrades sepia with the installer that installed it (`uv tool upgrade sepia-cli`, `pipx upgrade sepia-cli`, or `python -m pip install --upgrade sepia-cli`), uv keeps extras such as `[local]` and the CUDA index, and pipx keeps extras; pip upgrades only `sepia-cli` itself. It asks PyPI first and says so when sepia is already the latest. On Windows, close sepia's other windows first; `sepia update` says so if one is open. An install from a folder or a git checkout is updated there (`git pull`); one from a git or web address is installed again from there.
 
 Nothing is downloaded at install. The first `/local` names the model and its size (FLUX.2 [klein] 4B, about 16 GB from Hugging Face) and downloads it once you say yes. `sepia --download` fetches it ahead of time instead.
 
