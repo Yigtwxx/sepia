@@ -15,11 +15,12 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/repl.py`: the prompt window loop, slash commands, spinner, session folders, viewer relaunch.
 - `src/sepia/chatbar.py`: the chat bar pinned to the bottom rows, with the slash-command menu above it.
 - `src/sepia/ui.py`: wordmark, palette, spinner frames, replies, interface strings (English only).
-- `src/sepia/director.py`: one Claude call per request; structured JSON reply (`message`, `prompt`, `edit`, `references`); maps API errors to `Failure`.
-- `src/sepia/prompts/`: `director.md` (system prompt), `mature.md` (appended to it while `/mature` is on) and `request.md` (per-request template).
+- `src/sepia/director.py`: one Claude call per request; structured JSON reply (`message`, `prompt`, `edit`, `references`, and `questions` while asking); maps API errors to `Failure`.
+- `src/sepia/prompts/`: `director.md` (system prompt), `mature.md` (appended to it while `/mature` is on), `ask.md` (appended while clarifying questions are on) and `request.md` (per-request template).
 - `src/sepia/reference.py`: finds a reference picture for a named subject (Brave image search with `BRAVE_SEARCH_API_KEY`, else a link or page `og:image`), pasted links in requests, https and public hosts only.
 - `src/sepia/painter.py`: `CloudflarePainter` (Workers AI, FLUX.2 [klein] 4B, multipart upload), `LocalPainter`, `FallbackPainter` (120 s cooldown after HTTP 429, off for the session when the day's free allocation is used up; `retry_primary` for `/api`), `build_painter`, `select_device`, model download.
-- `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`, `/effort`, `/mature`).
+- `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`, `/effort`, `/mature`) and the `/config` toggle list.
+- `src/sepia/questions.py`: the menu for Claude's clarifying questions (one option, several, or the person's own words; tabs and a Paint page for several).
 - `src/sepia/snapshot.py`: `/save`; draws the window's symbol art to a PNG (12x24 px cells, a system monospace font, Pillow's own shrunk to fit as the fallback) in `Pictures/sepia`.
 - `src/sepia/usage.py`: totals for `/usage` (tokens, searches, estimated cost from list prices, pictures per source); `Ledger` keeps all-time totals in `usage.json` in the config dir, with a one-time estimate of earlier use from the prompt history and session folders.
 - `src/sepia/scene.py`: `Scene` (requests, prompts, latest image and its file, fixed seed), `History` (earlier scenes for `/undo`) and `Canvas` (viewer size in cells).

@@ -22,6 +22,7 @@ export const slashCommands: readonly Command[] = [
     { cmd: '/save', comment: 'save the picture in the window to Pictures/sepia' },
     { cmd: '/model [haiku|sonnet|opus|fable]', comment: 'choose which Claude writes the prompts' },
     { cmd: '/effort [low|medium|high|xhigh|max]', comment: 'choose how long Claude thinks' },
+    { cmd: '/config', comment: 'turn clarifying questions and mature pictures on or off' },
     { cmd: '/mature [on|off]', comment: 'allow sexy and dark pictures, never explicit' },
     { cmd: '/api', comment: 'paint with Cloudflare, on this machine when it fails' },
     { cmd: '/local', comment: 'paint only on this machine’s GPU' },

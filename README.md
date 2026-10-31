@@ -99,6 +99,7 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/save` | Save the picture in the viewer window as a PNG in the `sepia` folder of your Pictures folder: its colored characters as the window shows them, without the tab bar or frame, named after the time. |
 | `/model [haiku\|sonnet\|opus\|fable]` | Which Claude writes the prompts, from the next request on: Haiku 5.5 (the default), Sonnet 5.5, Opus 5.5 or Fable 5.1. |
 | `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. |
+| `/config` | Turn clarifying questions and mature pictures on or off in one list. |
 | `/mature [on\|off]` | Mature pictures; see [Mature mode](#mature-mode). Off by default. |
 | `/api` | Paint with Cloudflare Workers AI, and with the local model when it fails. Also makes sepia try Cloudflare again after a rate-limit pause or a used-up day; see [Painting backends](#painting-backends). |
 | `/local` | Paint only on this machine's GPU. The first time, it names the model and its size and downloads it once you say yes. Needs `sepia-cli[local]`. |
@@ -107,7 +108,11 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/help` | List the commands. |
 | `/exit` | Close sepia and the viewer window. `/quit`, `/q`, Ctrl+D and Ctrl+C twice do the same. |
 
-`/style`, `/charset`, `/model`, `/effort`, `/mature` and `/keys` without an argument open a menu: the arrow keys and Enter (or the option's number) pick, Esc cancels. `/usage` opens a panel that Esc (or Enter) closes without leaving it in the transcript. Its session bar is drawn against the all-time total, so its gray rest is earlier use; use from before tracking began is estimated once from the prompt history and the saved sessions.
+`/style`, `/charset`, `/model`, `/effort`, `/mature` and `/keys` without an argument open a menu: the arrow keys and Enter (or the option's number) pick, Esc cancels. `/config` lists the on/off settings: the arrow keys move, Enter or Space switches one, Esc closes. `/usage` opens a panel that Esc (or Enter) closes without leaving it in the transcript. Its session bar is drawn against the all-time total, so its gray rest is earlier use; use from before tracking began is estimated once from the prompt history and the saved sessions.
+
+### Clarifying questions
+
+When a request could mean very different pictures ("universe", "something cool"), Claude asks one to three short questions first. Each picks one option or several (Space), and the last row takes your own words. With several questions, ←→ switches between them and the Paint page sends the answers. Esc skips them and paints Claude's guess; Ctrl+C cancels the request. A clear request is painted at once. Asking costs a second Claude call, about twice the tokens of that request; turn it off in `/config` or with `SEPIA_ASK=off`.
 
 ### Keys and the viewer
 
@@ -152,11 +157,12 @@ sepia reads settings from the environment, then from `.env` in the current direc
 | `SEPIA_STYLE` | `ink` | Starting style: `ink` or `fill`. |
 | `SEPIA_CHARSET` | `classic` | Starting character set: `classic` or `symbols`. |
 | `SEPIA_MATURE` | `off` | Start with mature pictures `on` or `off`. `/mature` changes it while sepia runs. |
+| `SEPIA_ASK` | `on` | Let Claude ask about a vague request before painting (`on` or `off`). `/config` changes it while sepia runs. |
 | `SEPIA_IMAGE_MODEL` | `black-forest-labs/FLUX.2-klein-4B` | Hugging Face id of the local model. |
 
 An invalid value for `SEPIA_EFFORT`, `SEPIA_STYLE`, `SEPIA_CHARSET` or `SEPIA_MATURE` stops sepia at startup. So does setting only one of `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
 
-What you pick with `/model`, `/effort`, `/style`, `/charset`, `/mature`, `/api` or `/local` is kept in `choices.json` in the user config folder, and the next sepia starts with it. A kept choice wins over its `SEPIA_*` variable, which only sets what you have never picked; delete the file to start from the variables again. sepia starts with Cloudflare until you pick `/local`.
+What you pick with `/model`, `/effort`, `/style`, `/charset`, `/mature`, `/config`, `/api` or `/local` is kept in `choices.json` in the user config folder, and the next sepia starts with it. A kept choice wins over its `SEPIA_*` variable, which only sets what you have never picked; delete the file to start from the variables again. sepia starts with Cloudflare until you pick `/local`.
 
 The user config folder is `%LOCALAPPDATA%\sepia` on Windows and `~/Library/Application Support/sepia` on macOS. It holds the key file, the request history, the all-time usage totals (`usage.json`), the choices kept between sessions (`choices.json`), and one folder per session with that session's pictures (`01.png`, `02.png`, ...). The newest 10 session folders are kept.
 

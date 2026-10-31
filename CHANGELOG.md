@@ -12,6 +12,8 @@ tag all carry.
 
 ### Added
 
+- Clarifying questions: when a request could mean very different pictures ("universe", "something cool"), Claude first asks one to three short questions, as Claude Code does. Each takes one option or several, and the last row takes your own words; Esc paints Claude's guess instead, Ctrl+C cancels. Off with `/config` or `SEPIA_ASK=off`.
+- `/config` lists the on/off settings, clarifying questions and mature pictures, in one menu; `/mature` stays as a shortcut.
 - `/undo` goes back to the picture before, with its scene: the next `/add` builds on it, and `/clear` can be undone too.
 - `/again` paints the current picture again from the same prompt with fresh noise, without asking Claude; after `/add` it paints over the same picture.
 - `/cam` shows the webcam live in the picture window as colored text, mirrored, at up to 15 frames a second. `/cam` again keeps the frame as the picture, which `/add` paints over and `/save` saves; `/cam off` stops it. Install `sepia-cli[cam]` for it.
