@@ -1,3 +1,4 @@
+import io
 import re
 
 import pytest
@@ -6,6 +7,8 @@ from sepia import ui
 from sepia.director import Answer, Option, Question
 from sepia.questions import Asked, ask
 
+COLUMNS = 80
+ESCAPE = re.compile(r"\[([0-9;?]*)([A-Za-z])")
 DOWN, LEFT, RIGHT = "\x1b[B", "\x1b[D", "\x1b[C"
 SUBJECT = Question(
     "Subject",
@@ -37,10 +40,10 @@ def _answer(question: Question, *choices: str) -> Answer:
     return Answer(question.header, question.text, choices)
 
 
-def _drawn(screen) -> str:
-    """The text on the fake terminal after the run. prompt_toolkit redraws only the
-    cells that changed, so the raw output is replayed onto a grid; erasing is
-    ignored, which keeps what was last drawn for the asserts to find."""
+def _rows(screen: io.StringIO) -> list[str]:
+    """The rows of text on the fake terminal after the run. prompt_toolkit redraws
+    only the cells that changed, so the raw output is replayed onto a grid; erasing
+    is ignored, which keeps what was last drawn for the asserts to find."""
     grid: dict[tuple[int, int], str] = {}
     row = col = 0
     raw = screen.getvalue()
@@ -49,7 +52,7 @@ def _drawn(screen) -> str:
         char = raw[index]
         index += 1
         if char == "\x1b":
-            match = re.compile(r"\[([0-9;?]*)([A-Za-z])").match(raw, index)
+            match = ESCAPE.match(raw, index)
             if match is None:
                 continue
             index = match.end()
@@ -76,7 +79,12 @@ def _drawn(screen) -> str:
     for number in sorted({at[0] for at in grid}):
         width = max(at[1] for at in grid if at[0] == number)
         lines.append("".join(grid.get((number, at), " ") for at in range(width + 1)))
-    return "\n".join(lines)
+    return lines
+
+
+def _drawn(screen: io.StringIO) -> str:
+    """All the rows drawn, joined by newlines."""
+    return "\n".join(_rows(screen))
 
 
 @pytest.mark.parametrize(
@@ -215,6 +223,57 @@ def test_ask_cuts_long_lines_to_the_terminal_width(terminal) -> None:
         "Size", "How big?", False, (Option("Huge", "x" * 200), Option("Tiny", "y"))
     )
     _ask(long)
-    drawn = _drawn(screen)
-    assert "x" * 100 not in drawn, "A long description must be cut"
-    assert "…" in drawn, "A cut line must end in an ellipsis"
+    rows = [row for row in _rows(screen) if "1. Huge" in row]
+    assert rows, f"The long option's row is missing from {_drawn(screen)!r}"
+    row = rows[0].rstrip()
+    assert row.endswith("x…"), f"A cut row must end in an ellipsis: {row!r}"
+    assert len(row) <= COLUMNS - 1, f"Row is {len(row)} columns wide: {row!r}"
+
+
+def test_ask_other_row_keeps_the_end_of_a_long_answer_in_view(terminal) -> None:
+    pipe, screen = terminal
+    pipe.send_text("4" + "a" * 117 + "END\x1b")
+    _ask(SUBJECT)
+    rows = [row for row in _rows(screen) if "4. Other: " in row]
+    assert rows, f"The Other row is missing from {_drawn(screen)!r}"
+    row = rows[0].rstrip()
+    prefix = f" {ui.POINTER} 4. Other: …"
+    assert row.startswith(prefix), f"Prefix and left ellipsis expected: {row!r}"
+    assert row.endswith(f"END{ui.BLOCK}"), f"Cursor must stay in view: {row!r}"
+    assert len(row) <= COLUMNS - 1, f"Row is {len(row)} columns wide: {row!r}"
+
+
+def test_ask_other_row_keeps_the_box_and_cursor_for_several_choices(terminal) -> None:
+    pipe, screen = terminal
+    pipe.send_text("4" + "a" * 117 + "END\x1b")
+    _ask(MOOD)
+    rows = [row for row in _rows(screen) if "4. [" in row]
+    assert rows, f"The Other row is missing from {_drawn(screen)!r}"
+    row = rows[0].rstrip()
+    assert row.startswith(f" {ui.POINTER} 4. [{ui.CHECK}] Other: …"), f"Got {row!r}"
+    assert row.endswith(f"END{ui.BLOCK}"), f"Cursor must stay in view: {row!r}"
+    assert len(row) <= COLUMNS - 1, f"Row is {len(row)} columns wide: {row!r}"
+
+
+def test_ask_superscript_digit_is_not_a_shortcut(terminal) -> None:
+    pipe, _ = terminal
+    pipe.send_text("\u00b2\r")
+    asked = _ask(SUBJECT)
+    expected = Asked((_answer(SUBJECT, "A galaxy"),))
+    assert asked == expected, f"A superscript must be ignored, got {asked}"
+
+
+def test_ask_pasted_text_goes_into_the_other_row_as_one_line(terminal) -> None:
+    pipe, _ = terminal
+    pipe.send_text("4\x1b[200~a dying\nstar	now\x1b[201~\r")
+    asked = _ask(SUBJECT)
+    expected = Asked((_answer(SUBJECT, "a dying star now"),))
+    assert asked == expected, f"Got {asked}"
+
+
+def test_ask_paste_outside_the_other_row_is_ignored(terminal) -> None:
+    pipe, _ = terminal
+    pipe.send_text("\x1b[200~junk\x1b[201~\r")
+    asked = _ask(SUBJECT)
+    expected = Asked((_answer(SUBJECT, "A galaxy"),))
+    assert asked == expected, f"Got {asked}"

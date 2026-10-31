@@ -82,8 +82,8 @@ def ask(questions: Sequence[Question], words: ui.Words) -> Asked:
     """Ask `questions`; several get a tab each and a Paint page."""
     pages = [_Page(question) for question in questions]
     several = len(pages) > 1
+    # A page's index, or len(pages) for the Paint page.
     current = 0
-    """A page's index, or len(pages) for the Paint page."""
 
     def answers() -> tuple[Answer, ...]:
         given = (page.answer() for page in pages)
@@ -154,7 +154,14 @@ def ask(questions: Sequence[Question], words: ui.Words) -> Asked:
             row.append(box(bool(page.other.strip())))
         typed = words("questions_other_typed")
         if here:
-            row += [(style, typed), ("", page.other), ("class:cursor", ui.BLOCK)]
+            used = sum(get_cwidth(fragment[1]) for fragment in row)
+            room = get_app().output.get_size().columns - 1 - used
+            room -= get_cwidth(typed) + get_cwidth(ui.BLOCK)
+            row += [
+                (style, typed),
+                ("", _tail(page.other, room)),
+                ("class:cursor", ui.BLOCK),
+            ]
         elif page.other:
             row.append(("", f"{typed}{page.other}"))
             if not page.question.multi and not page.picked:
@@ -286,7 +293,7 @@ def ask(questions: Sequence[Question], words: ui.Words) -> Asked:
         page = pages[current]
         if page.on_other:
             type_into(page, event.data)
-        elif event.data.isdigit() and event.data != "0":
+        elif len(event.data) == 1 and event.data in "123456789":
             row = int(event.data) - 1
             if row == page.other_row:
                 page.pointer = row
@@ -296,6 +303,17 @@ def ask(questions: Sequence[Question], words: ui.Words) -> Asked:
                     page.picked ^= {row}
                 else:
                     pick(event, page)
+
+    @keys.add(Keys.BracketedPaste)
+    def _paste(event: KeyPressEvent) -> None:
+        if current == len(pages) or not pages[current].on_other:
+            return
+        flat = "".join(
+            " " if char in "\r\n\t" else char
+            for char in event.data
+            if char in "\r\n\t" or char.isprintable()
+        )
+        type_into(pages[current], flat)
 
     @keys.add("escape", eager=True)
     def _skip(event: KeyPressEvent) -> None:
@@ -341,3 +359,18 @@ def _fit(line: StyleAndTextTuples, width: int) -> StyleAndTextTuples:
             break
     kept.append(("class:summary", "…"))
     return kept
+
+
+def _tail(text: str, room: int) -> str:
+    """`text` as it is when it fits `room` columns, else its end behind a leading
+    … so the last typed characters stay in view."""
+    if get_cwidth(text) <= room:
+        return text
+    kept = ""
+    room -= 1
+    for char in reversed(text):
+        if get_cwidth(char) > room:
+            break
+        kept = char + kept
+        room -= get_cwidth(char)
+    return f"…{kept}"
