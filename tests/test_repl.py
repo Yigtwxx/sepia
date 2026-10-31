@@ -724,6 +724,28 @@ def test_repl_config_closed_unchanged_says_nothing(rig: Rig, terminal) -> None:
     assert "Clarifying questions" not in rig.printed(), rig.printed()
 
 
+def test_repl_config_turns_update_notices_off_and_remembers_it(
+    rig: Rig, terminal
+) -> None:
+    keys, _ = terminal
+    keys.send_text(f"{DOWN}{DOWN} ")
+    rig.say("/config")
+    assert rig.repl.update_check is False, "Update notices must be off"
+    assert _choices()["update_check"] is False, f"Kept {_choices()}"
+    assert "Update notices off" in rig.printed(), rig.printed()
+
+
+@pytest.mark.parametrize(("check", "shown"), [(True, True), (False, False)])
+def test_repl_welcome_screen_shows_a_newer_release_only_when_asked(
+    rig: Rig, check: bool, shown: bool
+) -> None:
+    rig.repl.update_notice = "9.9.9"
+    rig.repl.update_check = check
+    rig.say("/clear")
+    present = "sepia 9.9.9 is out: run sepia update" in rig.printed()
+    assert present is shown, f"update_check={check}: notice shown = {present}"
+
+
 # --- references --------------------------------------------------------------------
 
 

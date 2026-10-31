@@ -129,6 +129,11 @@ STRINGS: dict[str, str] = {
     "questions_cancelled": "Cancelled, nothing painted",
     "config_title": "Settings",
     "config_hint": "↑↓ to move · Enter or Space to switch · Esc to close",
+    "update_notice": "sepia {latest} is out: run sepia update",
+    "config.update": "Update notices",
+    "config.update_summary": "say when a new sepia is out",
+    "update_check_on": "Update notices on, from the next start",
+    "update_check_off": "Update notices off",
     "config.ask": "Clarifying questions",
     "config.ask_summary": "ask before painting a vague idea",
     "config.mature": "Mature pictures",
@@ -292,6 +297,13 @@ def tip(words: Words) -> Text:
     label, _, rest = words("tip").partition(":")
     text.append(f"{label}:", style="bold")
     text.append(rest, style=MUTED)
+    return text
+
+
+def release_notice(words: Words, latest: str) -> Text:
+    """The line under the tip when a newer sepia is out."""
+    text = Text(" ↑ ", style=ACCENT)
+    text.append(words("update_notice", latest=latest), style=MUTED)
     return text
 
 

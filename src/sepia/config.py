@@ -54,6 +54,8 @@ class Settings:
     """Let Claude paint sexy, dark and violent pictures of adults, never explicit."""
     ask: bool = True
     """Let Claude ask a few questions before painting a vague request."""
+    update_check: bool = True
+    """Say on start when a newer sepia is on PyPI."""
     painter: Source = "api"
     """Cloudflare (when its key is set) or this machine only: /api and /local."""
 
@@ -70,6 +72,7 @@ class Choices(BaseModel):
     charset: Charset | None = None
     mature: bool | None = None
     ask: bool | None = None
+    update_check: bool | None = None
     painter: Source | None = None
 
 
@@ -132,6 +135,7 @@ def load_settings(
     charset = _choice(environ, "SEPIA_CHARSET", get_args(Charset), DEFAULT_CHARSET)
     mature = _choice(environ, "SEPIA_MATURE", get_args(Switch), "off")
     ask = _choice(environ, "SEPIA_ASK", get_args(Switch), "on")
+    update_check = _choice(environ, "SEPIA_UPDATE_CHECK", get_args(Switch), "on")
     settings = Settings(
         model=model,
         effort=cast(Effort, effort),
@@ -140,6 +144,7 @@ def load_settings(
         image_model=image_model,
         mature=mature == "on",
         ask=ask == "on",
+        update_check=update_check == "on",
     )
     if chosen is None:
         return settings

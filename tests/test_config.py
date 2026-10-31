@@ -50,8 +50,26 @@ def test_load_settings_mature_switch_sets_mature(value: str, expected: bool) -> 
 
 
 @pytest.mark.parametrize(
+    ("environ", "expected"),
+    [({}, True), ({"SEPIA_UPDATE_CHECK": " OFF "}, False)],
+)
+def test_load_settings_update_check_switch_sets_the_notice(
+    environ: dict[str, str], expected: bool
+) -> None:
+    settings = load_settings(environ)
+    assert settings.update_check is expected, f"{environ}: got {settings}"
+
+
+@pytest.mark.parametrize(
     "name",
-    ["SEPIA_EFFORT", "SEPIA_STYLE", "SEPIA_CHARSET", "SEPIA_MATURE", "SEPIA_ASK"],
+    [
+        "SEPIA_EFFORT",
+        "SEPIA_STYLE",
+        "SEPIA_CHARSET",
+        "SEPIA_MATURE",
+        "SEPIA_ASK",
+        "SEPIA_UPDATE_CHECK",
+    ],
 )
 def test_load_settings_unknown_choice_raises_config_error(name: str) -> None:
     with pytest.raises(ConfigError, match=name):

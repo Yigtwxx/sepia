@@ -4,6 +4,7 @@ import os
 import queue
 import shutil
 import sys
+import threading
 import time
 import urllib.parse
 from collections.abc import Callable, Sequence
@@ -19,7 +20,7 @@ from rich.console import Console, RenderableType
 from rich.live import Live
 from rich.text import Text
 
-from sepia import ui
+from sepia import ui, update
 from sepia.ascii_art import ArtStyle, Charset
 from sepia.camera import camera_installed
 from sepia.chatbar import BottomBar, ChatBar, Resized
@@ -196,6 +197,7 @@ class Repl:
         folder: Path,
         ledger: Ledger,
         search_key: str | None = None,
+        update_notice: str = "",
     ) -> None:
         self.console = console
         self.words = words
@@ -219,6 +221,9 @@ class Repl:
         self.ledger = ledger
         self.search_key = search_key
         """Brave Search API key: named subjects come from an image search."""
+        self.update_notice = update_notice
+        """A newer sepia on PyPI, named on the welcome screen; empty when none."""
+        self.update_check = settings.update_check
         self.style: ArtStyle = settings.style
         self.charset: Charset = settings.charset
         self.canvas = Canvas(VIEWER_COLS, VIEWER_ROWS)
@@ -543,6 +548,12 @@ class Repl:
                     self.words("config.mature_summary"),
                     self.director.mature,
                 ),
+                (
+                    "update",
+                    self.words("config.update"),
+                    self.words("config.update_summary"),
+                    self.update_check,
+                ),
             ],
             self.words("config_hint"),
         )
@@ -555,6 +566,11 @@ class Repl:
             remember(mature=values["mature"])
             state = _switch(values["mature"])
             self.transcript.say(ui.reply(self.words(f"mature_{state}")))
+        if values["update"] != self.update_check:
+            self.update_check = values["update"]
+            remember(update_check=values["update"])
+            state = _switch(values["update"])
+            self.transcript.say(ui.reply(self.words(f"update_check_{state}")))
 
     def _draw(self, request: str, add: bool) -> None:
         """Paint `request`: a new picture, or with `add` an addition to this one.
@@ -973,6 +989,8 @@ class Repl:
         self.bar.start()
         self.console.print(ui.welcome(self.words, self.console.width))
         self.console.print(ui.tip(self.words))
+        if self.update_notice and self.update_check:
+            self.console.print(ui.release_notice(self.words, self.update_notice))
         self.console.print()
         self.transcript.replay()
 
@@ -1031,8 +1049,27 @@ def run_repl() -> int:
     # Before this session's requests reach the history and its folder prunes one.
     ledger.read()
     folder = new_session_dir(config_dir() / "sessions")
+    release_file = config_dir() / "update.json"
+    latest = update.notice(release_file) if settings.update_check else ""
+    if settings.update_check:
+        # The answer shows on the next start; this one never waits for PyPI.
+        threading.Thread(
+            target=update.refresh_release,
+            args=(release_file,),
+            name="sepia-release",
+            daemon=True,
+        ).start()
     repl = Repl(
-        console, words, settings, director, api, local, folder, ledger, search_key()
+        console,
+        words,
+        settings,
+        director,
+        api,
+        local,
+        folder,
+        ledger,
+        search_key(),
+        update_notice=latest,
     )
     return repl.run()
 

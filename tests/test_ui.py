@@ -20,6 +20,11 @@ def test_wordmark_is_compact_and_uses_the_band_colors() -> None:
     assert ui.BANDS[0] in styles and ui.BANDS[-1] in styles, "Gradient ends missing"
 
 
+def test_release_notice_names_the_version_and_the_command() -> None:
+    text = ui.release_notice(ui.Words(), "0.4.2").plain
+    assert text == " ↑ sepia 0.4.2 is out: run sepia update", f"Got {text!r}"
+
+
 def test_words_format_values_into_strings() -> None:
     text = ui.Words()("style_set", style="ink", charset="classic")
     assert text == "Style: ink · charset: classic", f"Got {text!r}"
