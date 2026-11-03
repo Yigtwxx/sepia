@@ -10,6 +10,8 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-03
+
 ### Added
 
 - `/copy` puts the picture in the viewer window on the clipboard as plain text in a ```` ``` ```` code block, ready to paste into Discord, Slack, GitHub or a code comment. It keeps the window's shape, is at most 80 columns wide and fits one Discord message (2,000 characters).
@@ -343,7 +345,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/Yigtwxx/sepia/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/Yigtwxx/sepia/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Yigtwxx/sepia/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Yigtwxx/sepia/compare/v0.4.0...v0.4.1
