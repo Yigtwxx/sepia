@@ -16,6 +16,7 @@ export const slashCommands: readonly Command[] = [
     { cmd: '/again', comment: 'paint the picture again with fresh noise, no new prompt' },
     { cmd: '/undo', comment: 'go back to the picture before' },
     { cmd: '/cam [off]', comment: 'show the webcam live; /cam again keeps the frame' },
+    { cmd: '/play <link|off>', comment: 'play a video of up to a minute in the window' },
     { cmd: '/clear', comment: 'clear the screen and start a fresh picture' },
     { cmd: '/style [ink|fill]', comment: 'choose how the picture is drawn' },
     { cmd: '/charset [classic|symbols]', comment: 'choose the characters that draw it' },

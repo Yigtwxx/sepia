@@ -39,6 +39,7 @@ Every request starts a new picture; `/add` builds on the current one. sepia only
 - **Real subjects stay recognizable.** Name a character, a famous person, a creature, product or landmark, or paste a link to a picture, and sepia paints from a reference picture instead of inventing a stranger.
 - **Made for the terminal.** 24-bit color, two styles and two character sets, a redraw on every resize without new API calls, and ripples that spread from the mouse pointer over the picture.
 - **Your camera, as text.** `/cam` shows the webcam live in the picture window; `/cam` again keeps the frame, and `/add` paints over it.
+- **Short videos, as text.** `/play <link>` plays a video of up to a minute from YouTube or another site in the picture window, then deletes it.
 - **Costs you can see.** `/usage` shows Claude's tokens, searches and estimated cost, for the session and for all time.
 - **Nothing hidden.** The two windows talk over an authenticated loopback socket, and sepia has no telemetry.
 
@@ -77,7 +78,13 @@ uv tool install "sepia-cli[local]" --index https://download.pytorch.org/whl/cu13
 uv tool install "sepia-cli[cam]"
 ```
 
-Extras combine: `"sepia-cli[local,cam]"`.
+**With videos.** yt-dlp, Deno (which YouTube needs) and OpenCV for `/play`, about 100 MB:
+
+```bash
+uv tool install "sepia-cli[video]"
+```
+
+Extras combine: `"sepia-cli[local,cam,video]"`.
 
 **Update.** `sepia update` upgrades sepia with the installer that installed it (`uv tool upgrade sepia-cli`, `pipx upgrade sepia-cli`, or `python -m pip install --upgrade sepia-cli`), uv keeps extras such as `[local]` and the CUDA index, and pipx keeps extras; pip upgrades only `sepia-cli` itself. It asks PyPI first and says so when sepia is already the latest. On Windows, close sepia's other windows first; `sepia update` says so if one is open. An install from a folder or a git checkout is updated there (`git pull`); one from a git or web address is installed again from there.
 
@@ -95,6 +102,7 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/again` | Paint the current picture again from the same prompt with fresh noise, without asking Claude; after `/add`, over the same picture. A picture shown as found has no prompt to paint again. |
 | `/undo` | Go back to the picture before, with its scene, so the next `/add` builds on it. `/clear` can be undone too; there is no redo. |
 | `/cam [off]` | Show the webcam live in the viewer window, mirrored. `/cam` again keeps the frame as the picture, cut to the window's shape; `/add` and `/save` while it is live keep the frame first. A request, `/again`, `/undo` and `/clear` stop the camera, as does `/cam off`. Needs `sepia-cli[cam]`. |
+| `/play <link\|off>` | Download a video of up to 60 seconds (YouTube or any other site yt-dlp knows; https links only) into a temporary folder and play it once in the viewer window, picture only, at up to 15 frames a second. Longer videos, live streams and playlists are refused before anything is downloaded; it takes at most 480p and 100 MB. The file is deleted when the video ends, on `/play off`, and when sepia closes. A request, `/again`, `/undo`, `/clear` and `/cam` stop the video. Needs `sepia-cli[video]`. |
 | `/clear` | Clear the screen and start a fresh picture. |
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background and suits dark themes; `fill` also paints each cell's background and works on any theme. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. |
@@ -258,6 +266,7 @@ What leaves your machine:
 - **To the site of a reference picture:** a plain download of the linked page or picture, when a request names a subject or contains a link.
 - **To Cloudflare:** the generated English prompt, the picture size, the seed and, as input pictures of at most 512 px a side, the reference picture and, for `/add`, the previous picture. Your original request is not sent. Nothing goes to Cloudflare when the picture is painted locally.
 - **The camera:** nowhere. Its frames are drawn in the viewer window and never sent; a frame you keep is a picture like any other, so an `/add` on it sends it to the painter as the previous picture.
+- **To the site of a video:** the link you give `/play`, which yt-dlp asks for the video and downloads; the file stays on your machine until it has played, then is deleted. Nothing about it goes to Anthropic or Cloudflare.
 - **To Hugging Face:** only the model download, after you say yes to it under `/local` or run `sepia --download`.
 
 Pictures, the request history and the API key file stay in the user config folder on your machine; a picture you keep with `/save` goes to the `sepia` folder of your Pictures folder. sepia has no telemetry of its own.
