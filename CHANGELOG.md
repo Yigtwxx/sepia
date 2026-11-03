@@ -10,6 +10,13 @@ tag all carry.
 
 ## [Unreleased]
 
+### Changed
+
+- Moving the mouse over the picture leaves a sepia trail instead of ripples:
+  where the pointer passes, the picture turns the brown of an old photograph
+  and fades back to its colors in about a second. Nothing on the picture moves
+  any more, so the effect no longer looks like a glitch.
+
 ## [0.5.0] - 2026-11-03
 
 ### Added

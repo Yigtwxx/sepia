@@ -31,16 +31,16 @@ from sepia.ipc import Channel, Message, Session, connect
 from sepia.mouse import MOUSE_OFF, MOUSE_ON, MouseParser, read_input
 from sepia.painter import image_size
 from sepia.raster import RGBImage, enhance, fit_image
-from sepia.ripple import (
-    DURATION,
-    FRAME_SECONDS,
-    MAX_RIPPLES,
-    Mask,
-    Ripple,
-    ripple_ansi,
-    spaced,
-)
 from sepia.scene import Canvas
+from sepia.trail import (
+    FADE,
+    FRAME_SECONDS,
+    MAX_DABS,
+    Dab,
+    Levels,
+    dabs_between,
+    trail_ansi,
+)
 from sepia.video import VideoError, VideoFile
 
 POLL_SECONDS = 0.01
@@ -106,7 +106,7 @@ def _art_text(art: SymbolArt) -> Text:
 
 def draw_frame(console: Console, screen: ScreenContext, frame: Text) -> None:
     """Draw `frame` over the whole window. rich prints a screen from wherever the
-    cursor is, and a ripple or a resize leaves it mid-screen, where the frame would
+    cursor is, and a trail or a resize leaves it mid-screen, where the frame would
     start off its first row and scroll the window; so it starts from home."""
     console.control(Control.home())
     screen.update(frame)
@@ -119,14 +119,14 @@ def _picture(path: str) -> Image.Image:
 
 
 class Hover:
-    """Drops ripples along the mouse pointer's path over the picture."""
+    """Leaves a sepia trail along the mouse pointer's path over the picture."""
 
     def __init__(self, write: Callable[[str], object]) -> None:
         self._write = write
         self._parser = MouseParser()
-        self._ripples: list[Ripple] = []
-        self._dropped: tuple[int, int] | None = None
-        self._drawn: Mask | None = None
+        self._dabs: list[Dab] = []
+        self._last: tuple[int, int] | None = None
+        self._shown: Levels | None = None
         self._frame_at = 0.0
 
     def start(self) -> None:
@@ -136,29 +136,30 @@ class Hover:
         self._write(MOUSE_OFF)
 
     def forget(self) -> None:
-        """The screen was redrawn; no ripple shows any more."""
-        self._ripples.clear()
-        self._dropped, self._drawn = None, None
+        """The screen was redrawn; no trail shows any more."""
+        self._dabs.clear()
+        self._last, self._shown = None, None
 
     def step(self, art: SymbolArt | None, typed: str) -> None:
-        """Take new pointer reports and draw the next ripple frame if one is due."""
-        point = self._parser.feed(typed) if typed else None
+        """Take new pointer reports and draw the next trail frame if one is due."""
+        points = self._parser.feed(typed) if typed else []
         now = time.monotonic()
         if art is None:
             return
-        if point is not None and spaced(self._dropped, point):
-            col, row = point
-            if 0 <= col < art.cols and 0 <= row < art.rows:
-                kept = self._ripples[-(MAX_RIPPLES - 1) :]
-                self._ripples = [*kept, Ripple(col, row, now)]
-                self._dropped = point
-        self._ripples = [r for r in self._ripples if now - r.born < DURATION]
-        if not self._ripples and self._drawn is None:
+        for point in points:
+            if 0 <= point[0] < art.cols and 0 <= point[1] < art.rows:
+                laid = dabs_between(self._last, point, now)
+                if laid:
+                    self._dabs.extend(laid)
+                    self._last = point
+        self._dabs = [d for d in self._dabs[-MAX_DABS:] if now - d.born < FADE]
+        if not self._dabs and self._shown is None:
             return
         if now - self._frame_at >= FRAME_SECONDS:
-            ansi, drawn = ripple_ansi(art, self._ripples, now, self._drawn)
-            self._write(ansi)
-            self._drawn = drawn if drawn.any() else None
+            ansi, shown = trail_ansi(art, self._dabs, now, self._shown)
+            if ansi:
+                self._write(ansi)
+            self._shown = shown if shown.any() else None
             self._frame_at = now
 
 
@@ -383,9 +384,9 @@ def _loop(channel: Channel, console: Console) -> None:
                         art = render_art(state, size.width, size.height)
                         frame = Text("") if art is None else _art_text(art)
                     draw_frame(console, screen, frame)
-                    hover.forget()  # the full redraw wiped any ripple
+                    hover.forget()  # the full redraw wiped the trail
                     dirty = False
-                # No ripples over a live view: the next frame would wipe them.
+                # No trail over a live view: the next frame would wipe it.
                 hover.step(None if live.active else art, read_input())
                 console.file.flush()
         finally:

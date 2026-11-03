@@ -16,26 +16,27 @@ _MAX_PENDING = 32
 
 
 class MouseParser:
-    """Turns raw terminal input into the latest pointer cell."""
+    """Turns raw terminal input into the pointer cells it reports."""
 
     def __init__(self) -> None:
         self._pending = ""
 
-    def feed(self, text: str) -> tuple[int, int] | None:
-        """The last pointer position (col, row), 0-based, reported in `text`.
+    def feed(self, text: str) -> list[tuple[int, int]]:
+        """Every pointer position (col, row), 0-based, reported in `text`, oldest
+        first, so a quick stroke keeps the cells between the first and the last.
 
         A report split across two reads is kept and completed by the next one.
         """
         data = self._pending + text
-        latest: tuple[int, int] | None = None
+        points: list[tuple[int, int]] = []
         end = 0
         for match in _REPORT.finditer(data):
-            latest = (int(match[1]) - 1, int(match[2]) - 1)
+            points.append((int(match[1]) - 1, int(match[2]) - 1))
             end = match.end()
         rest = data[end:]
         start = rest.rfind("\x1b")
         self._pending = rest[start:][-_MAX_PENDING:] if start >= 0 else ""
-        return latest
+        return points
 
 
 if sys.platform == "win32":

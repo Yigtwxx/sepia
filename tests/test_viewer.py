@@ -19,8 +19,8 @@ from sepia.camera import CameraError
 from sepia.ipc import Channel, Session
 from sepia.mouse import MOUSE_OFF, MOUSE_ON
 from sepia.painter import image_size
-from sepia.ripple import DURATION, FRAME_SECONDS
 from sepia.scene import Canvas
+from sepia.trail import FADE, FRAME_SECONDS
 from sepia.video import VideoError
 from sepia.viewer import (
     LIVE_FPS,
@@ -93,7 +93,7 @@ def test_draw_frame_starts_at_the_top_left_wherever_the_cursor_was() -> None:
     out = io.StringIO()
     console = Console(file=out, force_terminal=True, width=12, height=3)
     with console.screen() as screen:
-        console.file.write("\x1b[2;7H")  # a ripple left the cursor mid-screen
+        console.file.write("\x1b[2;7H")  # a trail left the cursor mid-screen
         out.seek(0)
         out.truncate()
         draw_frame(console, screen, Text("abc\ndef\nghi"))
@@ -101,13 +101,13 @@ def test_draw_frame_starts_at_the_top_left_wherever_the_cursor_was() -> None:
     assert drawn.startswith("\x1b[H"), f"Frame must start from home, got {drawn!r}"
 
 
-def _gray_art() -> SymbolArt:
+def _gray_art(cols: int = 40) -> SymbolArt:
     return SymbolArt(
-        np.full((12, 40), "a"), np.full((12, 40, 3), 100, dtype=np.uint8), None
+        np.full((12, cols), "a"), np.full((12, cols, 3), 100, dtype=np.uint8), None
     )
 
 
-def test_hover_pointer_report_drops_a_ripple_under_the_pointer() -> None:
+def test_hover_pointer_report_tones_the_cells_under_the_pointer() -> None:
     written: list[str] = []
     hover = Hover(written.append)
     hover.step(_gray_art(), "[<35;10;5M")
@@ -121,7 +121,7 @@ def test_hover_after_a_full_redraw_draws_nothing() -> None:
     hover.forget()
     written.clear()
     hover.step(_gray_art(), "")
-    assert written == [], f"A redraw wiped the ripples, but got {written!r}"
+    assert written == [], f"A redraw wiped the trail, but got {written!r}"
 
 
 def test_hover_start_and_stop_switch_mouse_reporting_on_and_off() -> None:
@@ -135,14 +135,14 @@ def test_hover_start_and_stop_switch_mouse_reporting_on_and_off() -> None:
 def test_hover_pointer_before_the_first_picture_draws_nothing() -> None:
     written: list[str] = []
     Hover(written.append).step(None, "\x1b[<35;10;5M")
-    assert written == [], f"There is no picture to ripple, but got {written!r}"
+    assert written == [], f"There is no picture to tone, but got {written!r}"
 
 
 def test_hover_pointer_outside_the_picture_draws_nothing() -> None:
     written: list[str] = []
     hover = Hover(written.append)
     hover.step(_gray_art(), "\x1b[<35;90;5M")  # the art is 40 columns wide
-    assert written == [], f"No ripple belongs outside the grid, got {written!r}"
+    assert written == [], f"No trail belongs outside the grid, got {written!r}"
 
 
 @pytest.fixture
@@ -159,20 +159,35 @@ def test_hover_frames_are_limited_to_the_frame_rate(clock: list[float]) -> None:
     hover = Hover(written.append)
     hover.step(_gray_art(), "\x1b[<35;10;5M")
     clock[0] += FRAME_SECONDS / 4
-    hover.step(_gray_art(), "")
+    hover.step(_gray_art(), "\x1b[<35;30;5M")  # the stroke goes on
     assert len(written) == 1, f"A second frame came too soon: {len(written)}"
     clock[0] += FRAME_SECONDS
     hover.step(_gray_art(), "")
     assert len(written) == 2, f"The next frame was not drawn: {len(written)}"
 
 
-def test_hover_finished_ripple_is_erased_once_then_the_hover_goes_quiet(
+def test_hover_reports_in_one_read_all_join_the_stroke() -> None:
+    def frame(reports: str) -> str:
+        written: list[str] = []
+        Hover(written.append).step(_gray_art(120), reports)
+        return written[0]
+
+    def runs_on_row_5(ansi: str) -> int:
+        return len(re.findall(r"\x1b\[5;\d+H", ansi))
+
+    path = "".join(f"\x1b[<35;{col};5M" for col in range(10, 61, 2))
+    whole, ends = frame(path), frame("\x1b[<35;10;5M\x1b[<35;60;5M")
+    assert runs_on_row_5(whole) == 1, "Every report in a read must join the stroke"
+    assert runs_on_row_5(ends) == 2, "Two far reports alone must leave two dabs"
+
+
+def test_hover_faded_trail_is_erased_once_then_the_hover_goes_quiet(
     clock: list[float],
 ) -> None:
     written: list[str] = []
     hover = Hover(written.append)
     hover.step(_gray_art(), "\x1b[<35;10;5M")
-    clock[0] += DURATION + 0.5
+    clock[0] += FADE + 0.5
     hover.step(_gray_art(), "")
     assert len(written) == 2, f"Expected a frame that heals the picture: {written!r}"
     assert written[1].endswith("\x1b[0m"), "The healing frame must reset the colors"
@@ -181,21 +196,19 @@ def test_hover_finished_ripple_is_erased_once_then_the_hover_goes_quiet(
     assert len(written) == 2, "Nothing may be drawn once the picture has healed"
 
 
-def test_hover_pointer_far_from_the_last_ring_adds_a_ring(
-    clock: list[float],
-) -> None:
+def test_hover_longer_stroke_tones_more_cells(clock: list[float]) -> None:
     def second_frame(report: str) -> str:
         written: list[str] = []
         hover = Hover(written.append)
-        hover.step(_gray_art(), "\x1b[<35;10;5M")
+        hover.step(_gray_art(120), "\x1b[<35;10;5M")
         written.clear()
         clock[0] += FRAME_SECONDS * 2
-        hover.step(_gray_art(), report)
+        hover.step(_gray_art(120), report)
         return written[0]
 
-    near = second_frame("\x1b[<35;11;5M")  # one cell away: too close for a ring
+    near = second_frame("\x1b[<35;11;5M")  # one cell away: too close for a dab
     far = second_frame("\x1b[<35;30;5M")
-    assert len(far) > len(near), "A far pointer must redraw more cells than a near one"
+    assert len(far) > len(near), "A longer stroke must redraw more cells"
 
 
 class _FakeConnection:
@@ -385,7 +398,7 @@ def test_loop_resize_survives_a_prompt_that_stopped_listening(
     assert MOUSE_OFF in out.getvalue(), "The loop must end normally"
 
 
-def test_loop_pointer_report_ripples_the_drawn_picture(
+def test_loop_pointer_report_leaves_a_trail_on_the_drawn_picture(
     picture: str, window: tuple[Console, io.StringIO], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     console, out = window
@@ -396,7 +409,7 @@ def test_loop_pointer_report_ripples_the_drawn_picture(
         {0: lambda: "\x1b[<35;10;5M", 1: _say_bye(link)},
     )
     viewer._loop(Channel(link), console)
-    assert "\x1b[5;" in out.getvalue(), "No ripple was drawn around row 5"
+    assert "\x1b[5;" in out.getvalue(), "No trail was drawn around row 5"
 
 
 def _use_window(
