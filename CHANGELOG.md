@@ -10,6 +10,13 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-11-03
+
+### Fixed
+
+- `/copy` makes the text at most 60 columns wide instead of 80, so Discord no longer wraps each row of the picture into two lines.
+- More pasted Google Images links (`share.google`) give their picture. The picture is asked for as the page that shows it would ask, so sites that stop hotlinking (wallpaper sites) send it instead of their home page; where the picture's address still leads to a web page (Instagram), that page's preview picture is used. TikTok refuses every download, so its links still give none, and the message for such a link now says the site may refuse downloads.
+
 ## [0.5.2] - 2026-11-03
 
 ### Added
@@ -345,7 +352,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/Yigtwxx/sepia/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/Yigtwxx/sepia/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/Yigtwxx/sepia/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Yigtwxx/sepia/compare/v0.4.1...v0.5.0
