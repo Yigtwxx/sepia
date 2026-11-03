@@ -42,6 +42,13 @@ local = [
 ]
 # /cam: the webcam, shown live in the picture window (about 45 MB).
 cam = ["opencv-python-headless>=5.0.0.93"]
+# /play: short videos from YouTube and other sites, played in the picture window.
+# Deno solves YouTube's JavaScript challenges; yt-dlp finds it in the scripts
+# folder its PyPI package installs to (about 100 MB with OpenCV).
+video = [
+    "yt-dlp[default,deno]>=2026.10.26",
+    "opencv-python-headless>=5.0.0.93",
+]
 
 [project.urls]
 Homepage = "https://sepia-cli.vercel.app"
@@ -98,9 +105,10 @@ module = ["diffusers", "diffusers.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 
-# The cam extra may not be installed either; OpenCV is used through a Protocol.
+# The cam and video extras may not be installed either; OpenCV and yt-dlp are
+# used through Protocols.
 [[tool.mypy.overrides]]
-module = ["cv2", "cv2.*"]
+module = ["cv2", "cv2.*", "yt_dlp", "yt_dlp.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

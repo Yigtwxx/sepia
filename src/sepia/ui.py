@@ -122,6 +122,25 @@ STRINGS: dict[str, str] = {
     "use it; close any other app that has it",
     "camera_hint_macos": "System Settings › Privacy & Security › Camera must allow "
     "your terminal",
+    "video_usage": "Paste a video link after it: /play https://youtu.be/…",
+    "video_missing": "Videos need the video extra: install sepia-cli[video], then "
+    "type /play again",
+    "fetching_video": "Working on it… (fetching the video · {elapsed})",
+    "video_opening": "Working on it… (opening the video · {elapsed})",
+    "video_on": "Playing {title}: /play off stops it",
+    "the_video": "the video",
+    "video_off": "Video off",
+    "video_failed": "The video did not play: {error}",
+    "video_silent": "The video did not start in time",
+    "video_unseen": "The video ended before a frame could be shown",
+    "video_no_window": "The video plays in the picture window, which is not open",
+    "video.unusable": "That link cannot be played: it needs https and a public site",
+    "video.too_long": "That video is {length}; /play takes videos up to {limit} "
+    "seconds",
+    "video.live": "That is a live stream; /play takes videos up to {limit} seconds",
+    "video.not_a_video": "That link is a playlist or a channel; give it one video",
+    "video.too_big": "That video is over 100 MB even at 480p",
+    "video.failed": "Could not fetch the video: {error}",
     "style_set": "Style: {style} · charset: {charset}",
     "effort_set": "Effort: {effort}, from the next picture on",
     "model_set": "Model: {model}, from the next picture on",
@@ -248,6 +267,7 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/again", "paint the picture again with fresh noise, no new prompt"),
     ("/undo", "go back to the picture before"),
     ("/cam [off]", "show the webcam live; /cam again keeps the frame"),
+    ("/play <link|off>", "play a video of up to a minute in the window"),
     ("/clear", "clear the screen and start a fresh picture"),
     ("/style [ink|fill]", "choose how the picture is drawn"),
     ("/charset [classic|symbols]", "choose the characters that draw it"),
@@ -324,6 +344,12 @@ def elapsed(seconds: float) -> str:
     """How long a request has run, for the spinner: 42s, then 2m 05s."""
     minutes, rest = divmod(int(seconds), 60)
     return f"{minutes}m {rest:02d}s" if minutes else f"{rest}s"
+
+
+def length(seconds: float) -> str:
+    """A video's length, as players show it: 0:19, 3:12."""
+    minutes, rest = divmod(round(seconds), 60)
+    return f"{minutes}:{rest:02d}"
 
 
 def reply(message: str, detail: str = "", *, failed: bool = False) -> Text:

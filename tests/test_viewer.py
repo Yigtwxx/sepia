@@ -21,6 +21,7 @@ from sepia.mouse import MOUSE_OFF, MOUSE_ON
 from sepia.painter import image_size
 from sepia.ripple import DURATION, FRAME_SECONDS
 from sepia.scene import Canvas
+from sepia.video import VideoError
 from sepia.viewer import (
     LIVE_FPS,
     Hover,
@@ -559,6 +560,7 @@ class FakeCamera:
         self.frame = frame
         self.error = error
         self.failed = False
+        self.ended = False
         self.started = 0
         self.stopped = 0
 
@@ -585,9 +587,17 @@ def _frame() -> np.ndarray:
 ON = {"type": "camera", "on": True}
 
 
-def _live(camera: FakeCamera) -> tuple[LiveView, list[str]]:
+def _live(
+    camera: FakeCamera, video: "FakeVideo | None" = None
+) -> tuple[LiveView, list[str]]:
     written: list[str] = []
-    return LiveView(written.append, lambda: camera), written
+    played = video or FakeVideo(_frame())
+
+    def make_video(path: str) -> FakeVideo:
+        played.path = path
+        return played
+
+    return LiveView(written.append, lambda: camera, make_video), written
 
 
 def test_live_view_on_starts_the_camera_and_says_so_with_the_first_frame() -> None:
@@ -734,3 +744,180 @@ def test_loop_leaving_lets_go_of_the_camera(
     link = _FakeConnection(_wire(ON, {"type": "bye"}))
     viewer._loop(Channel(link), console)
     assert camera.stopped == 1, "The camera must be released on the way out"
+
+
+# --- a video, live -----------------------------------------------------------------
+
+
+class FakeVideo:
+    """Stands in for a video file played by OpenCV: one fixed frame (or none), a
+    file that cannot open, and an end the test sets."""
+
+    def __init__(self, frame: np.ndarray | None = None, error: str = "") -> None:
+        self.frame = frame
+        self.error = error
+        self.path = ""
+        self.failed = False
+        self.ended = False
+        self.started = 0
+        self.stopped = 0
+
+    def start(self) -> None:
+        self.started += 1
+        if self.error:
+            raise VideoError("failed", self.error)
+
+    def latest(self) -> np.ndarray | None:
+        return self.frame
+
+    def stop(self) -> None:
+        self.stopped += 1
+
+
+CLIP = "C:/tmp/sepia-video-1/video.mp4"
+PLAY = {"type": "video", "path": CLIP}
+VIDEO_OFF = {"type": "video", "on": False}
+
+
+def test_live_view_video_plays_and_says_so_with_the_first_frame() -> None:
+    video = FakeVideo(_frame())
+    live, written = _live(FakeCamera(_frame()), video)
+    assert live.handle(PLAY, 30, 10) is None, "On is said once a frame is drawn"
+    assert live.active and video.started == 1, "The video must be started"
+    assert video.path == CLIP, f"Opened {video.path}"
+    reply = live.step(30, 10, "ink", "classic")
+    assert reply == {"type": "video", "state": "on", "path": CLIP}, f"Got {reply}"
+    assert len(written) == 1, "A whole frame is drawn"
+
+
+def test_live_view_video_that_cannot_open_replies_the_error_with_its_path() -> None:
+    live, _ = _live(FakeCamera(_frame()), FakeVideo(error="no codec"))
+    reply = live.handle(PLAY, 30, 10)
+    assert reply == {"type": "video", "error": "no codec", "path": CLIP}, f"Got {reply}"
+    assert not live.active, "No video, no live view"
+
+
+def test_live_view_video_off_stops_it_and_replies_off_with_its_path() -> None:
+    video = FakeVideo(_frame())
+    live, _ = _live(FakeCamera(_frame()), video)
+    live.handle(PLAY, 30, 10)
+    reply = live.handle(VIDEO_OFF, 30, 10)
+    assert reply == {"type": "video", "state": "off", "path": CLIP}, f"Got {reply}"
+    assert not live.active and video.stopped == 1, "The file must be let go"
+
+
+def test_live_view_video_off_when_none_plays_replies_nothing() -> None:
+    live, _ = _live(FakeCamera(_frame()))
+    assert live.handle(VIDEO_OFF, 30, 10) is None, "Nothing played, nothing to say"
+
+
+def test_live_view_video_end_stops_it_and_replies_ended() -> None:
+    video = FakeVideo(_frame())
+    live, _ = _live(FakeCamera(_frame()), video)
+    live.handle(PLAY, 30, 10)
+    live.step(30, 10, "ink", "classic")
+    video.ended = True
+    reply = live.step(30, 10, "ink", "classic")
+    assert reply == {"type": "video", "state": "ended", "path": CLIP}, f"Got {reply}"
+    assert not live.active and video.stopped == 1, "An ended video is let go"
+
+
+def test_live_view_video_ended_before_it_was_shown_says_on_first() -> None:
+    video = FakeVideo(_frame())
+    live, _ = _live(FakeCamera(_frame()), video)
+    live.handle(PLAY, 30, 10)
+    video.ended = True
+    first = live.step(30, 10, "ink", "classic")
+    second = live.step(30, 10, "ink", "classic")
+    assert first is not None and first["state"] == "on", f"First {first}"
+    assert second is not None and second["state"] == "ended", f"Then {second}"
+
+
+def test_live_view_video_ended_without_any_frame_replies_ended() -> None:
+    video = FakeVideo(None)
+    live, written = _live(FakeCamera(_frame()), video)
+    live.handle(PLAY, 30, 10)
+    video.ended = True
+    reply = live.step(30, 10, "ink", "classic")
+    assert reply == {"type": "video", "state": "ended", "path": CLIP}, f"Got {reply}"
+    assert written == [], "Nothing to draw"
+
+
+def test_live_view_lost_video_replies_an_error_with_its_path() -> None:
+    video = FakeVideo(_frame())
+    live, _ = _live(FakeCamera(_frame()), video)
+    live.handle(PLAY, 30, 10)
+    video.failed = True
+    reply = live.step(30, 10, "ink", "classic")
+    assert reply is not None and reply.get("path") == CLIP, f"Replied {reply}"
+    assert reply["type"] == "video" and "error" in reply, f"Replied {reply}"
+    assert not live.active and video.stopped == 1, "A broken video is let go"
+
+
+def test_live_view_video_replaces_a_live_camera() -> None:
+    camera, video = FakeCamera(_frame()), FakeVideo(_frame())
+    live, _ = _live(camera, video)
+    live.handle(ON, 30, 10)
+    live.handle(PLAY, 30, 10)
+    assert camera.stopped == 1, "The camera must be let go first"
+    assert video.started == 1 and live.active, "The video must play"
+
+
+def test_live_view_camera_off_while_a_video_plays_is_ignored() -> None:
+    video = FakeVideo(_frame())
+    live, _ = _live(FakeCamera(_frame()), video)
+    live.handle(PLAY, 30, 10)
+    assert live.handle({"type": "camera", "on": False}, 30, 10) is None, "No reply"
+    assert live.active and video.stopped == 0, "The video must keep playing"
+
+
+def test_live_view_video_off_while_the_camera_is_live_is_ignored() -> None:
+    camera = FakeCamera(_frame())
+    live, _ = _live(camera)
+    live.handle(ON, 30, 10)
+    assert live.handle(VIDEO_OFF, 30, 10) is None, "No reply"
+    assert live.active and camera.stopped == 0, "The camera must stay on"
+
+
+def test_live_view_keep_while_a_video_plays_replies_an_error(tmp_path: Path) -> None:
+    video = FakeVideo(_frame())
+    live, _ = _live(FakeCamera(_frame()), video)
+    live.handle(PLAY, 30, 10)
+    reply = live.handle({"type": "camera", "keep": str(tmp_path / "a.png")}, 30, 10)
+    assert reply is not None and "error" in reply, f"Replied {reply}"
+    assert live.active, "Keeping is the camera's; the video plays on"
+
+
+def test_loop_video_plays_then_ends_and_the_picture_comes_back(
+    picture: str,
+    window: tuple[Console, io.StringIO],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    console, out = window
+    video = FakeVideo(_frame())
+    monkeypatch.setattr(viewer, "VideoFile", lambda path: video)
+    link = _FakeConnection(_wire({"type": "image", "path": picture}, PLAY))
+
+    def end() -> None:
+        video.ended = True
+
+    _drive(monkeypatch, link, {1: end, 3: _say_bye(link)})
+    viewer._loop(Channel(link), console)
+    assert link.sent[1:] == [
+        {"type": "video", "state": "on", "path": CLIP},
+        {"type": "video", "state": "ended", "path": CLIP},
+    ], f"Replies {link.sent}"
+    shown = render_frame(ViewerState(path=picture), 30, 10).plain.split("\n")
+    tail = _ANSI.sub("", out.getvalue())[-400:]
+    assert shown[0] in tail, "The picture must be drawn again after the video"
+
+
+def test_loop_leaving_lets_go_of_the_video(
+    window: tuple[Console, io.StringIO], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    console, _ = window
+    video = FakeVideo(_frame())
+    monkeypatch.setattr(viewer, "VideoFile", lambda path: video)
+    link = _FakeConnection(_wire(PLAY, {"type": "bye"}))
+    viewer._loop(Channel(link), console)
+    assert video.stopped == 1, "The file must be released on the way out"

@@ -68,6 +68,8 @@ class Camera:
         self._latest: RGBImage | None = None
         self.failed = False
         """A read failed: the camera was unplugged, or another app took it."""
+        self.ended = False
+        """A camera never ends, unlike a video file; the live view asks both."""
 
     def start(self) -> None:
         """Open the camera and start reading it; CameraError when it does not."""

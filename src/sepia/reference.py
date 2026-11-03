@@ -186,7 +186,7 @@ class CheckedRedirects(urllib.request.HTTPRedirectHandler):
         headers: HTTPMessage,
         newurl: str,
     ) -> urllib.request.Request | None:
-        _check(newurl)
+        check_link(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -218,7 +218,7 @@ def _result_image(url: str) -> str | None:
 
 def _download(url: str) -> tuple[bytes, str, str]:
     """Body, content type and final address of `url`."""
-    _check(url)
+    check_link(url)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     opener = urllib.request.build_opener(CheckedRedirects)
     try:
@@ -233,7 +233,7 @@ def _download(url: str) -> tuple[bytes, str, str]:
     return data, kind, final
 
 
-def _check(url: str) -> None:
+def check_link(url: str) -> None:
     """Only https, and only to hosts on the public internet: a link taken from a
     web page must not reach this machine or its network."""
     parts = urllib.parse.urlsplit(url)

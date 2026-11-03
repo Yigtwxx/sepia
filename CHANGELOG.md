@@ -10,6 +10,10 @@ tag all carry.
 
 ## [Unreleased]
 
+### Added
+
+- `/play <link>` plays a video of up to a minute, from YouTube or another site yt-dlp supports, in the picture window as colored text, picture only. It downloads at most 480p and 100 MB into a temporary folder, refuses longer videos, live streams and playlists before downloading, and deletes the file when the video ends, on `/play off`, and when sepia closes. Install `sepia-cli[video]` for it; Deno, which YouTube needs, comes with it.
+
 ## [0.4.1] - 2026-10-31
 
 ### Added

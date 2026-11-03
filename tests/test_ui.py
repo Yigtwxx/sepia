@@ -237,3 +237,26 @@ def test_answers_pads_headers_to_one_width() -> None:
     text = ui.answers([("Subject", "A black hole"), ("Mood", "Calm")]).plain
     expected = "   · Subject  A black hole\n   · Mood     Calm"
     assert text == expected, f"Got {text!r}"
+
+
+def test_words_commands_include_play() -> None:
+    names = [usage.split()[0] for usage, _ in ui.Words().commands]
+    assert "/play" in names, f"Got {names}"
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [(0.0, "0:00"), (19.0, "0:19"), (59.6, "1:00"), (60.0, "1:00"), (192.0, "3:12")],
+)
+def test_length_shows_minutes_and_seconds(seconds: float, expected: str) -> None:
+    assert ui.length(seconds) == expected, f"{seconds}: got {ui.length(seconds)}"
+
+
+def test_words_video_refusals_fill_in_their_values() -> None:
+    words = ui.Words()
+    too_long = words("video.too_long", length="3:12", limit=60, error="")
+    assert too_long == "That video is 3:12; /play takes videos up to 60 seconds", (
+        f"Got {too_long!r}"
+    )
+    failed = words("video.failed", length="", limit=60, error="Video unavailable")
+    assert failed == "Could not fetch the video: Video unavailable", f"Got {failed!r}"

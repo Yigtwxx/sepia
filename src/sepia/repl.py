@@ -67,6 +67,15 @@ from sepia.reference import Reference, find_reference, find_subject, split_links
 from sepia.scene import Canvas, History, Scene, new_seed
 from sepia.snapshot import pictures_dir, save_snapshot, snapshot
 from sepia.usage import SESSION_FORMAT, Ledger, Usage, estimate_earlier
+from sepia.video import (
+    MAX_SECONDS,
+    VideoError,
+    discard,
+    fetch,
+    new_folder,
+    sweep,
+    video_installed,
+)
 
 T = TypeVar("T")
 
@@ -82,7 +91,10 @@ EXIT_SECONDS = 2.0
 RESIZE_SETTLE_SECONDS = 0.15
 """A resize drag fires many sizes; redraw once the window has stopped changing."""
 CAMERA_SECONDS = 15.0
-"""How long to wait for the camera to come on, or for a kept frame."""
+"""How long to wait for the camera or a video to come on, or for a kept frame."""
+LET_GO_SECONDS = 3.0
+"""On the way out, how long the picture window gets to let go of a video, so
+that its folder can be deleted (Windows deletes no open file)."""
 CAMERA_HINTS = {"win32": "camera_hint_windows", "darwin": "camera_hint_macos"}
 """Where each system lets a program use the camera."""
 
@@ -176,6 +188,14 @@ def _clarified(request: str, answers: Sequence[Answer]) -> str:
     return f"{request} ({given})"
 
 
+def _answers(asked: Message, reply: Message) -> bool:
+    """Whether `reply` is the viewer's answer to `asked`: about the same camera,
+    or about the same video file."""
+    if reply.get("type") != asked.get("type"):
+        return False
+    return asked.get("type") != "video" or reply.get("path") == asked.get("path")
+
+
 def new_session_dir(root: Path, keep: int = KEEP_SESSIONS) -> Path:
     """A fresh folder for this session's pictures; prunes the oldest ones."""
     root.mkdir(parents=True, exist_ok=True)
@@ -216,8 +236,17 @@ class Repl:
         """Earlier scenes, for /undo."""
         self.camera_live = False
         """The picture window shows the camera (/cam)."""
-        self._camera_replies: queue.Queue[Message] = queue.Queue()
-        """What the viewer answers about the camera, for the command waiting."""
+        self._playing: Path | None = None
+        """The folder of the video the picture window plays (/play)."""
+        self._videos: set[Path] = set()
+        """Video folders made this session and not deleted yet."""
+        self._video_lock = threading.Lock()
+        """The viewer's replies about videos come on the host's reader thread."""
+        self._cancel = threading.Event()
+        """Set on the way out: a video still downloading stops."""
+        self._live_replies: queue.Queue[Message] = queue.Queue()
+        """What the viewer answers about the camera or a video, for the command
+        waiting."""
         self.usage = Usage()
         self.ledger = ledger
         self.search_key = search_key
@@ -282,9 +311,17 @@ class Repl:
             return 0
         finally:
             self.bar.stop()
+            self._cancel.set()
+            self._let_go_of_video()
             self.host.send({"type": "bye"})
             self.host.close()
             self._pool.shutdown(wait=False, cancel_futures=True)
+            self._discard_videos()
+
+    @property
+    def video_live(self) -> bool:
+        """The picture window plays a video (/play)."""
+        return self._playing is not None
 
     def _handle(self, line: str) -> bool:
         """Act on one line; False means exit."""
@@ -320,7 +357,7 @@ class Repl:
                 model = self.director.model.removeprefix("claude-")
                 self.transcript.say(ui.reply(self.words("model_set", model=model)))
         elif command.name == "clear":
-            self._stop_camera()
+            self._stop_live()
             if not self.scene.is_empty:
                 self.history.push(self.scene)
             self._enter(Scene())
@@ -337,6 +374,8 @@ class Repl:
             self._undo()
         elif command.name == "cam":
             self._camera(command.argument)
+        elif command.name == "play":
+            self._play(command.argument)
         elif command.name == "effort":
             levels = cast(tuple[str, ...], get_args(Effort))
             effort = self.director.effort
@@ -583,7 +622,7 @@ class Repl:
         is painted.
         """
         self._started = time.monotonic()
-        self._stop_camera()
+        self._stop_live()
         add = add and not self.scene.is_empty
         scene = self.scene.copy() if add else Scene()
         self._ensure_viewer()
@@ -642,7 +681,7 @@ class Repl:
     def _again(self) -> None:
         """Paint the latest prompt again with fresh noise, over the picture an /add
         painted over; Claude is not asked."""
-        self._stop_camera()
+        self._stop_live()
         if self.scene.is_empty:
             self.transcript.say(ui.reply(self.words("again_empty"), failed=True))
             return
@@ -664,7 +703,7 @@ class Repl:
 
     def _undo(self) -> None:
         """Go back to the scene before this one; there is no redo."""
-        self._stop_camera()
+        self._stop_live()
         earlier = self.history.pop()
         if earlier is None:
             self.transcript.say(ui.reply(self.words("undo_empty"), failed=True))
@@ -692,9 +731,15 @@ class Repl:
             self.transcript.say(ui.reply(self.words("camera_missing"), failed=True))
             return
         self._started = time.monotonic()
+        self._stop_video()
         self._ensure_viewer()
         self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
-        reply = self._ask_camera({"type": "camera", "on": True}, "camera_opening")
+        reply = self._ask_live(
+            {"type": "camera", "on": True},
+            "camera_opening",
+            "camera_no_window",
+            "camera_silent",
+        )
         if reply is None or "error" in reply:
             # A camera that opens after all must not stay on unseen.
             self.host.send({"type": "camera", "on": False})
@@ -709,7 +754,12 @@ class Repl:
         False after saying why not. The camera stops either way."""
         self._started = time.monotonic()
         path = self._next_path()
-        reply = self._ask_camera({"type": "camera", "keep": str(path)}, "keeping")
+        reply = self._ask_live(
+            {"type": "camera", "keep": str(path)},
+            "keeping",
+            "camera_no_window",
+            "camera_silent",
+        )
         self.camera_live = False
         if reply is None:
             return False
@@ -734,25 +784,145 @@ class Repl:
             self.host.send({"type": "camera", "on": False})
             self.camera_live = False
 
-    def _ask_camera(self, message: Message, step: str) -> Message | None:
-        """Send `message` to the viewer and wait for its camera reply under the
-        spinner; None after saying why none came."""
-        while not self._camera_replies.empty():  # a late error from earlier
-            self._camera_replies.get_nowait()
+    def _stop_live(self) -> None:
+        """Stop the camera or the video, whichever is live; the window shows its
+        picture again."""
+        self._stop_camera()
+        self._stop_video()
+
+    def _ask_live(
+        self, message: Message, step: str, no_window: str, silent: str
+    ) -> Message | None:
+        """Send `message` to the viewer and wait under the spinner for its reply
+        about the same camera or video; None after saying why none came (the
+        `no_window` or `silent` string)."""
+        while not self._live_replies.empty():  # a late error from earlier
+            self._live_replies.get_nowait()
         if not self.host.send(message):
-            self.transcript.say(ui.reply(self.words("camera_no_window"), failed=True))
+            self.transcript.say(ui.reply(self.words(no_window), failed=True))
             return None
+        deadline = time.monotonic() + CAMERA_SECONDS
 
         def answer() -> Message | None:
-            try:
-                return self._camera_replies.get(timeout=CAMERA_SECONDS)
-            except queue.Empty:
-                return None
+            while (left := deadline - time.monotonic()) > 0:
+                try:
+                    reply = self._live_replies.get(timeout=left)
+                except queue.Empty:
+                    return None
+                if _answers(message, reply):
+                    return reply
+            return None
 
         reply = self._wait(answer, step)
         if reply is None:
-            self.transcript.say(ui.reply(self.words("camera_silent"), failed=True))
+            self.transcript.say(ui.reply(self.words(silent), failed=True))
         return reply
+
+    def _play(self, argument: str) -> None:
+        """/play <link> downloads a video of up to a minute into a folder of its
+        own and plays it in the picture window; /play off stops it. The folder is
+        deleted once the window lets go of the file."""
+        link = argument.strip()
+        if link.lower() == "off":
+            self._stop_video()
+            self.transcript.say(ui.reply(self.words("video_off")))
+            return
+        if not link:
+            self.transcript.say(ui.reply(self.words("video_usage"), failed=True))
+            return
+        if not video_installed():
+            self.transcript.say(ui.reply(self.words("video_missing"), failed=True))
+            return
+        self._started = time.monotonic()
+        self._stop_live()
+        self._ensure_viewer()  # it opens while the video downloads
+        folder = new_folder()
+        with self._video_lock:
+            self._videos.add(folder)
+        try:
+            video = self._wait(
+                lambda: fetch(link, folder, cancel=self._cancel), "fetching_video"
+            )
+        except VideoError as exc:
+            self._drop_video(folder)
+            self.transcript.say(ui.reply(self._refusal(exc), failed=True))
+            return
+        self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
+        # Set before sending: a short video may end before the reply is read.
+        self._playing = folder
+        reply = self._ask_live(
+            {"type": "video", "path": str(video.path)},
+            "video_opening",
+            "video_no_window",
+            "video_silent",
+        )
+        if reply is None:
+            self._stop_video()  # one that opens late must not play unseen
+            return
+        if "error" in reply:
+            message = self.words("video_failed", error=reply["error"])
+            self.transcript.say(ui.reply(message, failed=True))
+            return
+        if reply.get("state") == "ended":  # every frame came too late to show
+            self.transcript.say(ui.reply(self.words("video_unseen"), failed=True))
+            return
+        title = video.title or self.words("the_video")
+        known = [] if video.seconds is None else [ui.length(video.seconds)]
+        detail = " · ".join([*known, video.host])
+        self.transcript.say(ui.reply(self.words("video_on", title=title), detail))
+
+    def _refusal(self, exc: VideoError) -> str:
+        """Why /play does not play a video, from the reason `fetch` gave."""
+        length = "" if exc.seconds is None else ui.length(exc.seconds)
+        return self.words(
+            f"video.{exc.reason}",
+            length=length,
+            limit=MAX_SECONDS,
+            error=exc.detail or exc.reason,
+        )
+
+    def _stop_video(self) -> None:
+        """Stop the video, if one plays. Its folder goes when the window answers
+        that it let go of the file, or now when there is no window."""
+        with self._video_lock:
+            folder, self._playing = self._playing, None
+        if folder is not None and not self.host.send({"type": "video", "on": False}):
+            self._drop_video(folder)
+
+    def _drop_video(self, folder: Path) -> None:
+        """Forget a video's folder and delete it, if this session made it. One
+        that cannot be deleted yet is tried again on the way out."""
+        with self._video_lock:
+            if folder == self._playing:
+                self._playing = None
+            if folder not in self._videos:
+                return
+            self._videos.discard(folder)
+        discard(folder)
+        if folder.exists():
+            with self._video_lock:
+                self._videos.add(folder)
+
+    def _let_go_of_video(self) -> None:
+        """On the way out: stop the video and give the window a moment to let go
+        of its file, which deletes the folder when it answers."""
+        folder = self._playing
+        if folder is None:
+            return
+        self._stop_video()
+        deadline = time.monotonic() + LET_GO_SECONDS
+        while time.monotonic() < deadline:
+            with self._video_lock:
+                if folder not in self._videos:
+                    return
+            time.sleep(FRAME_SECONDS)
+
+    def _discard_videos(self) -> None:
+        """Delete every video folder this session made, on the way out."""
+        with self._video_lock:
+            folders, self._videos, self._playing = list(self._videos), set(), None
+        for folder in folders:
+            discard(folder)
 
     def _camera_failed(self, reply: Message) -> None:
         """Say why the camera did not work, and where its access is allowed."""
@@ -951,10 +1121,18 @@ class Repl:
 
     def _on_viewer_message(self, message: Message) -> None:
         """A message from the viewer, on the host's reader thread."""
-        if message.get("type") == "camera":
-            if "error" in message:
-                self.camera_live = False  # also when the camera is lost later
-            self._camera_replies.put(message)
+        kind = message.get("type")
+        if kind == "camera" and "error" in message:
+            self.camera_live = False  # also when the camera is lost later
+        if kind == "video" and (
+            message.get("state") in ("ended", "off") or "error" in message
+        ):
+            # The window let go of the file, so it can be deleted.
+            path = message.get("path")
+            if isinstance(path, str):
+                self._drop_video(Path(path).parent)
+        if kind in ("camera", "video"):
+            self._live_replies.put(message)
             return
         cols, rows = message.get("cols"), message.get("rows")
         if message.get("type") != "size":
@@ -1012,6 +1190,8 @@ class Repl:
         art = f"{self.style}/{self.charset}"
         if self.camera_live:
             art += " · camera"
+        if self.video_live:
+            art += " · video"
         return f"  /help · {model} · {painter} · {art} · {window} window"
 
 
@@ -1049,6 +1229,7 @@ def run_repl() -> int:
     )
     # Before this session's requests reach the history and its folder prunes one.
     ledger.read()
+    sweep()  # videos left by a sepia that did not close
     folder = new_session_dir(config_dir() / "sessions")
     release_file = config_dir() / "update.json"
     latest = update.notice(release_file) if settings.update_check else ""

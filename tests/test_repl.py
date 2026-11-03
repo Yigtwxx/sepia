@@ -1,7 +1,9 @@
 import io
 import json
 import os
+import shutil
 import sys
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -36,6 +38,7 @@ from sepia.repl import (
 )
 from sepia.scene import Canvas
 from sepia.usage import Earlier, Ledger
+from sepia.video import Video, VideoError
 
 
 @pytest.mark.parametrize(
@@ -206,8 +209,12 @@ class FakeHost:
         self.accepting = 0
         self.closed = False
         self.answers: list[dict[str, Any]] = []
-        """What the viewer replies, in turn, to camera messages that wait for one.
-        A kept frame is written where the prompt asked for it."""
+        """What the viewer replies, in turn, to camera and video messages that
+        wait for one. A kept frame is written where the prompt asked for it; a
+        video's reply names its file."""
+        self.playing = ""
+        """The video the fake viewer plays; stopping it replies "off" as the
+        viewer does."""
 
     def accept_in_background(self) -> None:
         self.accepting += 1
@@ -220,11 +227,19 @@ class FakeHost:
         if not self.connected:
             return False
         self.sent.append(message)
-        waits = message.get("on") is True or "keep" in message
-        if message.get("type") == "camera" and waits and self.answers:
+        kind = message.get("type")
+        if kind == "video" and message.get("on") is False and self.playing:
+            stopped, self.playing = self.playing, ""
+            self.on_message({"type": "video", "state": "off", "path": stopped})
+            return True
+        waits = message.get("on") is True or "keep" in message or "path" in message
+        if kind in ("camera", "video") and waits and self.answers:
             answer = self.answers.pop(0)
             if answer.get("state") == "kept":
                 Image.new("RGB", (64, 40), (90, 90, 90)).save(message["keep"])
+            if kind == "video":
+                answer = {**answer, "path": message["path"]}
+                self.playing = message["path"] if answer.get("state") == "on" else ""
             self.on_message(answer)
         return True
 
@@ -1821,3 +1836,299 @@ def test_run_repl_without_a_key_asks_and_stops_when_none_is_given(
     keys.send_text("\r")
     assert repl.run_repl() == 1, "No key, no sepia"
     assert "repl" not in started, "The loop must not start"
+
+
+# --- /play -------------------------------------------------------------------------
+
+LINK = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+VIDEO_ON = {"type": "video", "state": "on"}
+VIDEO_OFF = {"type": "video", "on": False}
+
+
+@pytest.fixture
+def player(rig: Rig, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """The rig's viewer with the video extra installed and yt-dlp's download
+    replaced: each link "downloads" a small file into the folder it is given.
+    Returns the links fetched; set `rig.host.answers` to script the viewer."""
+    fetched: list[str] = []
+    monkeypatch.setattr(repl, "video_installed", lambda: True)
+    monkeypatch.setattr(repl, "CAMERA_SECONDS", 0.05)
+    monkeypatch.setattr(repl, "LET_GO_SECONDS", 0.05)
+
+    def fetch(url: str, folder: Path, cancel: threading.Event | None = None) -> Video:
+        assert cancel is rig.repl._cancel, "A download must stop when sepia closes"
+        fetched.append(url)
+        path = folder / "video.mp4"
+        path.write_bytes(b"not really a video")
+        return Video(path, "Me at the zoo", 19.0, "www.youtube.com")
+
+    monkeypatch.setattr(repl, "fetch", fetch)
+    return fetched
+
+
+def _video_folders(temp: Path) -> list[Path]:
+    return sorted(temp.glob("sepia-video-*"))
+
+
+def _played(rig: Rig) -> Path:
+    """The file the last video message asked the viewer to play."""
+    paths = [
+        m["path"] for m in rig.host.sent if m.get("type") == "video" and "path" in m
+    ]
+    assert paths, f"No video was sent: {rig.host.sent}"
+    return Path(paths[-1])
+
+
+def test_repl_play_without_a_link_says_how(rig: Rig, player: list[str]) -> None:
+    rig.say("/play")
+    assert "/play https://" in rig.printed(), rig.printed()
+    assert player == [] and rig.host.sent == [], "Nothing is fetched or sent"
+
+
+def test_repl_play_without_the_extra_explains_the_install(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, private_temp_dir: Path
+) -> None:
+    monkeypatch.setattr(repl, "video_installed", lambda: False)
+    rig.say(f"/play {LINK}")
+    assert "sepia-cli[video]" in rig.printed(), rig.printed()
+    assert rig.host.sent == [], f"The viewer must hear nothing, got {rig.host.sent}"
+    assert _video_folders(private_temp_dir) == [], "No folder without the extra"
+
+
+def test_repl_play_plays_the_video_in_the_window(rig: Rig, player: list[str]) -> None:
+    rig.host.answers = [VIDEO_ON]
+    rig.say(f"/play {LINK}")
+    path = _played(rig)
+    assert player == [LINK], f"Fetched {player}"
+    assert rig.launched == [rig.repl.session_file], "The window must open for it"
+    assert rig.host.sent[-1] == {"type": "video", "path": str(path)}, rig.host.sent
+    assert path.exists(), "The file stays while it plays"
+    assert rig.repl.video_live, "The prompt must know the video plays"
+    assert "Playing Me at the zoo: /play off stops it" in rig.printed()
+    assert "0:19 · www.youtube.com" in rig.printed(), rig.printed()
+    assert "· video ·" in rig.repl._status(), rig.repl._status()
+    assert rig.client.beta.messages.stream.call_count == 0, "Claude is not needed"
+
+
+def test_repl_play_link_keeps_its_case(rig: Rig, player: list[str]) -> None:
+    rig.host.answers = [VIDEO_ON]
+    rig.say("/play https://youtu.be/AbCdEf")
+    assert player == ["https://youtu.be/AbCdEf"], f"Fetched {player}"
+
+
+@pytest.mark.parametrize(
+    ("error", "said"),
+    [
+        (VideoError("too_long", seconds=192.0), "That video is 3:12"),
+        (VideoError("live"), "live stream"),
+        (VideoError("not_a_video"), "playlist or a channel"),
+        (VideoError("unusable"), "needs https"),
+        (VideoError("too_big"), "100 MB"),
+        (VideoError("failed", "Video unavailable"), "Video unavailable"),
+    ],
+)
+def test_repl_play_refused_video_says_why_and_deletes_its_folder(
+    rig: Rig,
+    player: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    private_temp_dir: Path,
+    error: VideoError,
+    said: str,
+) -> None:
+    def refuse(url: str, folder: Path, cancel: object = None) -> Video:
+        (folder / "video.mp4.part").write_bytes(b"half")
+        raise error
+
+    monkeypatch.setattr(repl, "fetch", refuse)
+    rig.say(f"/play {LINK}")
+    assert said in rig.printed(), rig.printed()
+    assert _video_folders(private_temp_dir) == [], "The folder must be deleted"
+    assert not [m for m in rig.host.sent if m.get("type") == "video"], "Not played"
+    assert not rig.repl.video_live, "A refused video does not play"
+
+
+def test_repl_play_off_stops_the_video_and_deletes_it(
+    rig: Rig, player: list[str], private_temp_dir: Path
+) -> None:
+    rig.host.answers = [VIDEO_ON]
+    rig.say(f"/play {LINK}")
+    rig.say("/play off")
+    assert rig.host.sent[-1] == VIDEO_OFF, f"Sent {rig.host.sent[-1]}"
+    assert not rig.repl.video_live, "The video must be off"
+    assert _video_folders(private_temp_dir) == [], "Its folder must be deleted"
+    assert "Video off" in rig.printed(), rig.printed()
+
+
+def test_repl_play_off_without_a_video_just_says_off(
+    rig: Rig, player: list[str]
+) -> None:
+    rig.say("/play off")
+    assert rig.host.sent == [], f"Nothing to stop, sent {rig.host.sent}"
+    assert "Video off" in rig.printed(), rig.printed()
+
+
+def test_repl_video_end_deletes_its_folder(
+    rig: Rig, player: list[str], private_temp_dir: Path
+) -> None:
+    rig.host.answers = [VIDEO_ON]
+    rig.say(f"/play {LINK}")
+    path = _played(rig)
+    rig.host.on_message({"type": "video", "state": "ended", "path": str(path)})
+    assert not rig.repl.video_live, "An ended video is not live"
+    assert _video_folders(private_temp_dir) == [], "Its folder must be deleted"
+
+
+def test_repl_video_reply_for_a_folder_it_did_not_make_deletes_nothing(
+    rig: Rig, player: list[str], tmp_path: Path
+) -> None:
+    other = tmp_path / "someone-else"
+    other.mkdir()
+    (other / "video.mp4").write_bytes(b"x")
+    rig.host.on_message(
+        {"type": "video", "state": "ended", "path": str(other / "video.mp4")}
+    )
+    assert other.exists(), "Only folders this session made may be deleted"
+
+
+def test_repl_play_viewer_error_says_why_and_deletes_the_folder(
+    rig: Rig, player: list[str], private_temp_dir: Path
+) -> None:
+    rig.host.answers = [{"type": "video", "error": "no codec"}]
+    rig.say(f"/play {LINK}")
+    assert "The video did not play: no codec" in rig.printed(), rig.printed()
+    assert not rig.repl.video_live, "A video that failed is not live"
+    assert _video_folders(private_temp_dir) == [], "Its folder must be deleted"
+
+
+def test_repl_play_without_an_answer_in_time_gives_up_and_stops_it(
+    rig: Rig, player: list[str]
+) -> None:
+    rig.say(f"/play {LINK}")
+    assert "did not start in time" in rig.printed(), rig.printed()
+    assert rig.host.sent[-1] == VIDEO_OFF, "A video that opens late must be stopped"
+    assert not rig.repl.video_live, "No answer, no video"
+
+
+def test_repl_play_without_the_window_says_so_and_deletes_the_folder(
+    rig: Rig, player: list[str], private_temp_dir: Path
+) -> None:
+    rig.host.opens_viewer = False
+    rig.say(f"/play {LINK}")
+    assert "picture window" in rig.printed(), rig.printed()
+    assert not rig.repl.video_live, "No window, no video"
+    assert _video_folders(private_temp_dir) == [], "Its folder must be deleted"
+
+
+def test_repl_request_while_playing_stops_the_video_first(
+    rig: Rig, player: list[str], private_temp_dir: Path
+) -> None:
+    rig.host.answers = [VIDEO_ON]
+    rig.say(f"/play {LINK}")
+    rig.say("a lake")
+    kinds = [m.get("on", m["type"]) for m in rig.host.sent]
+    assert kinds.index(False) < kinds.index("image"), f"Sent in order {kinds}"
+    assert not rig.repl.video_live, "A new picture ends the video"
+    assert _video_folders(private_temp_dir) == [], "Its folder must be deleted"
+
+
+@pytest.mark.parametrize("command", ["/again", "/undo", "/clear"])
+def test_repl_picture_commands_while_playing_stop_the_video(
+    rig: Rig, player: list[str], command: str
+) -> None:
+    rig.host.answers = [VIDEO_ON]
+    rig.say(f"/play {LINK}")
+    rig.say(command)
+    assert VIDEO_OFF in rig.host.sent, f"{command} must stop it: {rig.host.sent}"
+    assert not rig.repl.video_live, f"{command} ends the video"
+
+
+def test_repl_cam_while_playing_stops_the_video_first(
+    rig: Rig, player: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(repl, "camera_installed", lambda: True)
+    rig.host.answers = [VIDEO_ON, CAMERA_ON]
+    rig.say(f"/play {LINK}")
+    rig.say("/cam")
+    sent = rig.host.sent
+    assert sent.index(VIDEO_OFF) < sent.index({"type": "camera", "on": True}), sent
+    assert rig.repl.camera_live and not rig.repl.video_live, "The camera replaces it"
+
+
+def test_repl_play_while_the_camera_is_live_stops_the_camera_first(
+    rig: Rig, player: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(repl, "camera_installed", lambda: True)
+    rig.host.answers = [CAMERA_ON, VIDEO_ON]
+    rig.say("/cam")
+    rig.say(f"/play {LINK}")
+    kinds = [m["type"] for m in rig.host.sent]
+    assert rig.host.sent.index(CAMERA_OFF) < kinds.index("video"), rig.host.sent
+    assert rig.repl.video_live and not rig.repl.camera_live, "The video replaces it"
+
+
+def test_repl_play_while_playing_stops_the_first_video(
+    rig: Rig, player: list[str], private_temp_dir: Path
+) -> None:
+    rig.host.answers = [VIDEO_ON, VIDEO_ON]
+    rig.say(f"/play {LINK}")
+    first = _played(rig)
+    rig.say(f"/play {LINK}")
+    second = _played(rig)
+    assert first != second, "Each video gets a folder of its own"
+    assert not first.exists(), "The first video's folder must be deleted"
+    assert _video_folders(private_temp_dir) == [second.parent], "Only one is left"
+
+
+def test_repl_run_exit_deletes_the_video_folders(
+    rig: Rig, player: list[str], private_temp_dir: Path, terminal
+) -> None:
+    keys, _ = terminal
+    rig.host.answers = [VIDEO_ON]
+    keys.send_text(f"/play {LINK}\r/exit\r")
+    assert rig.repl.run() == 0, "The loop must end at /exit"
+    assert player == [LINK], "The video must have been fetched"
+    sent = rig.host.sent
+    assert sent.index(VIDEO_OFF) < sent.index({"type": "bye"}), f"Sent {sent}"
+    assert _video_folders(private_temp_dir) == [], "Closing sepia deletes its videos"
+    assert rig.repl._cancel.is_set(), "A download in progress must be stopped"
+
+
+def test_repl_folder_still_open_is_deleted_on_the_way_out(
+    rig: Rig, player: list[str], monkeypatch: pytest.MonkeyPatch, terminal
+) -> None:
+    keys, _ = terminal
+    tries: list[Path] = []
+
+    def locked_once(folder: Path) -> None:
+        # The first try fails as Windows does with a file still open.
+        tries.append(folder)
+        if len(tries) > 1:
+            shutil.rmtree(folder)
+
+    monkeypatch.setattr(repl, "discard", locked_once)
+    rig.host.answers = [VIDEO_ON]
+    keys.send_text(f"/play {LINK}\r/play off\r/exit\r")
+    rig.repl.run()
+    assert len(tries) == 2 and tries[0] == tries[1], f"Tried {tries}"
+    assert not tries[0].exists(), "The second try must delete it"
+
+
+def test_repl_play_video_ended_before_a_frame_says_so(
+    rig: Rig, player: list[str]
+) -> None:
+    rig.host.answers = [{"type": "video", "state": "ended"}]
+    rig.say(f"/play {LINK}")
+    assert "ended before a frame could be shown" in rig.printed(), rig.printed()
+    assert "Playing" not in rig.printed(), "Nothing was shown"
+    assert not rig.repl.video_live, "An ended video is not live"
+
+
+def test_run_repl_sweeps_videos_left_by_a_crash(
+    started: dict[str, Any], private_temp_dir: Path
+) -> None:
+    left = private_temp_dir / "sepia-video-left"
+    left.mkdir()
+    long_ago = time.time() - 7200
+    os.utime(left, (long_ago, long_ago))
+    repl.run_repl()
+    assert not left.exists(), "A folder left by a crash must be deleted on start"

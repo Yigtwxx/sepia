@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import cast, get_args
+from typing import Literal, Protocol, cast, get_args
 
 import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -41,13 +41,14 @@ from sepia.ripple import (
     spaced,
 )
 from sepia.scene import Canvas
+from sepia.video import VideoError, VideoFile
 
 POLL_SECONDS = 0.01
 """How long to wait for a message before checking the window size again."""
 RESIZE_SETTLE_SECONDS = 0.15
 """A resize drag fires many sizes; redraw once the window has stopped changing."""
 LIVE_FPS = 15
-"""Camera frames drawn a second, at most."""
+"""Camera or video frames drawn a second, at most."""
 LIVE_CELL_WIDTH, LIVE_CELL_HEIGHT = 4, 8
 """Pixels a cell averages in the live view: a quarter of a picture's, so a frame
 draws in about 35 ms."""
@@ -175,37 +176,61 @@ def live_frame(
     return to_ansi(image_to_art(enhanced, cols, rows, style=style, charset=charset))
 
 
+class FrameSource(Protocol):
+    """The camera or a video file: frames read on a thread of their own."""
+
+    @property
+    def failed(self) -> bool: ...
+    @property
+    def ended(self) -> bool: ...
+    def start(self) -> None: ...
+    def latest(self) -> RGBImage | None: ...
+    def stop(self) -> None: ...
+
+
+Live = Literal["camera", "video"]
+LOST: dict[Live, str] = {
+    "camera": "the camera stopped giving pictures",
+    "video": "the video file could not be read",
+}
+
+
 class LiveView:
-    """The camera shown live, each frame written straight as ANSI (rich takes
-    about 120 ms a frame), until it is stopped or a frame is kept. `handle` and
-    `step` return the replies the prompt waits for."""
+    """The camera, or a video from /play, shown live: each frame written straight
+    as ANSI (rich takes about 120 ms a frame), until it is stopped, a camera frame
+    is kept or the video ends. `handle` and `step` return the replies the prompt
+    waits for; a video's replies name its file, which the prompt then deletes."""
 
     def __init__(
-        self, write: Callable[[str], object], make_camera: Callable[[], Camera]
+        self,
+        write: Callable[[str], object],
+        make_camera: Callable[[], FrameSource],
+        make_video: Callable[[str], FrameSource] = VideoFile,
     ) -> None:
         self._write = write
         self._make_camera = make_camera
-        self._camera: Camera | None = None
+        self._make_video = make_video
+        self._source: FrameSource | None = None
+        self._kind: Live = "camera"
+        self._path = ""
+        """The video's file."""
         self._announced = False
         self._drawn_at = float("-inf")
 
     @property
     def active(self) -> bool:
-        return self._camera is not None
+        return self._source is not None
 
     def handle(self, message: Message, cols: int, rows: int) -> Message | None:
-        """Act on a `camera` message: on, off, or keep the newest frame."""
+        """Act on a `camera` message (on, off, or keep the newest frame) or a
+        `video` one (play a file, or off)."""
+        if message.get("type") == "video":
+            return self._video(message)
         if "keep" in message:
             return self._keep(message["keep"], cols, rows)
-        if message.get("on") is True and self._camera is None:
-            camera = self._make_camera()
-            try:
-                camera.start()
-            except CameraError as exc:
-                return {"type": "camera", "error": str(exc)}
-            self._camera, self._announced = camera, False
-            self._drawn_at = float("-inf")
-        elif message.get("on") is False:
+        if message.get("on") is True and not self._showing("camera"):
+            return self._start("camera", "", self._make_camera)
+        if message.get("on") is False and self._showing("camera"):
             self.stop()
         return None
 
@@ -213,15 +238,16 @@ class LiveView:
         self, cols: int, rows: int, style: ArtStyle, charset: Charset
     ) -> Message | None:
         """Draw the newest frame when one is due. Says "on" with the first frame,
-        and an error when the camera is lost."""
-        camera = self._camera
-        if camera is None:
+        "ended" after a video's last, and an error when the source is lost."""
+        source = self._source
+        if source is None:
             return None
-        if camera.failed:
-            self.stop()
-            return {"type": "camera", "error": "the camera stopped giving pictures"}
+        if source.failed:
+            return self._reply(error=LOST[self._kind])
+        frame = source.latest()
+        if source.ended and (self._announced or frame is None):
+            return self._reply(state="ended")
         now = time.monotonic()
-        frame = camera.latest()
         due = now - self._drawn_at >= 1 / LIVE_FPS
         if frame is None or not due or cols <= 0 or rows <= 0:
             return None
@@ -230,18 +256,60 @@ class LiveView:
         if self._announced:
             return None
         self._announced = True
-        return {"type": "camera", "state": "on"}
+        return self._said(state="on")
 
     def stop(self) -> None:
-        """Let go of the camera, if it is on."""
-        if self._camera is not None:
-            self._camera.stop()
-            self._camera = None
+        """Let go of the camera or the video file, if one is live."""
+        if self._source is not None:
+            self._source.stop()
+            self._source = None
+
+    def _showing(self, kind: Live) -> bool:
+        return self._source is not None and self._kind == kind
+
+    def _start(
+        self, kind: Live, path: str, make: Callable[[], FrameSource]
+    ) -> Message | None:
+        """Show a new source in place of any live one; an error when it does not
+        start."""
+        self.stop()
+        self._kind, self._path = kind, path
+        source = make()
+        try:
+            source.start()
+        except (CameraError, VideoError) as exc:
+            return self._said(error=str(exc))
+        self._source, self._announced = source, False
+        self._drawn_at = float("-inf")
+        return None
+
+    def _video(self, message: Message) -> Message | None:
+        """Play the file a `video` message names, or stop the video playing."""
+        if message.get("on") is False:
+            return self._reply(state="off") if self._showing("video") else None
+        path = message.get("path")
+        if not isinstance(path, str):
+            return None
+        return self._start("video", path, lambda: self._make_video(path))
+
+    def _reply(self, **fields: object) -> Message:
+        """Stop the live source and say so."""
+        self.stop()
+        return self._said(**fields)
+
+    def _said(self, **fields: object) -> Message:
+        """A reply about the live source; a video's names its file."""
+        reply: Message = {"type": self._kind, **fields}
+        if self._kind == "video":
+            reply["path"] = self._path
+        return reply
 
     def _keep(self, path: object, cols: int, rows: int) -> Message:
         """Save the newest frame at `path`, cut to the window's shape at the size
         a painting has, so /add can paint over it; then stop."""
-        frame = None if self._camera is None else self._camera.latest()
+        if self._showing("video"):
+            return {"type": "camera", "error": "a video is playing, not the camera"}
+        frame = None if self._source is None else self._source.latest()
         self.stop()
         if frame is None or not isinstance(path, str) or cols <= 0 or rows <= 0:
             return {"type": "camera", "error": "there was no frame to keep"}
@@ -275,13 +343,13 @@ def _loop(channel: Channel, console: Console) -> None:
     frame = Text("")
     art: SymbolArt | None = None
     hover = Hover(console.file.write)
-    live = LiveView(console.file.write, Camera)
+    live = LiveView(console.file.write, Camera, VideoFile)
     with console.screen(hide_cursor=True) as screen:
         hover.start()
         try:
             size = console.size
             channel.send({"type": "size", "cols": size.width, "rows": size.height})
-            # Stays dirty while the camera is live, so its end redraws the picture.
+            # Dirty while a camera or video is live, so its end redraws the picture.
             dirty, changed_at = True, 0.0
             while True:
                 try:
@@ -289,7 +357,7 @@ def _loop(channel: Channel, console: Console) -> None:
                         message = channel.receive()
                         if not state.apply(message):
                             return
-                        if message.get("type") == "camera":
+                        if message.get("type") in ("camera", "video"):
                             reply = live.handle(message, size.width, size.height)
                             _answer(channel, reply, state)
                         dirty = True
@@ -317,7 +385,7 @@ def _loop(channel: Channel, console: Console) -> None:
                     draw_frame(console, screen, frame)
                     hover.forget()  # the full redraw wiped any ripple
                     dirty = False
-                # No ripples over a live camera: the next frame would wipe them.
+                # No ripples over a live view: the next frame would wipe them.
                 hover.step(None if live.active else art, read_input())
                 console.file.flush()
         finally:
@@ -326,7 +394,8 @@ def _loop(channel: Channel, console: Console) -> None:
 
 
 def _answer(channel: Channel, reply: Message | None, state: ViewerState) -> None:
-    """Tell the prompt what the camera did; a kept frame becomes the picture."""
+    """Tell the prompt what the camera or video did; a kept frame becomes the
+    picture."""
     if reply is None:
         return
     if reply.get("state") == "kept":

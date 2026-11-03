@@ -1,5 +1,6 @@
 import io
 import json
+import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,6 +34,18 @@ def private_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     folder = tmp_path / "config"
     monkeypatch.setattr(config, "config_dir", lambda: folder)
     monkeypatch.setattr(repl, "config_dir", lambda: folder)
+    return folder
+
+
+@pytest.fixture(autouse=True)
+def private_temp_dir(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Every test gets its own temporary directory, beside its `tmp_path` rather
+    than in it: video folders that /play makes, deletes and sweeps never reach
+    the real one."""
+    folder = tmp_path_factory.mktemp("temp")
+    monkeypatch.setattr(tempfile, "tempdir", str(folder))
     return folder
 
 
