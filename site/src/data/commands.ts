@@ -81,7 +81,7 @@ export const settings: readonly { name: string; value: string; what: string }[] 
     { name: 'SEPIA_UPDATE_CHECK', value: 'on', what: 'say when a new sepia is out' },
 ];
 
-export const version = '0.5.0';
+export const version = '0.5.1';
 export const repo = 'https://github.com/Yigtwxx/sepia';
 export const pypi = 'https://pypi.org/project/sepia-cli/';
 

@@ -10,6 +10,8 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-03
+
 ### Changed
 
 - Moving the mouse over the picture leaves a sepia trail instead of ripples:
@@ -337,7 +339,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/Yigtwxx/sepia/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Yigtwxx/sepia/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Yigtwxx/sepia/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Yigtwxx/sepia/compare/v0.3.4...v0.4.0
