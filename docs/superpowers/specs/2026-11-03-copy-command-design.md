@@ -12,9 +12,11 @@ answers `Copied`. No colors, no HTML or ANSI files: one command, one result.
   Discord, Slack and GitHub need to show it in a monospace font; in a code comment
   the two fence lines are deleted by hand.
 - **Sized for one Discord message.** Discord takes at most 2,000 characters a
-  message. The copy keeps the window's shape, is at most 80 columns wide (a
-  comfortable width for GitHub and code), and shrinks until the fenced text fits
-  2,000 characters. A 200x50 window gives 80x20 cells, 1,627 characters.
+  message. The copy keeps the window's shape, is at most 60 columns wide, and
+  shrinks until the fenced text fits 2,000 characters. A 200x50 window gives
+  60x15 cells, 922 characters. Discord wraps a code block's longer rows at their
+  spaces, and about 72 characters fit beside the member list on a 1920 px screen;
+  the first release's 80 columns broke every row in two.
 - **Dark backgrounds, as the viewer.** Dense symbols stand for bright pixels, as in
   the viewer and on Discord's default dark theme. On a light theme the picture reads
   as a negative; that is accepted, nothing is inverted.
@@ -44,7 +46,7 @@ only their colors differ.
 
 ### `src/sepia/clipboard.py` (new)
 
-- `COPY_COLS = 80`, `COPY_LIMIT = 2000`, `FENCE = "```"`.
+- `COPY_COLS = 60`, `COPY_LIMIT = 2000`, `FENCE = "```"`.
 - `copy_size(canvas: Canvas) -> Canvas`: the copy's grid. Starts at
   `min(COPY_COLS, canvas.cols)` columns, with `rows = max(1, round(cols *
   canvas.rows / canvas.cols))`, and takes one column off (rows following) while
@@ -83,7 +85,7 @@ left alone, as `/save` leaves it: the picture under it is copied.
 
 ### Docs
 
-- `README.md`: a `/copy` row after `/save` in the commands table, with the 80
+- `README.md`: a `/copy` row after `/save` in the commands table, with the 60
   columns, the 2,000 characters and the fence.
 - `CHANGELOG.md`: under `[Unreleased]`, `### Added`.
 - `site/src/data/commands.ts`: the help line, word for word.
@@ -99,10 +101,10 @@ left alone, as `/save` leaves it: the picture under it is copied.
 
 `tests/test_clipboard.py`:
 
-- `copy_size` of a 200x50 window is 80x20.
+- `copy_size` of a 200x50 window is 60x15.
 - `copy_size` of a tall 100x80 window fits 2,000 characters and keeps its shape
   within a row.
-- `copy_size` of a window narrower than 80 columns keeps its width.
+- `copy_size` of a window narrower than 60 columns keeps its width.
 - `copy_size` of an absurd 1x5000 window still fits 2,000 characters.
 - `fence` wraps the lines in fence lines, turns backticks into dots and drops
   trailing spaces.

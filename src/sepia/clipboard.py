@@ -11,8 +11,10 @@ from sepia.ascii_art import CELL_HEIGHT, CELL_WIDTH, Charset, image_to_art
 from sepia.raster import enhance, fit_image
 from sepia.scene import Canvas
 
-COPY_COLS = 80
-"""Widest copy, in characters: a comfortable width for GitHub and code."""
+COPY_COLS = 60
+"""Widest copy, in characters. Discord wraps a code block's longer rows at its
+spaces (about 72 characters fit beside the member list on a 1920 px screen), which
+breaks the picture apart; 60 leaves room for smaller windows."""
 COPY_LIMIT = 2000
 """Longest copy, fences included: what Discord takes in one message."""
 FENCE = "```"

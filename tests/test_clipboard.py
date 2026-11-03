@@ -32,9 +32,9 @@ def runs(monkeypatch: pytest.MonkeyPatch) -> list[Run]:
 # --- copy_size ---------------------------------------------------------------------
 
 
-def test_copy_size_wide_window_is_80_columns_in_its_shape() -> None:
+def test_copy_size_wide_window_is_60_columns_in_its_shape() -> None:
     size = clipboard.copy_size(Canvas(200, 50))
-    assert size == Canvas(80, 20), f"Expected 80x20, got {size}"
+    assert size == Canvas(60, 15), f"Expected 60x15, got {size}"
 
 
 def test_copy_size_tall_window_shrinks_to_fit_one_message() -> None:
@@ -44,8 +44,8 @@ def test_copy_size_tall_window_shrinks_to_fit_one_message() -> None:
 
 
 def test_copy_size_narrow_window_keeps_its_width() -> None:
-    size = clipboard.copy_size(Canvas(60, 20))
-    assert size == Canvas(60, 20), f"Expected 60x20, got {size}"
+    size = clipboard.copy_size(Canvas(40, 20))
+    assert size == Canvas(40, 20), f"Expected 40x20, got {size}"
 
 
 def test_copy_size_absurd_window_still_fits_one_message() -> None:

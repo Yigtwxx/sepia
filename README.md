@@ -107,7 +107,7 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background and suits dark themes; `fill` also paints each cell's background and works on any theme. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. |
 | `/save` | Save the picture in the viewer window as a PNG in the `sepia` folder of your Pictures folder: its colored characters as the window shows them, without the tab bar or frame, named after the time. |
-| `/copy` | Copy the picture in the viewer window to the clipboard as plain text, for Discord, Slack, GitHub or a code comment. It keeps the window's shape, is at most 80 columns wide, and fits one Discord message (2,000 characters) inside a ```` ``` ```` code block. Symbols stand for light on a dark background, as in the viewer. |
+| `/copy` | Copy the picture in the viewer window to the clipboard as plain text, for Discord, Slack, GitHub or a code comment. It keeps the window's shape, is at most 60 columns wide so Discord does not wrap its rows, and fits one Discord message (2,000 characters) inside a ```` ``` ```` code block. Symbols stand for light on a dark background, as in the viewer. |
 | `/model [haiku\|sonnet\|opus\|fable]` | Which Claude writes the prompts, from the next request on: Haiku 5.5 (the default), Sonnet 5.5, Opus 5.5 or Fable 5.1. |
 | `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. |
 | `/config` | Turn clarifying questions, mature pictures and update notices on or off in one list. |

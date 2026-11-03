@@ -22,7 +22,7 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/picker.py`: arrow-key menu for commands with fixed options (`/style`, `/charset`, `/effort`, `/mature`) and the `/config` toggle list.
 - `src/sepia/questions.py`: the menu for Claude's clarifying questions (one option, several, or the person's own words; tabs and a Paint page for several).
 - `src/sepia/snapshot.py`: `/save`; draws the window's symbol art to a PNG (12x24 px cells, a system monospace font, Pillow's own shrunk to fit as the fallback) in `Pictures/sepia`.
-- `src/sepia/clipboard.py`: `/copy`; the picture as plain text in a code fence, at most 80 columns and 2,000 characters (one Discord message), handed to `clip`, `pbcopy` or `wl-copy`/`xclip`/`xsel`.
+- `src/sepia/clipboard.py`: `/copy`; the picture as plain text in a code fence, at most 60 columns (Discord wraps wider code-block rows) and 2,000 characters (one Discord message), handed to `clip`, `pbcopy` or `wl-copy`/`xclip`/`xsel`.
 - `src/sepia/usage.py`: totals for `/usage` (tokens, searches, estimated cost from list prices, pictures per source); `Ledger` keeps all-time totals in `usage.json` in the config dir, with a one-time estimate of earlier use from the prompt history and session folders.
 - `src/sepia/scene.py`: `Scene` (requests, prompts, latest image and its file, fixed seed), `History` (earlier scenes for `/undo`) and `Canvas` (viewer size in cells).
 - `src/sepia/raster.py`: autocontrast, saturation boost, cover-crop to the grid, letterbox for pictures shown as they are.
