@@ -219,6 +219,11 @@ def test_words_commands_include_save() -> None:
     assert "/save" in names, f"Got {names}"
 
 
+def test_words_commands_include_copy() -> None:
+    names = [usage.split()[0] for usage, _ in ui.Words().commands]
+    assert "/copy" in names, f"Got {names}"
+
+
 def test_words_save_replies_fill_in_the_path_and_the_error() -> None:
     words = ui.Words()
     saved = words("saved", path="C:/Pictures/sepia/a.png")

@@ -20,6 +20,7 @@ from rich.text import Text
 
 from sepia import config, repl, ui
 from sepia.chatbar import Resized
+from sepia.clipboard import ClipboardError
 from sepia.config import Settings
 from sepia.director import Director
 from sepia.ipc import Session
@@ -310,6 +311,14 @@ def isolated_environment(
     monkeypatch.setattr(repl, "RESIZE_SETTLE_SECONDS", 0.0)
     for variable in ("SEPIA_EFFORT", "SEPIA_MODEL", "SEPIA_STYLE", "SEPIA_CHARSET"):
         monkeypatch.delenv(variable, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def copied(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Texts /copy put on the clipboard; the real clipboard is never touched."""
+    texts: list[str] = []
+    monkeypatch.setattr(repl, "copy_text", texts.append)
+    return texts
 
 
 @pytest.fixture
@@ -1289,6 +1298,48 @@ def test_repl_save_failure_is_reported(rig: Rig, tmp_path: Path) -> None:
     rig.say("a lake")
     rig.say("/save")
     assert "Could not save the picture" in rig.printed(), rig.printed()
+
+
+# --- /copy -------------------------------------------------------------------------
+
+
+def test_repl_copy_without_a_picture_says_so(rig: Rig, copied: list[str]) -> None:
+    rig.say("/copy")
+    assert "Nothing to copy yet" in rig.printed(), rig.printed()
+    assert copied == [], f"Nothing must reach the clipboard: {copied}"
+
+
+def test_repl_copy_puts_fenced_text_on_the_clipboard(
+    rig: Rig, copied: list[str]
+) -> None:
+    rig.say("a lake")
+    rig.say("/copy")
+    assert len(copied) == 1, f"Copied {len(copied)} times"
+    lines = copied[0].split("\n")
+    assert lines[0] == lines[-1] == "```", f"Not fenced: {lines[0]!r}"
+    assert "Copied" in rig.printed(), rig.printed()
+
+
+def test_repl_copy_failure_is_reported(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(text: str) -> None:
+        raise ClipboardError("clip failed")
+
+    monkeypatch.setattr(repl, "copy_text", fail)
+    rig.say("a lake")
+    rig.say("/copy")
+    assert "Could not copy the picture: clip failed" in rig.printed(), rig.printed()
+
+
+def test_repl_copy_while_live_keeps_the_frame_then_copies_it(
+    rig: Rig, camera: FakeHost, copied: list[str]
+) -> None:
+    camera.answers = [CAMERA_ON, KEPT]
+    rig.say("/cam")
+    rig.say("/copy")
+    assert len(copied) == 1, f"Copied {len(copied)} times"
+    assert rig.repl.scene.requests == ["a frame from the camera"], "Kept first"
 
 
 # --- /api and /local ---------------------------------------------------------------

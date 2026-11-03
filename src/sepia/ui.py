@@ -113,7 +113,8 @@ STRINGS: dict[str, str] = {
     "keeping": "Working on it… (keeping the frame · {elapsed})",
     "camera_on": "Camera on: /cam again keeps this frame, /cam off stops it",
     "camera_off": "Camera off",
-    "camera_kept": "Kept this frame: /add paints over it, /save saves it",
+    "camera_kept": "Kept this frame: /add paints over it, /save saves it, "
+    "/copy copies it",
     "camera_request": "a frame from the camera",
     "camera_failed": "The camera did not work: {error}",
     "camera_silent": "The camera did not answer in time",
@@ -180,6 +181,9 @@ STRINGS: dict[str, str] = {
     "save_empty": "Nothing to save yet: describe a picture first",
     "saved": "Saved to {path}",
     "save_failed": "Could not save the picture: {error}",
+    "copy_empty": "Nothing to copy yet: describe a picture first",
+    "copied": "Copied",
+    "copy_failed": "Could not copy the picture: {error}",
     "help_title": "commands",
     "setup": "Welcome to sepia. It needs an Anthropic API key; Cloudflare is "
     "optional, and Enter skips it.",
@@ -272,6 +276,7 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/style [ink|fill]", "choose how the picture is drawn"),
     ("/charset [classic|symbols]", "choose the characters that draw it"),
     ("/save", "save the picture in the window to Pictures/sepia"),
+    ("/copy", "copy the picture as text for Discord or GitHub"),
     ("/model [haiku|sonnet|opus|fable]", "choose which Claude writes the prompts"),
     ("/effort [low|medium|high|xhigh|max]", "choose how long Claude thinks"),
     ("/config", "turn clarifying questions and mature pictures on or off"),

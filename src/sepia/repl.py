@@ -25,6 +25,7 @@ from sepia import ui, update
 from sepia.ascii_art import ArtStyle, Charset
 from sepia.camera import camera_installed
 from sepia.chatbar import BottomBar, ChatBar, Resized
+from sepia.clipboard import ClipboardError, art_text, copy_text
 from sepia.config import (
     MODELS,
     ConfigError,
@@ -420,6 +421,8 @@ class Repl:
             self.transcript.say(ui.reply(message))
         elif command.name == "save":
             self._save()
+        elif command.name == "copy":
+            self._copy()
         else:
             unknown = self.words("unknown", command=f"/{command.name}")
             self.transcript.say(ui.reply(unknown, failed=True))
@@ -440,6 +443,22 @@ class Repl:
             self.transcript.say(ui.reply(failed, failed=True))
             return
         self.transcript.say(ui.reply(self.words("saved", path=path)))
+
+    def _copy(self) -> None:
+        """Put the picture in the window on the clipboard as fenced plain text."""
+        if self.camera_live and not self._keep_frame():
+            return
+        if self.scene.image is None:
+            self.transcript.say(ui.reply(self.words("copy_empty"), failed=True))
+            return
+        text = art_text(self.scene.image, self.canvas, self.charset)
+        try:
+            copy_text(text)
+        except ClipboardError as exc:
+            failed = self.words("copy_failed", error=exc)
+            self.transcript.say(ui.reply(failed, failed=True))
+            return
+        self.transcript.say(ui.reply(self.words("copied")))
 
     def _switch_painter(self, source: Source) -> None:
         """Paint with Cloudflare (the local model when it fails) or only on this
