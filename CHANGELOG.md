@@ -10,6 +10,10 @@ tag all carry.
 
 ## [Unreleased]
 
+### Added
+
+- `/copy` puts the picture in the viewer window on the clipboard as plain text in a ```` ``` ```` code block, ready to paste into Discord, Slack, GitHub or a code comment. It keeps the window's shape, is at most 80 columns wide and fits one Discord message (2,000 characters).
+
 ## [0.5.1] - 2026-11-03
 
 ### Changed

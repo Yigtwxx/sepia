@@ -101,12 +101,13 @@ Start sepia with `sepia`. The first request opens the viewer window; if you clos
 | `/add <text>` | Add to the current picture instead of starting a new one. |
 | `/again` | Paint the current picture again from the same prompt with fresh noise, without asking Claude; after `/add`, over the same picture. A picture shown as found has no prompt to paint again. |
 | `/undo` | Go back to the picture before, with its scene, so the next `/add` builds on it. `/clear` can be undone too; there is no redo. |
-| `/cam [off]` | Show the webcam live in the viewer window, mirrored. `/cam` again keeps the frame as the picture, cut to the window's shape; `/add` and `/save` while it is live keep the frame first. A request, `/again`, `/undo` and `/clear` stop the camera, as does `/cam off`. Needs `sepia-cli[cam]`. |
+| `/cam [off]` | Show the webcam live in the viewer window, mirrored. `/cam` again keeps the frame as the picture, cut to the window's shape; `/add`, `/save` and `/copy` while it is live keep the frame first. A request, `/again`, `/undo` and `/clear` stop the camera, as does `/cam off`. Needs `sepia-cli[cam]`. |
 | `/play <link\|off>` | Download a video of up to 60 seconds (YouTube or any other site yt-dlp knows; https links only) into a temporary folder and play it once in the viewer window, picture only, at up to 15 frames a second. Longer videos, live streams and playlists are refused before anything is downloaded; it takes at most 480p and 100 MB. The file is deleted when the video ends, on `/play off`, and when sepia closes. A request, `/again`, `/undo`, `/clear` and `/cam` stop the video. Needs `sepia-cli[video]`. |
 | `/clear` | Clear the screen and start a fresh picture. |
 | `/style [ink\|fill]` | `ink` colors the characters on the terminal's own background and suits dark themes; `fill` also paints each cell's background and works on any theme. |
 | `/charset [classic\|symbols]` | `classic` uses 31 density levels of the ASCII-art alphabet (letters, digits, punctuation); `symbols` uses punctuation only. |
 | `/save` | Save the picture in the viewer window as a PNG in the `sepia` folder of your Pictures folder: its colored characters as the window shows them, without the tab bar or frame, named after the time. |
+| `/copy` | Copy the picture in the viewer window to the clipboard as plain text, for Discord, Slack, GitHub or a code comment. It keeps the window's shape, is at most 80 columns wide, and fits one Discord message (2,000 characters) inside a ```` ``` ```` code block. Symbols stand for light on a dark background, as in the viewer. |
 | `/model [haiku\|sonnet\|opus\|fable]` | Which Claude writes the prompts, from the next request on: Haiku 5.5 (the default), Sonnet 5.5, Opus 5.5 or Fable 5.1. |
 | `/effort [low\|medium\|high\|xhigh\|max]` | How long Claude thinks about each picture, from the next request on. |
 | `/config` | Turn clarifying questions, mature pictures and update notices on or off in one list. |

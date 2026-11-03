@@ -21,6 +21,7 @@ export const slashCommands: readonly Command[] = [
     { cmd: '/style [ink|fill]', comment: 'choose how the picture is drawn' },
     { cmd: '/charset [classic|symbols]', comment: 'choose the characters that draw it' },
     { cmd: '/save', comment: 'save the picture in the window to Pictures/sepia' },
+    { cmd: '/copy', comment: 'copy the picture as text for Discord or GitHub' },
     { cmd: '/model [haiku|sonnet|opus|fable]', comment: 'choose which Claude writes the prompts' },
     { cmd: '/effort [low|medium|high|xhigh|max]', comment: 'choose how long Claude thinks' },
     {
