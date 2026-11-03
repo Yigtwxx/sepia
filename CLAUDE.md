@@ -32,7 +32,7 @@ sepia (always lowercase) is a Python CLI. `sepia` opens a prompt window; each re
 - `src/sepia/viewer.py`: full-screen picture window; redraws on resize and on messages; `LiveView` draws the camera (`/cam`) or a video file (`/play`) as raw ANSI.
 - `src/sepia/camera.py`: the webcam for `/cam` (optional extra `cam`, OpenCV imported inside functions), read on a thread, newest frame mirrored.
 - `src/sepia/video.py`: `/play` (optional extra `video`, yt-dlp and OpenCV imported inside functions): `fetch` refuses videos over 60 s, live streams and playlists, then downloads at most 480p and 100 MB into a `sepia-video-*` temp folder; `VideoFile` plays it at its own speed for `LiveView`; `discard` and `sweep` delete the folders.
-- `src/sepia/mouse.py`: pointer reports from the terminal (SGR mouse mode); `src/sepia/ripple.py`: the rings that spread from the pointer, drawn as ANSI over the changed cells only.
+- `src/sepia/mouse.py`: pointer reports from the terminal (SGR mouse mode); `src/sepia/trail.py`: the sepia trail behind the pointer, drawn as ANSI over the changed cells only.
 - `src/sepia/config.py`: settings from env and `.env` files, slash-command choices kept in `choices.json` (they win over `SEPIA_*`), key storage (`save_keys`), config dir.
 - `src/sepia/keys.py`: the Anthropic and Cloudflare keys asked for on the first run and by `/keys`; hidden prompts, a key's state is only set or not set.
 - `tests/`: one `test_<module>.py` per module, shared fixtures in `conftest.py`.

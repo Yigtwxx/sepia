@@ -6,7 +6,7 @@ export const limits: readonly { title: string; body: string }[] = [
     },
     {
         title: 'Terminal.app may miss the pointer.',
-        body: 'Ripples need the terminal to report the mouse. *Windows Terminal and iTerm2* do; macOS Terminal.app may not.',
+        body: 'The sepia trail needs the terminal to report the mouse. *Windows Terminal and iTerm2* do; macOS Terminal.app may not.',
     },
     {
         title: 'The free tier runs out.',

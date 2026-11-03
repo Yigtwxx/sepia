@@ -37,7 +37,7 @@ Every request starts a new picture; `/add` builds on the current one. sepia only
 - **An art director, not a prompt box.** Claude paints what you asked for, as a search would show it, and finds its own twist only when you ask for one. It writes a detailed English photo prompt tuned for text rendering, and decides whether a request edits the current picture or starts a new one.
 - **Free to paint, local when you need it.** [FLUX.2 [klein] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) paints every picture: on [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) with a free account (about 100 pictures a day), or, with the optional `local` extra, on your own GPU (CUDA or Apple Silicon) whenever the API fails or rate limits. `/local` keeps it on your GPU.
 - **Real subjects stay recognizable.** Name a character, a famous person, a creature, product or landmark, or paste a link to a picture, and sepia paints from a reference picture instead of inventing a stranger.
-- **Made for the terminal.** 24-bit color, two styles and two character sets, a redraw on every resize without new API calls, and ripples that spread from the mouse pointer over the picture.
+- **Made for the terminal.** 24-bit color, two styles and two character sets, a redraw on every resize without new API calls, and a sepia trail that follows the mouse pointer over the picture.
 - **Your camera, as text.** `/cam` shows the webcam live in the picture window; `/cam` again keeps the frame, and `/add` paints over it.
 - **Short videos, as text.** `/play <link>` plays a video of up to a minute from YouTube or another site in the picture window, then deletes it.
 - **Costs you can see.** `/usage` shows Claude's tokens, searches and estimated cost, for the session and for all time.
@@ -132,7 +132,7 @@ When a request could mean very different pictures ("universe", "something cool")
 
 - Up and down arrows walk the request history. Typing `/` opens a menu of the matching commands, with their descriptions, above the chat bar: the up and down arrows move through it, Tab completes the highlighted command, and Enter runs it.
 - The status line under the chat bar shows the painter, the model and its effort (and `mature` when it is on), the current style and charset, and whether the viewer window is connected (`●`) or not (`○`).
-- Moving the mouse over the viewer window sends ripples out from the pointer: rings that bend the picture, light up at their crest and fade. Windows Terminal and iTerm2 report pointer movement; macOS Terminal.app may not.
+- Moving the mouse over the viewer window leaves a sepia trail behind the pointer: where it passes, the picture turns the brown of an old photograph and fades back to its colors in about a second. Nothing on the picture moves. Windows Terminal and iTerm2 report pointer movement; macOS Terminal.app may not.
 
 ### Named subjects and reference pictures
 
