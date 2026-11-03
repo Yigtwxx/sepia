@@ -10,6 +10,11 @@ tag all carry.
 
 ## [Unreleased]
 
+### Added
+
+- `/open <file>` shows a picture from your computer in the picture window as colored text, whole and on black, turned upright as the phone held it. It calls neither Claude nor a painter, so it needs no key and costs nothing; `/add` paints over it, and `/save`, `/copy` and `/undo` work as with any picture. Quotes around the path and a file dragged into the terminal both work.
+- `/play <file>` plays a video from your computer in the picture window, to its end whatever its length. Nothing is downloaded and the file is never deleted; it needs only OpenCV, which comes with `sepia-cli[cam]` or `sepia-cli[video]`.
+
 ## [0.5.3] - 2026-11-03
 
 ### Fixed

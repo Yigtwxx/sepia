@@ -494,6 +494,19 @@ def test_video_file_stops_at_sixty_seconds() -> None:
     assert reader.reads == MAX_SECONDS + 1, f"Read {reader.reads} frames"
 
 
+def test_video_file_without_a_limit_plays_past_a_minute() -> None:
+    frames = MAX_SECONDS + 5
+    reader = FakeReader([_bgr((0, 0, 0))] * frames, fps=1.0)
+    far_behind = iter([0.0, *[1e9] * 1000])  # every frame is already late
+    playing = VideoFile(
+        "v.mp4", lambda path: reader, clock=lambda: next(far_behind), limit=None
+    )
+    playing.start()
+    assert _eventually(lambda: playing.ended), "The video must end at its last frame"
+    playing.stop()
+    assert reader.reads == frames + 1, f"Read {reader.reads} frames, not all"
+
+
 def test_video_file_late_frames_are_skipped() -> None:
     first, late = _bgr((0, 0, 255)), _bgr((255, 0, 0))
     reader = FakeReader([first, late], fps=1.0)

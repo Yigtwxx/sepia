@@ -124,7 +124,12 @@ STRINGS: dict[str, str] = {
     "use it; close any other app that has it",
     "camera_hint_macos": "System Settings › Privacy & Security › Camera must allow "
     "your terminal",
-    "video_usage": "Paste a video link after it: /play https://youtu.be/…",
+    "video_usage": "Give a video link or file after it: /play https://youtu.be/… "
+    "or /play clip.mp4",
+    "video_file_missing": "No video file at {path} (a link starts with https://)",
+    "video_file_needs_opencv": "Videos from this computer need OpenCV: install "
+    "sepia-cli[cam] or sepia-cli[video], then type /play again",
+    "video_here": "this computer",
     "video_missing": "Videos need the video extra: install sepia-cli[video], then "
     "type /play again",
     "fetching_video": "Working on it… (fetching the video · {elapsed})",
@@ -143,6 +148,14 @@ STRINGS: dict[str, str] = {
     "video.not_a_video": "That link is a playlist or a channel; give it one video",
     "video.too_big": "That video is over 100 MB even at 480p",
     "video.failed": "Could not fetch the video: {error}",
+    "open_usage": "Give a picture file after it: /open photo.jpg",
+    "opening_picture": "Working on it… (opening the picture · {elapsed})",
+    "opened": "Opened {name}: /add paints over it, /save saves it, /copy copies it",
+    "open_request": "a picture opened from {name}",
+    "open_missing": "No picture file at {path}",
+    "open_not_picture": "{name} is not a picture sepia can read (JPEG, PNG, WebP, "
+    "GIF, BMP or TIFF)",
+    "open_failed": "Could not open {name}: {error}",
     "style_set": "Style: {style} · charset: {charset}",
     "effort_set": "Effort: {effort}, from the next picture on",
     "model_set": "Model: {model}, from the next picture on",
@@ -272,7 +285,8 @@ COMMANDS: Sequence[tuple[str, str]] = (
     ("/again", "paint the picture again with fresh noise, no new prompt"),
     ("/undo", "go back to the picture before"),
     ("/cam [off]", "show the webcam live; /cam again keeps the frame"),
-    ("/play <link|off>", "play a video of up to a minute in the window"),
+    ("/play <link|file|off>", "play a video: a link up to a minute, a file whole"),
+    ("/open <file>", "show a picture from this computer; no key needed"),
     ("/clear", "clear the screen and start a fresh picture"),
     ("/style [ink|fill]", "choose how the picture is drawn"),
     ("/charset [classic|symbols]", "choose the characters that draw it"),

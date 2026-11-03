@@ -41,7 +41,7 @@ from sepia.trail import (
     dabs_between,
     trail_ansi,
 )
-from sepia.video import VideoError, VideoFile
+from sepia.video import MAX_SECONDS, VideoError, VideoFile
 
 POLL_SECONDS = 0.01
 """How long to wait for a message before checking the window size again."""
@@ -189,6 +189,12 @@ class FrameSource(Protocol):
     def stop(self) -> None: ...
 
 
+class MakeVideo(Protocol):
+    """Opens a video file to play, for at most `limit` seconds (None: whole)."""
+
+    def __call__(self, path: str, *, limit: float | None) -> FrameSource: ...
+
+
 Live = Literal["camera", "video"]
 LOST: dict[Live, str] = {
     "camera": "the camera stopped giving pictures",
@@ -206,7 +212,7 @@ class LiveView:
         self,
         write: Callable[[str], object],
         make_camera: Callable[[], FrameSource],
-        make_video: Callable[[str], FrameSource] = VideoFile,
+        make_video: MakeVideo = VideoFile,
     ) -> None:
         self._write = write
         self._make_camera = make_camera
@@ -285,13 +291,16 @@ class LiveView:
         return None
 
     def _video(self, message: Message) -> Message | None:
-        """Play the file a `video` message names, or stop the video playing."""
+        """Play the file a `video` message names, or stop the video playing. A
+        download plays at most its first minute; a `whole` one, a file from this
+        computer, plays to its end."""
         if message.get("on") is False:
             return self._reply(state="off") if self._showing("video") else None
         path = message.get("path")
         if not isinstance(path, str):
             return None
-        return self._start("video", path, lambda: self._make_video(path))
+        limit = None if message.get("whole") is True else MAX_SECONDS
+        return self._start("video", path, lambda: self._make_video(path, limit=limit))
 
     def _reply(self, **fields: object) -> Message:
         """Stop the live source and say so."""

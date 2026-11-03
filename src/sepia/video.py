@@ -25,7 +25,7 @@ from sepia.raster import RGBImage
 from sepia.reference import UnusableLink, check_link
 
 MAX_SECONDS = 60
-"""The longest video /play takes."""
+"""The longest video /play downloads; a file from this computer has no limit."""
 SLACK_SECONDS = 1.0
 """How far over a file measured after its download may run: frame counts are
 estimates."""
@@ -316,17 +316,22 @@ def sweep(
 
 class VideoFile:
     """Plays a video file once at its own speed, on a thread, keeping the frame
-    due now. The same shape as `Camera`, so the live view shows either."""
+    due now. The same shape as `Camera`, so the live view shows either. It stops
+    after `limit` seconds (a download whose length was not known), or plays to
+    the end when `limit` is None (a file from this computer)."""
 
     def __init__(
         self,
         path: str,
         open_file: Callable[[str], Reader] = open_video,
         clock: Callable[[], float] = time.monotonic,
+        *,
+        limit: float | None = MAX_SECONDS,
     ) -> None:
         self.path = path
         self._open = open_file
         self._clock = clock
+        self._limit = limit
         self._thread: threading.Thread | None = None
         self._stopping = threading.Event()
         self._lock = threading.Lock()
@@ -334,7 +339,7 @@ class VideoFile:
         self.failed = False
         """The file gave no frame at all."""
         self.ended = False
-        """The last frame, or the minute, has been played."""
+        """The last frame, or the limit, has been played."""
 
     def start(self) -> None:
         """Open the file and start playing; VideoError when it does not open."""
@@ -392,7 +397,7 @@ class VideoFile:
                     self.ended = True
                 return
             due = index / fps
-            if due >= MAX_SECONDS:
+            if self._limit is not None and due >= self._limit:
                 self.ended = True
                 return
             index += 1

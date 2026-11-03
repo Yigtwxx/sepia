@@ -3,6 +3,7 @@
 import contextlib
 import os
 import queue
+import re
 import shutil
 import sys
 import threading
@@ -15,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TypeVar, cast, get_args
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from prompt_toolkit.history import FileHistory
 from rich.console import Console, RenderableType
 from rich.live import Live
@@ -76,6 +77,7 @@ from sepia.video import (
     new_folder,
     sweep,
     video_installed,
+    video_seconds,
 )
 
 T = TypeVar("T")
@@ -169,6 +171,39 @@ def named_option(options: tuple[str, ...], argument: str) -> str | None:
     """The option `argument` names (`/style ink`), or None to ask with a menu."""
     name = argument.strip().lower()
     return name if name in options else None
+
+
+def local_path(argument: str) -> Path:
+    """The file /open or /play names. Quotes around it (Windows' "Copy as path")
+    go, and `~` alone or before a slash is the home folder; `~draft.png` stays as
+    it is, where `expanduser` would look for a user named draft.png. Off Windows a
+    file dragged into the terminal arrives with its spaces escaped (`my\\ cat.png`);
+    that is undone when the path as typed names nothing."""
+    text = argument.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1]
+    path = _home(text)
+    # os.path.exists, unlike Path.exists, says False for a name too long to stat.
+    if sys.platform != "win32" and not os.path.exists(path):
+        unescaped = _home(re.sub(r"\\(.)", r"\1", text))
+        if os.path.exists(unescaped):
+            return unescaped
+    return path
+
+
+def _home(text: str) -> Path:
+    """`text` as a path, with a leading `~` or `~/` as the home folder."""
+    if text == "~" or text.startswith(("~/", "~\\")):
+        return Path.home() / text[2:]
+    return Path(text)
+
+
+def read_picture(path: Path) -> Image.Image:
+    """The picture in `path`, turned upright the way a phone's EXIF says it was
+    held. Raises UnidentifiedImageError for a file that is not a picture, OSError
+    for one that cannot be read and DecompressionBombError for one too large."""
+    with Image.open(path) as opened:
+        return ImageOps.exif_transpose(opened)
 
 
 def _host(url: str) -> str:
@@ -377,6 +412,8 @@ class Repl:
             self._camera(command.argument)
         elif command.name == "play":
             self._play(command.argument)
+        elif command.name == "open":
+            self._open(command.argument)
         elif command.name == "effort":
             levels = cast(tuple[str, ...], get_args(Effort))
             effort = self.director.effort
@@ -839,8 +876,10 @@ class Repl:
 
     def _play(self, argument: str) -> None:
         """/play <link> downloads a video of up to a minute into a folder of its
-        own and plays it in the picture window; /play off stops it. The folder is
-        deleted once the window lets go of the file."""
+        own and plays it in the picture window; /play <file> plays a video from
+        this computer whole; /play off stops either. A download's folder is
+        deleted once the window lets go of the file; a file of the person's own
+        never is."""
         link = argument.strip()
         if link.lower() == "off":
             self._stop_video()
@@ -848,6 +887,9 @@ class Repl:
             return
         if not link:
             self.transcript.say(ui.reply(self.words("video_usage"), failed=True))
+            return
+        if "://" not in link:
+            self._play_file(local_path(link))
             return
         if not video_installed():
             self.transcript.say(ui.reply(self.words("video_missing"), failed=True))
@@ -866,29 +908,95 @@ class Repl:
             self._drop_video(folder)
             self.transcript.say(ui.reply(self._refusal(exc), failed=True))
             return
-        self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
-        # Set before sending: a short video may end before the reply is read.
-        self._playing = folder
-        reply = self._ask_live(
-            {"type": "video", "path": str(video.path)},
-            "video_opening",
-            "video_no_window",
-            "video_silent",
-        )
-        if reply is None:
-            self._stop_video()  # one that opens late must not play unseen
-            return
-        if "error" in reply:
-            message = self.words("video_failed", error=reply["error"])
-            self.transcript.say(ui.reply(message, failed=True))
-            return
-        if reply.get("state") == "ended":  # every frame came too late to show
-            self.transcript.say(ui.reply(self.words("video_unseen"), failed=True))
+        if not self._start_video(video.path, folder, whole=False):
             return
         title = video.title or self.words("the_video")
         known = [] if video.seconds is None else [ui.length(video.seconds)]
         detail = " · ".join([*known, video.host])
         self.transcript.say(ui.reply(self.words("video_on", title=title), detail))
+
+    def _play_file(self, path: Path) -> None:
+        """Play a video from this computer to its end. It needs only OpenCV, and
+        its folder is not one this session made, so nothing deletes it."""
+        if not os.path.isfile(path):  # never raises, unlike Path.is_file
+            message = self.words("video_file_missing", path=path)
+            self.transcript.say(ui.reply(message, failed=True))
+            return
+        if not camera_installed():
+            message = self.words("video_file_needs_opencv")
+            self.transcript.say(ui.reply(message, failed=True))
+            return
+        self._started = time.monotonic()
+        self._stop_live()
+        self._ensure_viewer()
+        path = path.resolve()  # the window may have started in another folder
+        seconds = video_seconds(path)
+        if not self._start_video(path, path.parent, whole=True):
+            return
+        known = [] if seconds is None else [ui.length(seconds)]
+        detail = " · ".join([*known, self.words("video_here")])
+        message = self.words("video_on", title=path.name)
+        self.transcript.say(ui.reply(message, detail))
+
+    def _start_video(self, path: Path, folder: Path, *, whole: bool) -> bool:
+        """Have the window play `path`, kept in `folder` (`whole`: past the first
+        minute too); False after saying why it does not play."""
+        self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
+        # Set before sending: a short video may end before the reply is read.
+        self._playing = folder
+        message: Message = {"type": "video", "path": str(path)}
+        if whole:
+            message["whole"] = True
+        reply = self._ask_live(
+            message, "video_opening", "video_no_window", "video_silent"
+        )
+        if reply is None:
+            self._stop_video()  # one that opens late must not play unseen
+            return False
+        if "error" in reply:
+            failed = self.words("video_failed", error=reply["error"])
+            self.transcript.say(ui.reply(failed, failed=True))
+            return False
+        if reply.get("state") == "ended":  # every frame came too late to show
+            self.transcript.say(ui.reply(self.words("video_unseen"), failed=True))
+            return False
+        return True
+
+    def _open(self, argument: str) -> None:
+        """/open <file> shows a picture from this computer whole and on black, as
+        a bare link shows its picture: Claude is not asked and nothing is painted,
+        so it needs no key. /add paints over it like any other picture."""
+        if not argument.strip():
+            self.transcript.say(ui.reply(self.words("open_usage"), failed=True))
+            return
+        path = local_path(argument)
+        if not os.path.isfile(path):  # never raises, unlike Path.is_file
+            message = self.words("open_missing", path=path)
+            self.transcript.say(ui.reply(message, failed=True))
+            return
+        self._started = time.monotonic()
+        try:
+            picture = self._wait(lambda: read_picture(path), "opening_picture")
+        except UnidentifiedImageError:
+            message = self.words("open_not_picture", name=path.name)
+            self.transcript.say(ui.reply(message, failed=True))
+            return
+        except (OSError, Image.DecompressionBombError) as exc:
+            message = self.words("open_failed", name=path.name, error=exc)
+            self.transcript.say(ui.reply(message, failed=True))
+            return
+        self._stop_live()
+        self._ensure_viewer()
+        # The window's own size, once it is open, shapes the picture.
+        self.host.wait_connected(timeout=VIEWER_CONNECT_SECONDS)
+        width, height = paint_size(self.canvas.aspect)
+        # Half a second for a 48-megapixel photo: under the spinner too.
+        image = self._wait(lambda: letterbox(picture, width, height), "opening_picture")
+        scene = Scene()
+        request = self.words("open_request", name=path.name)
+        scene.record(request, "", image, path=self._keep(image))
+        self._commit(scene)
+        self.transcript.say(ui.reply(self.words("opened", name=path.name)))
 
     def _refusal(self, exc: VideoError) -> str:
         """Why /play does not play a video, from the reason `fetch` gave."""

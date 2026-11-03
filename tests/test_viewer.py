@@ -21,7 +21,7 @@ from sepia.mouse import MOUSE_OFF, MOUSE_ON
 from sepia.painter import image_size
 from sepia.scene import Canvas
 from sepia.trail import FADE, FRAME_SECONDS
-from sepia.video import VideoError
+from sepia.video import MAX_SECONDS, VideoError
 from sepia.viewer import (
     LIVE_FPS,
     Hover,
@@ -606,8 +606,8 @@ def _live(
     written: list[str] = []
     played = video or FakeVideo(_frame())
 
-    def make_video(path: str) -> FakeVideo:
-        played.path = path
+    def make_video(path: str, *, limit: float | None) -> FakeVideo:
+        played.path, played.limit = path, limit
         return played
 
     return LiveView(written.append, lambda: camera, make_video), written
@@ -770,6 +770,7 @@ class FakeVideo:
         self.frame = frame
         self.error = error
         self.path = ""
+        self.limit: float | None = 0.0
         self.failed = False
         self.ended = False
         self.started = 0
@@ -798,9 +799,17 @@ def test_live_view_video_plays_and_says_so_with_the_first_frame() -> None:
     assert live.handle(PLAY, 30, 10) is None, "On is said once a frame is drawn"
     assert live.active and video.started == 1, "The video must be started"
     assert video.path == CLIP, f"Opened {video.path}"
+    assert video.limit == MAX_SECONDS, "A downloaded video plays its first minute"
     reply = live.step(30, 10, "ink", "classic")
     assert reply == {"type": "video", "state": "on", "path": CLIP}, f"Got {reply}"
     assert len(written) == 1, "A whole frame is drawn"
+
+
+def test_live_view_whole_video_plays_without_the_minute_limit() -> None:
+    video = FakeVideo(_frame())
+    live, _ = _live(FakeCamera(_frame()), video)
+    live.handle({**PLAY, "whole": True}, 30, 10)
+    assert video.limit is None, "A file from this computer plays to its end"
 
 
 def test_live_view_video_that_cannot_open_replies_the_error_with_its_path() -> None:
@@ -908,7 +917,7 @@ def test_loop_video_plays_then_ends_and_the_picture_comes_back(
 ) -> None:
     console, out = window
     video = FakeVideo(_frame())
-    monkeypatch.setattr(viewer, "VideoFile", lambda path: video)
+    monkeypatch.setattr(viewer, "VideoFile", lambda path, limit: video)
     link = _FakeConnection(_wire({"type": "image", "path": picture}, PLAY))
 
     def end() -> None:
@@ -930,7 +939,7 @@ def test_loop_leaving_lets_go_of_the_video(
 ) -> None:
     console, _ = window
     video = FakeVideo(_frame())
-    monkeypatch.setattr(viewer, "VideoFile", lambda path: video)
+    monkeypatch.setattr(viewer, "VideoFile", lambda path, limit: video)
     link = _FakeConnection(_wire(PLAY, {"type": "bye"}))
     viewer._loop(Channel(link), console)
     assert video.stopped == 1, "The file must be released on the way out"

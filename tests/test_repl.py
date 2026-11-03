@@ -1274,6 +1274,173 @@ def test_repl_camera_lost_later_marks_it_off(rig: Rig, camera: FakeHost) -> None
     assert not rig.repl.camera_live, "A lost camera is not live any more"
 
 
+# --- /open -------------------------------------------------------------------------
+
+
+@pytest.fixture
+def photo(tmp_path: Path) -> Path:
+    """A wide red picture on this computer, as /open finds it."""
+    path = tmp_path / "photo.png"
+    Image.new("RGB", (300, 100), (220, 30, 30)).save(path)
+    return path
+
+
+@pytest.mark.parametrize(
+    ("argument", "expected"),
+    [
+        ('"photos/my cat.jpg"', Path("photos/my cat.jpg")),
+        ("'cat.png'", Path("cat.png")),
+        ("  cat.png  ", Path("cat.png")),
+        ("~/cat.png", Path.home() / "cat.png"),
+        ("~", Path.home()),
+        ("~draft.png", Path("~draft.png")),  # names no home folder, so no expansion
+    ],
+)
+def test_local_path_strips_quotes_and_expands_home(
+    argument: str, expected: Path
+) -> None:
+    result = repl.local_path(argument)
+    assert result == expected, f"{argument!r}: expected {expected}, got {result}"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="backslash separates on Windows")
+def test_local_path_unescapes_a_dragged_in_path(tmp_path: Path) -> None:
+    (tmp_path / "my cat.png").touch()
+    dragged = str(tmp_path / "my\\ cat.png")  # as Terminal.app pastes a dropped file
+    result = repl.local_path(dragged)
+    assert result == tmp_path / "my cat.png", f"Got {result}"
+
+
+def test_read_picture_turns_a_phone_photo_upright(tmp_path: Path) -> None:
+    path = tmp_path / "phone.jpg"
+    exif = Image.Exif()
+    exif[0x0112] = 6  # Orientation: the camera was held on its side
+    Image.new("RGB", (60, 20), (90, 90, 90)).save(path, exif=exif)
+    picture = repl.read_picture(path)
+    assert picture.size == (20, 60), f"Not turned upright: {picture.size}"
+
+
+def test_repl_open_shows_the_picture_without_claude_or_painting(
+    rig: Rig, photo: Path
+) -> None:
+    rig.say(f"/open {photo}")
+    assert rig.client.beta.messages.stream.call_count == 0, "Claude is not needed"
+    assert rig.local.calls == [], "Nothing is painted"
+    scene = rig.repl.scene
+    assert scene.image is not None, "The picture must enter the scene"
+    assert scene.image.size == paint_size(rig.repl.canvas.aspect), scene.image.size
+    assert scene.requests == ["a picture opened from photo.png"], scene.requests
+    assert scene.prompts == [""], "An opened picture is shown as it is, not painted"
+    assert scene.path == rig.folder / "01.png", f"Kept at {scene.path}"
+    shown = rig.host.sent[-1]
+    assert shown["type"] == "image" and shown["path"] == str(scene.path), shown
+    assert "Opened photo.png" in rig.printed(), rig.printed()
+
+
+def test_repl_open_letterboxes_the_whole_picture_on_black(
+    rig: Rig, photo: Path
+) -> None:
+    rig.repl.canvas = Canvas(40, 40)  # a tall window for a wide picture
+    rig.say(f"/open {photo}")
+    image = rig.repl.scene.image
+    assert image is not None, "The picture must enter the scene"
+    width, height = image.size
+    assert image.getpixel((width // 2, 0)) == (0, 0, 0), "Black above the picture"
+    middle = image.getpixel((width // 2, height // 2))
+    assert middle == (220, 30, 30), f"The picture is whole in the middle: {middle}"
+
+
+def test_repl_open_shows_transparent_parts_as_black(rig: Rig, tmp_path: Path) -> None:
+    path = tmp_path / "logo.png"
+    Image.new("RGBA", (100, 100), (255, 255, 255, 0)).save(path)
+    rig.say(f"/open {path}")
+    image = rig.repl.scene.image
+    assert image is not None, "The picture must enter the scene"
+    middle = image.getpixel((image.width // 2, image.height // 2))
+    assert middle == (0, 0, 0), f"Transparent parts must be black, got {middle}"
+
+
+def test_repl_open_without_a_file_says_how(rig: Rig) -> None:
+    rig.say("/open")
+    assert "/open photo.jpg" in rig.printed(), rig.printed()
+    assert rig.repl.scene.is_empty, "No picture"
+
+
+def test_repl_open_missing_file_says_so_and_keeps_the_scene(
+    rig: Rig, tmp_path: Path
+) -> None:
+    rig.say("a lake")
+    lake = rig.repl.scene
+    missing = tmp_path / "nope.jpg"
+    rig.say(f"/open {missing}")
+    assert f"No picture file at {missing}" in rig.printed(), rig.printed()
+    assert rig.repl.scene is lake, "The picture before stays"
+
+
+def test_repl_open_a_file_that_is_not_a_picture_says_so(
+    rig: Rig, tmp_path: Path
+) -> None:
+    notes = tmp_path / "notes.txt"
+    notes.write_text("not a picture", encoding="utf-8")
+    rig.say(f"/open {notes}")
+    assert "notes.txt is not a picture sepia can read" in rig.printed(), rig.printed()
+    assert rig.repl.scene.is_empty, "No picture"
+
+
+def test_repl_open_a_truncated_picture_says_it_failed_and_keeps_the_scene(
+    rig: Rig, tmp_path: Path
+) -> None:
+    rig.say("a lake")
+    lake = rig.repl.scene
+    whole = tmp_path / "whole.png"
+    Image.new("RGB", (300, 300), (10, 200, 10)).save(whole)
+    cut = tmp_path / "cut.png"
+    data = whole.read_bytes()
+    cut.write_bytes(data[: len(data) // 2])  # a download that stopped half-way
+    rig.say(f"/open {cut}")
+    assert "Could not open cut.png" in rig.printed(), rig.printed()
+    assert rig.repl.scene is lake, "The picture before stays"
+
+
+def test_repl_open_a_name_too_long_for_a_file_says_there_is_none(rig: Rig) -> None:
+    name = "a" * 300 + ".png"  # longer than any file system allows: stat() raises
+    keep_going = rig.say(f"/open {name}")
+    assert keep_going, "A name the system refuses must not close sepia"
+    assert "No picture file at" in rig.printed(), rig.printed()  # wraps the name
+    assert rig.repl.scene.is_empty, "No picture"
+
+
+def test_repl_add_after_open_paints_over_the_opened_picture(
+    rig: Rig, photo: Path
+) -> None:
+    rig.say(f"/open {photo}")
+    opened = rig.repl.scene.image
+    rig.direct(edit=True, prompt="the red picture at night")
+    rig.say("/add make it night")
+    assert rig.local.calls[0][3] is opened, "/add must paint over the opened picture"
+    expected = ["a picture opened from photo.png", "make it night"]
+    assert rig.repl.scene.requests == expected, rig.repl.scene.requests
+
+
+def test_repl_open_can_be_undone(rig: Rig, photo: Path) -> None:
+    rig.say("a lake")
+    lake = rig.repl.scene
+    rig.say(f"/open {photo}")
+    rig.say("/undo")
+    assert rig.repl.scene is lake, "/undo must bring the painting back"
+
+
+def test_repl_open_stops_the_live_camera(
+    rig: Rig, camera: FakeHost, photo: Path
+) -> None:
+    camera.answers = [CAMERA_ON]
+    rig.say("/cam")
+    rig.say(f"/open {photo}")
+    assert CAMERA_OFF in camera.sent, f"Sent {camera.sent}"
+    assert not rig.repl.camera_live, "The camera must be off"
+    assert rig.repl.scene.requests == ["a picture opened from photo.png"], "Shown"
+
+
 # --- /save -------------------------------------------------------------------------
 
 
@@ -2184,3 +2351,67 @@ def test_run_repl_sweeps_videos_left_by_a_crash(
     os.utime(left, (long_ago, long_ago))
     repl.run_repl()
     assert not left.exists(), "A folder left by a crash must be deleted on start"
+
+
+@pytest.fixture
+def clip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, player: list[str]) -> Path:
+    """A video on this computer, 1:15 long, with OpenCV installed; the prompt
+    works in its folder."""
+    folder = tmp_path / "Videos"
+    folder.mkdir()
+    path = folder / "holiday.mp4"
+    path.write_bytes(b"not really a video")
+    monkeypatch.setattr(repl, "camera_installed", lambda: True)
+    monkeypatch.setattr(repl, "video_seconds", lambda path: 75.0)
+    monkeypatch.chdir(folder)
+    return path
+
+
+def test_repl_play_file_plays_it_whole_without_downloading(
+    rig: Rig, player: list[str], clip: Path
+) -> None:
+    rig.host.answers = [VIDEO_ON]
+    rig.say("/play holiday.mp4")
+    assert player == [], f"Nothing may be downloaded, fetched {player}"
+    played = {"type": "video", "path": str(clip.resolve()), "whole": True}
+    assert rig.host.sent[-1] == played, f"Sent {rig.host.sent[-1]}"
+    assert rig.repl.video_live, "The prompt must know the video plays"
+    assert "Playing holiday.mp4: /play off stops it" in rig.printed()
+    assert "1:15 · this computer" in rig.printed(), rig.printed()
+
+
+def test_repl_play_file_end_keeps_the_file(
+    rig: Rig, player: list[str], clip: Path
+) -> None:
+    rig.host.answers = [VIDEO_ON]
+    rig.say(f'/play "{clip}"')
+    rig.host.on_message({"type": "video", "state": "ended", "path": str(clip)})
+    assert not rig.repl.video_live, "An ended video is not live"
+    assert clip.exists(), "A file from this computer is never deleted"
+
+
+def test_repl_play_off_keeps_a_file_from_this_computer(
+    rig: Rig, player: list[str], clip: Path
+) -> None:
+    rig.host.answers = [VIDEO_ON]
+    rig.say(f"/play {clip}")
+    rig.say("/play off")
+    assert rig.host.sent[-1] == VIDEO_OFF, f"Sent {rig.host.sent[-1]}"
+    assert not rig.repl.video_live, "The video must be off"
+    assert clip.exists(), "A file from this computer is never deleted"
+
+
+def test_repl_play_missing_file_says_so(rig: Rig, player: list[str]) -> None:
+    rig.say("/play nope.mp4")
+    assert "No video file at nope.mp4" in rig.printed(), rig.printed()
+    assert "https://" in rig.printed(), "Say what a link looks like"
+    assert player == [] and rig.host.sent == [], "Nothing is fetched or sent"
+
+
+def test_repl_play_file_without_opencv_explains_the_install(
+    rig: Rig, player: list[str], clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(repl, "camera_installed", lambda: False)
+    rig.say(f"/play {clip}")
+    assert "sepia-cli[cam]" in rig.printed(), rig.printed()
+    assert rig.host.sent == [], f"The viewer must hear nothing, got {rig.host.sent}"
