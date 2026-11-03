@@ -10,6 +10,8 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-03
+
 ### Added
 
 - `/play <link>` plays a video of up to a minute, from YouTube or another site yt-dlp supports, in the picture window as colored text, picture only. It downloads at most 480p and 100 MB into a temporary folder, refuses longer videos, live streams and playlists before downloading, and deletes the file when the video ends, on `/play off`, and when sepia closes. Install `sepia-cli[video]` for it; Deno, which YouTube needs, comes with it.
@@ -328,7 +330,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Yigtwxx/sepia/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Yigtwxx/sepia/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Yigtwxx/sepia/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/Yigtwxx/sepia/compare/v0.3.3...v0.3.4
