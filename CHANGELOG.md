@@ -10,6 +10,8 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-03
+
 ### Added
 
 - `/open <file>` shows a picture from your computer in the picture window as colored text, whole and on black, turned upright as the phone held it. It calls neither Claude nor a painter, so it needs no key and costs nothing; `/add` paints over it, and `/save`, `/copy` and `/undo` work as with any picture. Quotes around the path and a file dragged into the terminal both work.
@@ -357,7 +359,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/Yigtwxx/sepia/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/Yigtwxx/sepia/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/Yigtwxx/sepia/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/Yigtwxx/sepia/compare/v0.5.0...v0.5.1
