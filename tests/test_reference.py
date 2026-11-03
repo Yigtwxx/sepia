@@ -117,6 +117,46 @@ def test_find_reference_google_image_result_follows_its_imgurl(web, host: str) -
     assert found is not None and found.url == PICTURE, f"Got {found}"
 
 
+def _google_result(web) -> str:
+    """A Google Images result for PICTURE, shown on PAGE."""
+    query = urllib.parse.urlencode({"imgurl": PICTURE, "imgrefurl": PAGE})
+    result = f"https://www.google.com/imgres?{query}"
+    web[result] = (_page(""), "text/html")
+    return result
+
+
+def test_find_reference_google_result_asks_for_imgurl_from_its_page(web) -> None:
+    # A host that stops hotlinking sends its home page to a request from anywhere
+    # but its own page.
+    def hotlinked(request) -> tuple[bytes, str]:
+        if request.get_header("Referer") == PAGE:
+            return _png(), "image/png"
+        return _page(""), "text/html"
+
+    web[PICTURE] = hotlinked
+    found = find_reference([_google_result(web)])
+    assert found is not None and found.url == PICTURE, f"Got {found}"
+
+
+def test_find_reference_google_result_refused_imgurl_takes_its_page_preview(
+    web,
+) -> None:
+    # Instagram's and others' picture addresses lead to a web page; the page the
+    # result came from still names its picture.
+    preview = "https://cdn.example.org/preview.jpg"
+    web[PICTURE] = (_page(""), "text/html")
+    web[PAGE] = (_page(f'<meta property="og:image" content="{preview}">'), "text/html")
+    web[preview] = (_png(), "image/jpeg")
+    found = find_reference([_google_result(web)])
+    assert found is not None and found.url == preview, f"Got {found}"
+
+
+def test_find_reference_google_result_without_any_picture_returns_none(web) -> None:
+    web[PAGE] = (_page(""), "text/html")
+    found = find_reference([_google_result(web)])
+    assert found is None, f"Neither the file nor the page has a picture: {found}"
+
+
 def test_find_reference_imgurl_on_another_site_is_not_followed(web) -> None:
     query = urllib.parse.urlencode({"imgurl": PICTURE})
     elsewhere = f"https://example.org/imgres?{query}"

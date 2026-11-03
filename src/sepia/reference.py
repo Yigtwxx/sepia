@@ -190,36 +190,64 @@ class CheckedRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _picture(url: str, follow_page: bool) -> Reference:
-    data, kind, final = _download(url)
+def _picture(url: str, follow_page: bool, referer: str | None = None) -> Reference:
+    data, kind, final = _download(url, referer)
     if kind.startswith("image/"):
         image, cutout = _decode(data)
         return Reference(final, image, cutout)
     if kind == "text/html" and follow_page:
-        found = _result_image(final) or preview_image(
-            data.decode("utf-8", errors="replace"), final
-        )
-        # A preview drawn from an SVG file is a logo, map or diagram, not the subject.
-        if found and ".svg" not in urllib.parse.urlsplit(found).path.lower():
-            return _picture(found, follow_page=False)
+        result = _result_image(final)
+        if result is not None:
+            return _result_picture(*result)
+        return _preview_picture(data, final)
     raise UnusableLink(url)
 
 
-def _result_image(url: str) -> str | None:
+def _preview_picture(data: bytes, page: str) -> Reference:
+    """The preview picture of the page `data` came from."""
+    found = preview_image(data.decode("utf-8", errors="replace"), page)
+    # A preview drawn from an SVG file is a logo, map or diagram, not the subject.
+    if found is None or ".svg" in urllib.parse.urlsplit(found).path.lower():
+        raise UnusableLink(page)
+    return _picture(found, follow_page=False)
+
+
+def _result_image(url: str) -> tuple[str, str | None] | None:
     """The picture a Google Images result page shows, where a share.google link
-    leads: the page has no preview picture, but the picture's address is in its
-    query (`imgurl`)."""
+    leads, and the page that picture is on: the result page has no preview
+    picture, but both addresses are in its query (`imgurl`, `imgrefurl`)."""
     parts = urllib.parse.urlsplit(url)
     if parts.path != "/imgres" or not GOOGLE.fullmatch(parts.hostname or ""):
         return None
-    found = urllib.parse.parse_qs(parts.query).get("imgurl")
-    return found[0] if found else None
+    query = urllib.parse.parse_qs(parts.query)
+    found, pages = query.get("imgurl"), query.get("imgrefurl")
+    return (found[0], pages[0] if pages else None) if found else None
 
 
-def _download(url: str) -> tuple[bytes, str, str]:
-    """Body, content type and final address of `url`."""
+def _result_picture(image: str, page: str | None) -> Reference:
+    """A Google Images result's picture, asked for as its own page asks for it:
+    hosts that stop hotlinking send their home page to anyone else. Where the
+    file still gives no picture (Instagram's lead to a web page), the page's own
+    preview picture stands in."""
+    try:
+        return _picture(image, follow_page=False, referer=page)
+    except UnusableLink:
+        if page is None:
+            raise
+    data, kind, final = _download(page)
+    if kind != "text/html":
+        raise UnusableLink(page)
+    return _preview_picture(data, final)
+
+
+def _download(url: str, referer: str | None = None) -> tuple[bytes, str, str]:
+    """Body, content type and final address of `url`; `referer` names the page
+    that shows it, for hosts that answer only to their own pages."""
     check_link(url)
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    headers = {"User-Agent": USER_AGENT}
+    if referer is not None:
+        headers["Referer"] = referer
+    request = urllib.request.Request(url, headers=headers)
     opener = urllib.request.build_opener(CheckedRedirects)
     try:
         with opener.open(request, timeout=TIMEOUT_SECONDS) as reply:

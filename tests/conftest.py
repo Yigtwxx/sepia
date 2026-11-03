@@ -4,6 +4,7 @@ import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -133,9 +134,16 @@ def make_canvas() -> Canvas:
     return make
 
 
+Answer = tuple[bytes, str]
+
+
 @pytest.fixture
-def web(monkeypatch: pytest.MonkeyPatch) -> dict[str, tuple[bytes, str]]:
-    """A fake public internet for `sepia.reference`: map url -> (body, type).
+def web(
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict[str, Answer | Callable[[Any], Answer]]:
+    """A fake public internet for `sepia.reference`: map url -> (body, type), or
+    to a function of the request that returns them, for a site that answers by
+    the request's headers.
 
     Every host resolves to a public address; unknown urls answer 404.
     """
@@ -143,13 +151,14 @@ def web(monkeypatch: pytest.MonkeyPatch) -> dict[str, tuple[bytes, str]]:
     import urllib.error
     import urllib.request
 
-    pages: dict[str, tuple[bytes, str]] = {}
+    pages: dict[str, Answer | Callable[[Any], Answer]] = {}
 
     def open_url(request: urllib.request.Request, timeout: float) -> MagicMock:
         url = request.full_url
         if url not in pages:
             raise urllib.error.HTTPError(url, 404, "Not Found", None, None)  # type: ignore[arg-type]
-        body, kind = pages[url]
+        entry = pages[url]
+        body, kind = entry(request) if callable(entry) else entry
         reply = MagicMock()
         reply.__enter__.return_value = reply
         reply.read.side_effect = lambda limit=-1: body if limit < 0 else body[:limit]

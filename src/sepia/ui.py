@@ -96,8 +96,9 @@ STRINGS: dict[str, str] = {
     "no_reference": "Found no usable picture of {subject}; painting from the "
     "description.",
     "the_subject": "the subject",
-    "link_unusable": "That link gave no usable picture (needs https and a picture "
-    "at least 256 px on each side).",
+    "link_unusable": "That link gave no usable picture: the site may refuse "
+    "downloads (TikTok does), or the link is not https, or the picture is under "
+    "256 px on a side.",
     "opening": "Opening the picture window…",
     "add_usage": "Say what to add: /add snowy mountains",
     "again_done": "Painted again, with fresh noise",

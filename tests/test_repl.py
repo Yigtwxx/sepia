@@ -815,6 +815,7 @@ def test_repl_unusable_bare_link_warns_and_stops(
     monkeypatch.setattr(repl, "find_reference", lambda links: None)
     rig.say("https://example.com/a.png")
     assert "no usable picture" in rig.printed(), rig.printed()
+    assert "may refuse downloads" in rig.printed(), "Names the likeliest cause"
     assert rig.client.beta.messages.stream.call_count == 0, "Nothing to direct"
     assert rig.repl.scene.is_empty, "No picture"
 
