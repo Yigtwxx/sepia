@@ -10,6 +10,13 @@ tag all carry.
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-22
+
+### Fixed
+
+- A character from a game, cartoon or anime is now found on Wikipedia. Wikipedia leaves a non-free picture, which a character's official art is, out of the article's preview, so sepia found "no usable picture" and painted from the description alone; it now asks Wikipedia for the article's lead picture.
+- A `/local` choice kept from an install with `sepia-cli[local]` no longer stops an install without it from painting: with a Cloudflare key set, Cloudflare paints instead of failing with "local painting needs the extra". The choice itself is kept for the install that has the local model.
+
 ## [0.5.4] - 2026-11-03
 
 ### Added
@@ -359,7 +366,8 @@ as a photograph made of colored text characters.
 - Pictures are saved per session in the user config folder; the newest 10
   sessions are kept.
 
-[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/Yigtwxx/sepia/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/Yigtwxx/sepia/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/Yigtwxx/sepia/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/Yigtwxx/sepia/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/Yigtwxx/sepia/compare/v0.5.1...v0.5.2
