@@ -361,3 +361,42 @@ def test_find_subject_search_takes_its_first_picture_even_a_cutout(web) -> None:
     assert found is not None and found.url == ORIGINAL, (
         f"The search's first picture is drawn as ranked, got {found}"
     )
+
+
+WIKI_ARTICLE = "https://en.wikipedia.org/wiki/Shadow_the_Hedgehog"
+WIKI_ART = "https://upload.wikimedia.org/wikipedia/en/4/41/Shadow.png"
+
+
+def _lead_picture(source: str | None) -> bytes:
+    page = {"original": {"source": source}} if source else {}
+    return json.dumps({"query": {"pages": {"1": page}}}).encode()
+
+
+def test_find_reference_wikipedia_article_without_preview_takes_its_lead_picture(
+    web,
+) -> None:
+    # Wikipedia leaves a non-free picture, a character's official art, out of og:image.
+    web[WIKI_ARTICLE] = (_page(""), "text/html")
+    api = reference.WIKIPEDIA_IMAGE.format(
+        host="en.wikipedia.org", title="Shadow_the_Hedgehog"
+    )
+    web[api] = (_lead_picture(WIKI_ART), "application/json")
+    web[WIKI_ART] = (_png(), "image/png")
+    found = find_reference([WIKI_ARTICLE])
+    assert found is not None and found.url == WIKI_ART, f"Got {found}"
+
+
+def test_find_reference_wikipedia_article_without_any_picture_returns_none(web) -> None:
+    web[WIKI_ARTICLE] = (_page(""), "text/html")
+    api = reference.WIKIPEDIA_IMAGE.format(
+        host="en.wikipedia.org", title="Shadow_the_Hedgehog"
+    )
+    web[api] = (_lead_picture(None), "application/json")
+    found = find_reference([WIKI_ARTICLE])
+    assert found is None, f"Expected None, got {found}"
+
+
+def test_find_reference_other_site_without_preview_asks_no_wikipedia(web) -> None:
+    web[PAGE] = (_page(""), "text/html")
+    found = find_reference([PAGE])
+    assert found is None, f"Expected None, got {found}"

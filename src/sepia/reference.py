@@ -48,6 +48,13 @@ PREVIEW_KEYS = (
 )
 GOOGLE = re.compile(r"(?:www\.)?google\.(?:com?\.)?[a-z]{2,3}")
 """Google's hosts: google.com, google.de, google.co.uk, google.com.tr."""
+WIKIPEDIA = re.compile(r"[a-z-]+(?:\.m)?\.wikipedia\.org")
+"""Wikipedia in any language, its mobile pages too."""
+WIKIPEDIA_IMAGE = (
+    "https://{host}/w/api.php?action=query&format=json&redirects=1"
+    "&prop=pageimages&piprop=original&pilicense=any&titles={title}"
+)
+"""An article's lead picture, whatever its license."""
 
 
 @dataclass(frozen=True)
@@ -206,10 +213,28 @@ def _picture(url: str, follow_page: bool, referer: str | None = None) -> Referen
 def _preview_picture(data: bytes, page: str) -> Reference:
     """The preview picture of the page `data` came from."""
     found = preview_image(data.decode("utf-8", errors="replace"), page)
+    found = found or _wikipedia_picture(page)
     # A preview drawn from an SVG file is a logo, map or diagram, not the subject.
     if found is None or ".svg" in urllib.parse.urlsplit(found).path.lower():
         raise UnusableLink(page)
     return _picture(found, follow_page=False)
+
+
+def _wikipedia_picture(page: str) -> str | None:
+    """The lead picture of the Wikipedia article at `page`, asked from its API:
+    the article's preview leaves out a non-free picture, which is what a
+    character's official art is. None for other sites and articles without one."""
+    parts = urllib.parse.urlsplit(page)
+    title = parts.path.removeprefix("/wiki/")
+    if not WIKIPEDIA.fullmatch(parts.hostname or "") or title in ("", parts.path):
+        return None
+    try:
+        data, _, _ = _download(WIKIPEDIA_IMAGE.format(host=parts.hostname, title=title))
+        pages = json.loads(data)["query"]["pages"]
+        sources = [entry["original"]["source"] for entry in pages.values()]
+    except (UnusableLink, ValueError, KeyError, TypeError, AttributeError):
+        return None
+    return sources[0] if sources and isinstance(sources[0], str) else None
 
 
 def _result_image(url: str) -> tuple[str, str | None] | None:
