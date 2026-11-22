@@ -265,6 +265,9 @@ class Repl:
         self.local = local
         # The painter picked last time; the local model while Cloudflare has no key.
         self.paint_with: Source = settings.painter if api is not None else "local"
+        if api is not None and not local_installed():
+            # /local kept by an install with the extra cannot paint in one without.
+            self.paint_with = "api"
         """What /api and /local switch between."""
         self.folder = folder
         self.scene = Scene()

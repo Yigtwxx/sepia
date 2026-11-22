@@ -2014,6 +2014,7 @@ def test_run_repl_builds_the_window_from_settings_and_choices(
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "t")
     monkeypatch.setenv("BRAVE_SEARCH_API_KEY", "b")
+    monkeypatch.setattr(repl, "local_installed", lambda: True)
     config.remember(model="claude-opus-5-5", style="fill", painter="local")
     code = repl.run_repl()
     window: Repl = started["repl"]
@@ -2027,6 +2028,20 @@ def test_run_repl_builds_the_window_from_settings_and_choices(
     assert window.folder.parent == config.config_dir() / "sessions", window.folder
     assert window.folder.is_dir(), "The session folder must exist"
     assert started["local"].loads == 1, "A downloaded model loads at once"
+
+
+def test_run_repl_remembered_local_without_the_extra_paints_with_cloudflare(
+    started: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "t")
+    monkeypatch.setattr(repl, "local_installed", lambda: False)
+    config.remember(painter="local")
+    repl.run_repl()
+    window: Repl = started["repl"]
+    assert window.paint_with == "api", "An install without the extra cannot paint"
+    kept = config.load_choices().painter
+    assert kept == "local", f"The choice stays for an install with it, got {kept}"
     assert (config.config_dir() / "usage.json").exists(), "Ledger must be started"
 
 
